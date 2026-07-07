@@ -1,4 +1,4 @@
-﻿# AI-v24.13.0 开源版
+# AI-v24.13.0 开源版
 
 > **Author: [2014-y](https://github.com/2014-y)**
 
@@ -243,5 +243,16 @@ MIT License
 - **云模型**: Agnes-AI (agnes-2.0-flash)
 - **数据库**: SQLite (会话存储)
 
+---
 
+## 已知问题
 
+### Computer Use 桌面控制解除后鼠标键盘失灵
+
+**现象：** 使用 Computer Use 控制桌面应用后解除控制，鼠标键盘可能无法正常使用。
+
+**原因：** open-computer-use.exe 原生进程在管道关闭后未正确退出，持续持有输入设备独占锁。
+
+**修复状态：** 已在 computer-use-client.mjs 中修复，解除控制时自动清理残留进程。
+
+**临时解决：** 如遇到此问题，手动执行 	askkill /F /T /IM open-computer-use.exe。

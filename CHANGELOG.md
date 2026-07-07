@@ -1,4 +1,4 @@
-﻿# CHANGELOG
+# CHANGELOG
 
 # AI-v24.13.0 变更日志
 
@@ -30,3 +30,14 @@
 - open-computer-use 0.1.54
 - Agnes-AI API
 - SQLite (会话存储)
+## [1.0.1] - 2026-07-08
+
+### 修复
+- **Computer Use 桌面控制解除后鼠标键盘失灵** (严重)
+  - 根因：`open-computer-use.exe` 原生进程在管道关闭后未正确退出，持续持有鼠标/键盘独占锁
+  - 修复：在 `computer-use-client.mjs` 中新增 `cleanupOrphanedComputerUseProcesses()` 清理函数
+  - 修补 `NativePipeComputerUseClient.close()` — 在 finally 块中调用清理
+  - 修补 `NativePipeComputerUseTransport.close()` — 关闭 socket 后等待 500ms 再清理
+  - 注册 `process.on("exit")` 兜底清理 — Node.js 进程退出时强制终止残留进程
+  - 影响：Windows 平台，修复后解除控制时自动清理残留进程，恢复正常输入
+
