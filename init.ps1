@@ -55,7 +55,7 @@ if (-not $src) {
 
 Write-Host "  Found: $src" -ForegroundColor Green
 
-# Copy only core node files (skip node_modules to avoid tslog ESM issues)
+# Copy node
 Write-Host "[2/3] Setting up .node-sandbox..." -ForegroundColor Cyan
 mkdir $sandboxDir | Out-Null
 Copy-Item "$src\node.exe" "$sandboxDir\node.exe" -Force
@@ -77,7 +77,7 @@ if (-not (Test-Path "$sandboxDir\node.exe")) {
 
 Write-Host "  Created .node-sandbox with node.exe" -ForegroundColor Green
 
-# Setup config
+# Setup config - copy template and replace ALL hardcoded paths
 Write-Host "[3/3] Setting up configuration..." -ForegroundColor Cyan
 $configDir = Join-Path $env:USERPROFILE ".openclaw"
 $configFile = Join-Path $configDir "openclaw.json"
@@ -89,11 +89,20 @@ if (-not (Test-Path $configFile)) {
     $examplePath = Join-Path $scriptDir "config\openclaw.json.example"
     if (Test-Path $examplePath) {
         Copy-Item $examplePath $configFile -Force
+        
+        # Replace ALL hardcoded paths with user-specific paths
+        $content = Get-Content $configFile -Raw
+        $content = $content -replace 'C:\\Users\\[^"]+', '$env:USERPROFILE'
+        $content = $content -replace '\$env:USERPROFILE', $env:USERPROFILE
+        # Replace relative plugin path with user's actual .openclaw path
+        $content = $content -replace '\.openclaw-plugins', "$configDir\plugins"
+        Set-Content $configFile -Value $content -Encoding UTF8
+        
         Write-Host "  Created openclaw.json from template." -ForegroundColor Green
         Write-Host ""
         Write-Host "  IMPORTANT: Edit $configFile" -ForegroundColor Yellow
-        Write-Host "  Replace <YOUR_AGNES_API_KEY> with your actual API Key." -ForegroundColor Yellow
-        Write-Host "  Get key from: https://agnes-ai.com/zh-Hans/docs/agnes-video-v20" -ForegroundColor Yellow
+        Write-Host "  Replace YOUR_*_API_KEY_HERE with your actual API Keys." -ForegroundColor Yellow
+        Write-Host "  Get Agnes key from: https://agnes-ai.com/zh-Hans/docs/agnes-video-v20" -ForegroundColor Yellow
         Write-Host ""
     }
 } else {
