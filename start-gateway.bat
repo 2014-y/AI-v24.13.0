@@ -5,6 +5,21 @@ setlocal
 set "SCRIPT_DIR=%~dp0"
 set "NODE_HOME=%SCRIPT_DIR%.node-sandbox"
 
+:: === ?? node-sandbox ???? ===
+if not exist "%NODE_HOME%\node.exe" (
+    echo ERROR: Node sandbox not found!
+    echo.
+    echo Please run init.bat first to set up the project.
+    echo.
+    pause
+    exit /b 1
+)
+
+:: === ?? .openclaw ???? ===
+if not exist "%USERPROFILE%\.openclaw" (
+    mkdir "%USERPROFILE%\.openclaw"
+)
+
 :: === ???? gateway ===
 for /f "tokens=*" %%a in ('netstat -ano 2^>nul ^| findstr ":18789.*LISTENING"') do (
     for /f "tokens=5" %%p in ("%%a") do (
@@ -20,10 +35,11 @@ echo  OpenClaw Gateway Launcher
 echo  Node: %NODE_HOME%\node.exe
 echo ========================================
 echo.
-if not exist "%NODE_HOME%\node.exe" (
-    echo ERROR: Node sandbox not found!
-    echo Please run init.bat first.
-    pause
-    exit /b 1
-)
 "%NODE_HOME%\node.exe" "%NODE_HOME%\node_modules\openclaw\dist\index.js" gateway run --force
+
+:: === ?? node ???????????????? ===
+if errorlevel 1 (
+    echo.
+    echo Gateway exited with error.
+    pause
+)
