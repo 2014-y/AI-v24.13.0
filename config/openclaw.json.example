@@ -53,7 +53,7 @@
                                                 },
                                      "yitong":  {
                                                     "baseUrl":  "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                                                    "apiKey":  "sk-2f2ec5aa103e40af8b71ec53cb0033b3",
+                                                    "apiKey":  "YOUR_YITONG_API_KEY_HERE",
                                                     "api":  "openai-completions",
                                                     "models":  [
                                                                    {
@@ -672,3 +672,5 @@
                                }
               }
 }
+
+
