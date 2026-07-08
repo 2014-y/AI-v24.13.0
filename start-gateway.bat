@@ -35,8 +35,11 @@ echo  OpenClaw Gateway Launcher
 echo  Node: %NODE_HOME%\node.exe
 echo ========================================
 echo.
-start "" /b "%NODE_HOME%\node.exe" "%NODE_HOME%\node_modules\openclaw\dist\index.js" gateway run --force
+
+:: ?? start ??????? gateway???????????
+start "OpenClaw Gateway" "%NODE_HOME%\node.exe" "%NODE_HOME%\node_modules\openclaw\dist\index.js" gateway run --force
+
 echo.
-echo Gateway started in background.
+echo Gateway launched in a new window.
 echo.
 pause

@@ -30,17 +30,17 @@ Write-Host ''
 Write-Host 'Starting Gateway...' -ForegroundColor Gray
 Write-Host ''
 
-# Run in background so this script can close cleanly
-$psi = New-Object System.Diagnostics.ProcessStartInfo
-$psi.FileName = $node
-$psi.Arguments = "`"$indexJs`" gateway run --force"
-$psi.WorkingDirectory = "$env:USERPROFILE\.openclaw"
-$psi.UseShellExecute = $true
-$psi.CreateNoWindow = $true
+# Launch in new window
+$startInfo = New-Object System.Diagnostics.ProcessStartInfo
+$startInfo.FileName = $node
+$startInfo.Arguments = "`"$indexJs`" gateway run --force"
+$startInfo.WorkingDirectory = "$env:USERPROFILE\.openclaw"
+$startInfo.UseShellExecute = $true
+$startInfo.WindowStyle = 'Normal'
 
-[System.Diagnostics.Process]::Start($psi) | Out-Null
+[System.Diagnostics.Process]::Start($startInfo) | Out-Null
 
-Write-Host 'Gateway started successfully.' -ForegroundColor Green
+Write-Host 'Gateway launched in a new window.' -ForegroundColor Green
 Write-Host ''
-Write-Host 'Press any key to close this launcher window...'
+Write-Host 'Press any key to close this launcher...'
 pause >nul
