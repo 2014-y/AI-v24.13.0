@@ -121,21 +121,10 @@
                                                    "agnes-ai/agnes-ai":  {
 
                                                                          },
-                                                   "agnes-ai/agnes-2.0-flash":  {
-                                                                                    "input":  [
-                                                                                                  "text",
-                                                                                                  "image"
-                                                                                              ]
-                                                                                },
-                                                   "agnes-ai/agnes-1.5-flash":  {
-                                                                                    "input":  [
-                                                                                                  "text",
-                                                                                                  "image"
-                                                                                              ]
-                                                                                }
+                                                   "agnes-ai/agnes-2.0-flash": {},
+                                                   "agnes-ai/agnes-1.5-flash": {}
                                                },
-                                    "contextPruning":  {
-                                                           "mode":  "none"
+                                    "contextPruning": {"mode": "off"
                                                        },
                                     "compaction":  {
                                                        "reserveTokensFloor":  96000,
@@ -671,3 +660,4 @@
                                }
               }
 }
+
