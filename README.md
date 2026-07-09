@@ -26,7 +26,7 @@ AI-v24.13.0 是一个**本地 AI 助手网关**，它把你的电脑变成一个
 | agnes-2.0-flash | Agnes AI | 推荐主模型，支持文本+图像，响应快 | 日常对话、图片理解 |
 | agnes-1.5-flash | Agnes AI | 轻量快速模型，节省 Token | 简单问答、快速回复 |
 | qwen3-max | 阿里云百炼 | 中文能力强，上下文长（200K tokens） | 长文写作、代码生成 |
-| jarvis | Ollama | 本地离线模型，无需网络 | 隐私敏感场景、离线使用 |
+| jarvis (Ollama) | 本地离线 | 无需联网，完全隐私 | 隐私敏感场景、离线使用 |
 
 ### 支持的聊天渠道
 
@@ -59,9 +59,9 @@ AI-v24.13.0 是一个**本地 AI 助手网关**，它把你的电脑变成一个
 │   Discord ──┤                                                   │
 │   飞书  ────┤── 发消息 ──→  ┌──────────────────┐                │
 │   Telegram─┘                │                  │                │
-│                             │   OpenClaw       │                │
-│                             │   Gateway        │                │
-│                             │   (端口 18789)   │                │
+│                             │   OpenClaw         │                │
+│                             │   Gateway          │                │
+│                             │   (端口 18789)     │                │
 │                             │                  │                │
 │                             └────────┬─────────┘                │
 │                                      │ 转发请求                   │
@@ -125,6 +125,7 @@ AI-v24.13.0 是一个**本地 AI 助手网关**，它把你的电脑变成一个
 |------|------|------|----------|
 | Node.js | v24.x | 运行环境 | 是 |
 | nvm-windows | 最新版 | Node.js 版本管理 | 推荐 |
+| Ollama | 最新版 | 本地 AI 模型（可选） | 否 |
 
 ---
 
@@ -177,7 +178,7 @@ node -v
 
 应该显示 24.x.x。
 
-#### 方法二：使用官方安装包
+#### 方法二：官方安装包
 
 如果你不想用 nvm，可以直接安装官方 Node.js。
 
@@ -347,55 +348,84 @@ Starting...
 
 ---
 
-## 日常使用
+### 第 6 步：配置本地 Ollama 模型（可选）
 
-### 启动
+如果你想用**离线本地模型**（不需要联网，完全隐私），可以安装 Ollama：
 
-每次开机后，双击 **start-gateway.bat** 即可启动 Gateway。
+1. **安装 Ollama**
+   - 访问 https://ollama.com 下载 Windows 安装包
+   - 安装完成后 Ollama 会自动在后台运行
 
-### 停止
+2. **拉取基础模型**
+   `ash
+   ollama pull gemma3:27b
+   `
 
-直接关闭 Gateway 窗口即可。
+3. **构建 Jarvis 自定义模型**
+   `ash
+   cd D:\ai\AI-v24.13.0
+   ollama create jarvis -f jarvis-modelfile.txt
+   `
 
-### 重启
+4. **验证**
+   `ash
+   ollama list
+   `
 
-1. 先关闭 Gateway 窗口
-2. 双击 **start-gateway.bat** 重新启动
-
-### 查看日志
-
-日志保存在：
-
-`
-C:\Users\<你的用户名>\.openclaw\logs\
-`
-
-按日期命名的 .log 文件就是日志。
+> 详见 [完整使用流程](docs/getting-started.md#第-5-步配置本地模型可选)
 
 ---
 
 ## 常见问题
 
 ### Q: 双击 start-gateway.bat 后窗口闪退？
-**A:** 先运行 init.bat 初始化项目，确保 .node-sandbox/node.exe 存在。
+**A:** 先运行 init.bat 初始化项目。如果仍有问题，请检查是否安装了 Node.js。
 
-### Q: 提示 "Missing config"？
-**A:** 运行 init.bat 会自动创建配置文件，然后编辑 openclaw.json 填入 API Key。
+### Q: 提示 "Missing config" 或 "Invalid config"？
+**A:** 运行 init.bat 会自动创建配置文件。如果提示配置错误，请编辑 openclaw.json 填入有效的 API Key。
 
 ### Q: 全局 Node.js 版本被改了？
-**A:** 不会。项目使用 .node-sandbox/ 内的独立 node，与全局完全隔离。
+**A:** 不会。项目使用 .node-sandbox/ 内的独立 node，与全局完全隔离。你的全局 
+ode -v 不受影响。
 
-### Q: 微信登录后立刻掉线？
-**A:** 检查是否在同一台电脑上运行 Gateway。不要同时用多个客户端登录同一个微信账号。
+### Q: 如何停止 Gateway？
+**A:** 直接关闭 Gateway 窗口即可。下次启动 start-gateway.bat 会自动清理旧进程。
 
-### Q: 收不到微信消息？
-**A:** 检查 openclaw.json 中 plugins.entries.openclaw-weixin.enabled 是否为 	rue。
+### Q: 可以在 Mac/Linux 上运行吗？
+**A:** 当前版本仅支持 Windows。Mac/Linux 用户可使用 Docker 部署 OpenClaw 原版。
 
-### Q: 想接多个微信号？
-**A:** 每个微信号单独执行一次 openclaw channels login --channel openclaw-weixin 即可。
+---
 
-### Q: 端口 18789 被占用？
-**A:** 先关闭占用该端口的程序，再启动 Gateway。
+## 安装 Node.js
+
+### 方法一：nvm-windows（推荐）
+
+支持多版本管理，方便切换：
+
+`powershell
+# 安装 nvm-windows
+# 下载地址: https://github.com/coreybutler/nvm-windows/releases
+
+# 安装并使用 Node.js v24
+nvm install 24
+nvm use 24
+`
+
+### 方法二：官方安装包
+
+直接下载安装：
+
+`
+下载地址: https://nodejs.org
+选择 LTS 版本安装即可
+`
+
+安装完成后验证：
+
+`powershell
+node -v   # 应显示 v24.x.x
+npm -v    # 应显示 10.x.x
+`
 
 ---
 
@@ -409,7 +439,7 @@ C:\Users\<你的用户名>\.openclaw\logs\
 
 ---
 
-## 文档索引
+## 文档
 
 | 文档 | 说明 |
 |------|------|
@@ -423,6 +453,10 @@ C:\Users\<你的用户名>\.openclaw\logs\
 MIT License
 
 ---
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request！
 
 ## 联系方式
 
