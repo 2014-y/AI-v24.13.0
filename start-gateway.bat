@@ -23,22 +23,20 @@ if not exist "%USERPROFILE%\.openclaw" (
     mkdir "%USERPROFILE%\.openclaw"
 )
 
-:: === ????? openclaw.json ===
+:: === ??????? openclaw.json ===
 set "CONFIG_FILE=%USERPROFILE%\.openclaw\openclaw.json"
 if exist "%CONFIG_FILE%" (
     findstr /i "C:\\Users\\Yuan" "%CONFIG_FILE%" >nul 2>&1
     if not errorlevel 1 (
         echo WARNING: Detected old config with hardcoded paths.
-        echo Restoring from template...
+        echo Auto-fixing from template...
         if exist "%SCRIPT_DIR%config\openclaw.json.example" (
             copy /Y "%SCRIPT_DIR%config\openclaw.json.example" "%CONFIG_FILE%" >nul
-            echo Config restored. Please edit %CONFIG_FILE% and fill in your API keys.
+            echo Config restored.
         ) else (
-            echo ERROR: Template not found!
+            echo WARNING: Template not found, continuing with old config.
         )
         echo.
-        pause
-        exit /b 1
     )
 )
 
