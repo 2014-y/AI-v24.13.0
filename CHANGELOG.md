@@ -1,6 +1,17 @@
-# CHANGELOG
+﻿# CHANGELOG
 
 # AI-v24.13.0 变更日志
+
+
+## [1.0.1] - 2026-07-09
+
+### 修复
+- **图片识别修复**：多轮对话中 AI 只识别第一张图片的问题
+  - 配置 tools.media.image.attachments.mode 设为 all，处理所有媒体附件
+  - 模型声明 input 类型包含 text+image，确保正确传递图片
+  - SOUL.md 新增图片识别规则指导 AI 只描述最新收到的图片
+- **配置兼容性修复**：移除不支持的 contextPruning.mode 和 maxMessages
+- **禁用冲突插件**：关闭 memory-core、memory-wiki、active-memory 插件
 
 ## [1.0.0] - 2026-07-07
 
@@ -40,4 +51,5 @@
   - 修补 `NativePipeComputerUseTransport.close()` — 关闭 socket 后等待 500ms 再清理
   - 注册 `process.on("exit")` 兜底清理 — Node.js 进程退出时强制终止残留进程
   - 影响：Windows 平台，修复后解除控制时自动清理残留进程，恢复正常输入
+
 
