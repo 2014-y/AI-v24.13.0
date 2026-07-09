@@ -26,8 +26,8 @@ if not exist "%USERPROFILE%\.openclaw" (
 :: === ??????? openclaw.json ===
 set "CONFIG_FILE=%USERPROFILE%\.openclaw\openclaw.json"
 if exist "%CONFIG_FILE%" (
-    findstr /i "C:\\Users\\Yuan" "%CONFIG_FILE%" >nul 2>&1
-    if not errorlevel 1 (
+    powershell -NoProfile -Command "if (Select-String -Path '%CONFIG_FILE%' -Pattern 'C:\\\\Users\\\\Yuan' -Quiet) { exit 1 } else { exit 0 }"
+    if errorlevel 1 (
         echo WARNING: Detected old config with hardcoded paths.
         echo Auto-fixing from template...
         if exist "%SCRIPT_DIR%config\openclaw.json.example" (
@@ -48,7 +48,7 @@ for /f "tokens=*" %%a in ('netstat -ano 2^>nul ^| findstr ":18789.*LISTENING"') 
 )
 timeout /t 2 /nobreak >nul
 
-:: === ?? nvm ? node_modules?openclaw ????? ===
+:: === ?? nvm ? node_modules ===
 set "NVM_MODS=%USERPROFILE%\AppData\Roaming\nvm\v24.13.0\node_modules"
 if not exist "%NVM_MODS%\openclaw\dist\index.js" (
     set "NVM_MODS=%APPDATA%\nvm\v24.13.0\node_modules"
