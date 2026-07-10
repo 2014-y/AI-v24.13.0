@@ -15,4 +15,4 @@ node_modules/
 Thumbs.db
 __pycache__/
 
-dist/
+/dist/
