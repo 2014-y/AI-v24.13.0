@@ -382,7 +382,24 @@ ipcMain.handle('open-external', async (event, url) => {
                 shell.openExternal(global.latestAcpDashboardUrl);
                 return true;
             }
-            const path = require('path');
+
+            // 次优先：从本地持久化日志流中扫描是否有最近一次网关启动时输出的免密登录链接
+            try {
+                const logPath = path.join(__dirname, 'gateway_stdout.log');
+                if (fs.existsSync(logPath)) {
+                    const logContent = fs.readFileSync(logPath, 'utf8');
+                    const matches = logContent.match(/https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):\d+\/acp\/[^\s"'\n]+/g);
+                    if (matches && matches.length > 0) {
+                        const latestUrl = matches[matches.length - 1].trim();
+                        global.latestAcpDashboardUrl = latestUrl;
+                        shell.openExternal(latestUrl);
+                        return true;
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to parse gateway log URL fallback:', e);
+            }
+
             const { fork } = require('child_process');
             
             let openclawEntry = path.join(__dirname, 'node_modules', 'openclaw', 'dist', 'index.js');
