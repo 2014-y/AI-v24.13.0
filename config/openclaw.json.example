@@ -127,12 +127,12 @@
   "messages": {
     "ackReactionScope": "group-mentions",
     "inbound": {
-      "debounceMs": 1000
+      "debounceMs": 2000
     },
     "queue": {
       "mode": "steer",
-      "debounceMs": 500,
-      "cap": 20,
+      "debounceMs": 1000,
+      "cap": 10,
       "drop": "summarize"
     }
   },
@@ -249,7 +249,10 @@
       ],
       "groupAllowFrom": [
         "*"
-      ]
+      ],
+      "inbound": {
+        "debounceMs": 2000
+      }
     }
   },
   "gateway": {
