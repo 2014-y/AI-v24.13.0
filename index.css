@@ -791,3 +791,139 @@ input:checked + .slider-knob:before {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--accent-color);
 }
+
+/* 动态提供商与模型管理组件样式 */
+.provider-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 20px;
+  margin-bottom: 20px;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.provider-card:hover {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 15px rgba(var(--accent-rgb), 0.15);
+}
+
+.provider-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: 10px;
+}
+
+.provider-card-header h3 {
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+}
+
+.btn-delete-provider {
+  background: rgba(211, 47, 47, 0.1);
+  color: #ff5252;
+  border: 1px solid rgba(211, 47, 47, 0.2);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-delete-provider:hover {
+  background: #d32f2f;
+  color: white;
+  border-color: transparent;
+}
+
+.provider-models-zone {
+  margin-top: 16px;
+  background: rgba(0,0,0,0.15);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.provider-models-zone h4 {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.model-tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.model-tag-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.model-tag-del {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-weight: bold;
+  font-size: 10px;
+  transition: color 0.15s ease;
+}
+
+.model-tag-del:hover {
+  color: #ff5252;
+}
+
+.add-model-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.add-model-input-row input {
+  flex: 1;
+  height: 30px !important;
+  font-size: 12px !important;
+}
+
+.btn-add-model {
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 0 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.btn-add-provider-box {
+  border: 2px dashed var(--border-color);
+  border-radius: 14px;
+  padding: 20px;
+  text-align: center;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-weight: 500;
+  transition: all 0.25s ease;
+  margin-bottom: 20px;
+}
+
+.btn-add-provider-box:hover {
+  border-color: var(--accent-color);
+  color: var(--text-primary);
+  background: rgba(var(--accent-rgb), 0.02);
+}
+

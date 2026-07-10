@@ -128,50 +128,37 @@
           <div class="config-scrollable" id="tour-config-form">
             <form id="openclaw-config-form">
               
-              <!-- 密钥管理 -->
+              <!-- 动态提供商与模型管理看板 -->
               <div class="form-group-section">
-                <h3>🔑 API 密钥与授权</h3>
-                <div class="form-row">
-                  <div class="form-field">
-                    <label for="key-agnes">Agnes AI Key</label>
-                    <input type="password" id="key-agnes" placeholder="YOUR_AGNES_API_KEY_HERE">
-                  </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                  <h3 style="margin-bottom: 0; border-left: 3px solid var(--accent-color); padding-left: 10px;">🔌 大模型厂家（提供商）管理</h3>
                 </div>
-                <div class="form-row">
-                  <div class="form-field">
-                    <label for="key-yitong">阿里云百炼 Key</label>
-                    <input type="password" id="key-yitong" placeholder="YOUR_YITONG_API_KEY_HERE">
-                  </div>
-                  <div class="form-field">
-                    <label for="key-zhipu">智谱 AI Key</label>
-                    <input type="password" id="key-zhipu" placeholder="YOUR_ZHIPU_API_KEY_HERE">
-                  </div>
+                
+                <!-- 动态厂家卡片列表容器 -->
+                <div id="providers-list-zone"></div>
+                
+                <!-- 添加厂家虚线按钮 -->
+                <div class="btn-add-provider-box" id="btn-add-provider">
+                  ➕ 添加自定义大模型提供商（厂家）
                 </div>
               </div>
 
               <!-- 模型选择与权重 -->
               <div class="form-group-section">
-                <h3>🤖 模型选型</h3>
+                <h3>🤖 默认模型选型</h3>
                 <div class="form-row">
                   <div class="form-field">
                     <label for="model-primary">主用模型 (Primary Model)</label>
-                    <select id="model-primary">
-                      <option value="agnes-ai/agnes-2.0-flash">Agnes 2.0 Flash</option>
-                      <option value="agnes-ai/agnes-1.5-flash">Agnes 1.5 Flash</option>
-                      <option value="yitong/qwen3-max">Qwen3-Max (阿里百炼)</option>
-                      <option value="ollama/jarvis">Jarvis (本地离线)</option>
-                    </select>
+                    <input type="text" id="model-primary" list="models-datalist" placeholder="请选择或输入, 例如: agnes-ai/agnes-2.0-flash">
                   </div>
                   <div class="form-field">
                     <label for="model-fallback">备用模型 (Fallback Model)</label>
-                    <select id="model-fallback">
-                      <option value="agnes-ai/agnes-1.5-flash">Agnes 1.5 Flash</option>
-                      <option value="agnes-ai/agnes-2.0-flash">Agnes 2.0 Flash</option>
-                      <option value="yitong/qwen3-max">Qwen3-Max (阿里百炼)</option>
-                      <option value="ollama/jarvis">Jarvis (本地离线)</option>
-                    </select>
+                    <input type="text" id="model-fallback" list="models-datalist" placeholder="请选择或输入, 例如: agnes-ai/agnes-1.5-flash">
                   </div>
                 </div>
+                <!-- 供模糊匹配选型的动态列表 -->
+                <datalist id="models-datalist"></datalist>
+                
                 <div class="form-row">
                   <div class="form-field half">
                     <label for="max-concurrent">最大并发请求数 (Max Concurrent)</label>

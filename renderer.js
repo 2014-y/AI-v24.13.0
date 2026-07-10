@@ -148,7 +148,9 @@ function setupIpcListeners() {
     });
 }
 
-// 5. 渲染与加载参数配置
+// 5. 动态大模型提供商与配置数据管理
+let localProviders = {};
+
 async function loadAndRenderConfig() {
     configData = await window.api.readConfig();
     if (!configData) {
@@ -156,26 +158,30 @@ async function loadAndRenderConfig() {
         return;
     }
 
-    // 填充表单输入框
-    if (configData.env) {
-        document.getElementById('key-agnes').value = configData.env.AGNES_API_KEY || '';
-        document.getElementById('key-yitong').value = configData.env.YITONG_API_KEY || '';
-        document.getElementById('key-zhipu').value = configData.env.ZHIPU_API_KEY || '';
+    // 深度拷贝厂商数据到本地变量以支持动态修改与渲染
+    if (configData.models && configData.models.providers) {
+        localProviders = JSON.parse(JSON.stringify(configData.models.providers));
+    } else {
+        localProviders = {};
     }
 
+    // 动态渲染厂商卡片和 datalist
+    renderProvidersList();
+    updateModelsDatalist();
+
+    // 填充并发数与主备模型
     if (configData.agents && configData.agents.defaults) {
         const defaults = configData.agents.defaults;
         document.getElementById('max-concurrent').value = defaults.maxConcurrent || 4;
         if (defaults.model) {
-            document.getElementById('model-primary').value = defaults.model.primary || 'agnes-ai/agnes-2.0-flash';
-            document.getElementById('model-fallback').value = (defaults.model.fallbacks && defaults.model.fallbacks[0]) || 'agnes-ai/agnes-1.5-flash';
+            document.getElementById('model-primary').value = defaults.model.primary || '';
+            document.getElementById('model-fallback').value = (defaults.model.fallbacks && defaults.model.fallbacks[0]) || '';
         }
     }
 
     if (configData.gateway) {
         document.getElementById('gateway-port').value = configData.gateway.port || 18789;
         statPort.innerText = configData.gateway.port || 18789;
-        // 自动提取或模拟一个令牌展示在界面上
         const auth = configData.gateway.auth;
         document.getElementById('gateway-token').value = (auth && auth.token) || 'openclaw-dev-token-998877';
     }
@@ -184,23 +190,211 @@ async function loadAndRenderConfig() {
     renderPluginsGrid();
 }
 
+// 渲染提供商卡片列表
+function renderProvidersList() {
+    const listZone = document.getElementById('providers-list-zone');
+    listZone.innerHTML = '';
+
+    for (const key of Object.keys(localProviders)) {
+        const provider = localProviders[key];
+        const card = document.createElement('div');
+        card.className = 'provider-card';
+        card.innerHTML = `
+            <div class="provider-card-header">
+                <h3>🔌 ${key}</h3>
+                <button type="button" class="btn-delete-provider" data-provider="${key}">❌ 删除此厂家</button>
+            </div>
+            <div class="form-row">
+                <div class="form-field">
+                    <label>Base URL (API 端点)</label>
+                    <input type="text" class="provider-url-input" data-provider="${key}" value="${provider.baseUrl || ''}" placeholder="例如: https://api.openai.com/v1">
+                </div>
+                <div class="form-field">
+                    <label>API Key (授权密钥)</label>
+                    <input type="password" class="provider-key-input" data-provider="${key}" value="${provider.apiKey || ''}" placeholder="API 密钥">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-field half">
+                    <label>API 协议类型</label>
+                    <select class="provider-api-select" data-provider="${key}">
+                        <option value="openai-completions" ${provider.api === 'openai-completions' ? 'selected' : ''}>OpenAI Completions</option>
+                        <option value="openai-chat" ${provider.api === 'openai-chat' ? 'selected' : ''}>OpenAI Chat</option>
+                        <option value="ollama" ${provider.api === 'ollama' ? 'selected' : ''}>Ollama</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="provider-models-zone">
+                <h4>🤖 模型白名单管理</h4>
+                <div class="model-tags-container" id="tags-container-${key}"></div>
+                <div class="add-model-input-row">
+                    <input type="text" id="add-model-input-${key}" placeholder="添加新模型 ID, 例如: deepseek-chat">
+                    <button type="button" class="btn-add-model" data-provider="${key}">添加</button>
+                </div>
+            </div>
+        `;
+        listZone.appendChild(card);
+
+        // 渲染模型标签
+        const tagsContainer = document.getElementById(`tags-container-${key}`);
+        const models = provider.models || [];
+        models.forEach((model, index) => {
+            const tag = document.createElement('div');
+            tag.className = 'model-tag-item';
+            tag.innerHTML = `
+                <span>${model.id}</span>
+                <span class="model-tag-del" data-provider="${key}" data-index="${index}">×</span>
+            `;
+            tagsContainer.appendChild(tag);
+        });
+    }
+
+    bindProviderEvents();
+}
+
+// 绑定动态卡片事件
+function bindProviderEvents() {
+    document.querySelectorAll('.provider-url-input').forEach(input => {
+        input.addEventListener('change', (e) => {
+            const provider = e.target.getAttribute('data-provider');
+            localProviders[provider].baseUrl = e.target.value;
+            updateModelsDatalist();
+        });
+    });
+
+    document.querySelectorAll('.provider-key-input').forEach(input => {
+        input.addEventListener('change', (e) => {
+            const provider = e.target.getAttribute('data-provider');
+            localProviders[provider].apiKey = e.target.value;
+        });
+    });
+
+    document.querySelectorAll('.provider-api-select').forEach(select => {
+        select.addEventListener('change', (e) => {
+            const provider = e.target.getAttribute('data-provider');
+            localProviders[provider].api = e.target.value;
+        });
+    });
+
+    document.querySelectorAll('.btn-delete-provider').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const provider = e.target.getAttribute('data-provider');
+            if (confirm(`确定要彻底删除厂家 "${provider}" 及其下的所有模型配置吗？`)) {
+                delete localProviders[provider];
+                renderProvidersList();
+                updateModelsDatalist();
+            }
+        });
+    });
+
+    document.querySelectorAll('.btn-add-model').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const provider = btn.getAttribute('data-provider');
+            const input = document.getElementById(`add-model-input-${provider}`);
+            const modelId = input.value.trim();
+            if (!modelId) return;
+
+            if (!localProviders[provider].models) localProviders[provider].models = [];
+            
+            if (localProviders[provider].models.some(m => m.id === modelId)) {
+                alert('该模型已存在！');
+                return;
+            }
+
+            localProviders[provider].models.push({
+                id: modelId,
+                name: modelId,
+                contextWindow: 128000,
+                maxTokens: 8192
+            });
+
+            input.value = '';
+            renderProvidersList();
+            updateModelsDatalist();
+        });
+    });
+
+    document.querySelectorAll('.model-tag-del').forEach(delBtn => {
+        delBtn.addEventListener('click', (e) => {
+            const provider = e.target.getAttribute('data-provider');
+            const index = parseInt(e.target.getAttribute('data-index'), 10);
+            localProviders[provider].models.splice(index, 1);
+            renderProvidersList();
+            updateModelsDatalist();
+        });
+    });
+}
+
+// 动态刷新 datalist
+function updateModelsDatalist() {
+    const datalist = document.getElementById('models-datalist');
+    if (!datalist) return;
+    datalist.innerHTML = '';
+
+    for (const providerKey of Object.keys(localProviders)) {
+        const provider = localProviders[providerKey];
+        const models = provider.models || [];
+        models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = `${providerKey}/${model.id}`;
+            datalist.appendChild(option);
+        });
+    }
+}
+
+// 添加厂家按钮绑定
+document.getElementById('btn-add-provider').addEventListener('click', () => {
+    const providerName = prompt("请输入新厂商（大模型提供商）的唯一标识（仅限小写字母/数字, 例如: deepseek, openai）：");
+    if (!providerName) return;
+
+    const key = providerName.trim().toLowerCase();
+    if (!/^[a-z0-9_-]+$/.test(key)) {
+        alert("格式错误！厂商标识仅能由小写字母、数字及中划线组成。");
+        return;
+    }
+
+    if (localProviders[key]) {
+        alert("该厂商标识已存在！");
+        return;
+    }
+
+    localProviders[key] = {
+        baseUrl: "https://api.example.com/v1",
+        apiKey: "",
+        api: "openai-completions",
+        models: []
+    };
+
+    renderProvidersList();
+    updateModelsDatalist();
+});
+
 // 保存配置
 document.getElementById('config-save-btn').addEventListener('click', async () => {
     if (!configData) return;
 
-    // 收集表单数据
-    if (!configData.env) configData.env = {};
-    configData.env.AGNES_API_KEY = document.getElementById('key-agnes').value;
-    configData.env.YITONG_API_KEY = document.getElementById('key-yitong').value;
-    configData.env.ZHIPU_API_KEY = document.getElementById('key-zhipu').value;
+    // 1. 同步保存提供商与模型白名单
+    if (!configData.models) configData.models = {};
+    configData.models.providers = localProviders;
 
+    // 2. 同步生成环境变量 (env) 机制
+    if (!configData.env) configData.env = {};
+    for (const key of Object.keys(localProviders)) {
+        const envKeyName = key.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase() + '_API_KEY';
+        if (localProviders[key].apiKey) {
+            configData.env[envKeyName] = localProviders[key].apiKey;
+        }
+    }
+
+    // 3. 同步并发选项及默认主备模型选择
     if (!configData.agents) configData.agents = {};
     if (!configData.agents.defaults) configData.agents.defaults = {};
     configData.agents.defaults.maxConcurrent = parseInt(document.getElementById('max-concurrent').value, 10);
     
     if (!configData.agents.defaults.model) configData.agents.defaults.model = {};
-    configData.agents.defaults.model.primary = document.getElementById('model-primary').value;
-    configData.agents.defaults.model.fallbacks = [document.getElementById('model-fallback').value];
+    configData.agents.defaults.model.primary = document.getElementById('model-primary').value.trim();
+    configData.agents.defaults.model.fallbacks = [document.getElementById('model-fallback').value.trim()];
 
     if (!configData.gateway) configData.gateway = {};
     configData.gateway.port = parseInt(document.getElementById('gateway-port').value, 10);
@@ -210,7 +404,6 @@ document.getElementById('config-save-btn').addEventListener('click', async () =>
     if (result.success) {
         alert('配置已成功保存！');
         statPort.innerText = configData.gateway.port;
-        // 如果在运行中，提示需要重启
         if (gatewayStatus === 'running') {
             const restart = confirm('网关正在运行中，是否立即重启网关以使新配置生效？');
             if (restart) {
