@@ -2,6 +2,35 @@
 
 # AI-v24.13.0 变更日志
 
+
+## [1.0.7] - 2026-07-10
+
+### 修复
+- **配置模板彻底清理**：移除所有可能导致启动失败的未识别 key（input、reasoning、api、heartbeat、subagents、contextPruning 等）
+- **移除空对象 {}**：删除 agents.defaults.models 中的空对象，修复首次对话触发 /new 错误
+- **API 占位符统一**：所有占位符统一为 YOUR_*_API_KEY_HERE 格式
+- **插件精简**：仅保留 6 个核心插件（openclaw-weixin、ollama、tavily、duckduckgo、searxng、matrix）
+- **配置模板从 12KB 精简到 6KB**
+
+## [1.0.7b] - 2026-07-10
+
+### 修复
+- **移除所有文件的 UTF-8 BOM**（371 个文件），修复 Node.js/PowerShell 解析失败
+- **创建 .gitattributes** 确保跨平台行尾一致性
+- **修复 extensions/plugins 中残留 BOM**
+
+## [1.0.7c] - 2026-07-10
+
+### 修复
+- **修复 auto-finetune.py 中硬编码路径**
+- **修复 run-gateway.py 中硬编码路径**
+- **移除 extensions 中 6 个 JSON 文件的 BOM**
+
+## [1.0.7d] - 2026-07-10
+
+### 修复
+- **修复 docs 中剩余的 C:\Users\<用户名> 硬编码路径**
+- **所有文档统一使用 %USERPROFILE%**
 ## [1.0.2] - 2026-07-10
 
 ### 修复
