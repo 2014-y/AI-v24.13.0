@@ -331,6 +331,29 @@ ipcMain.handle('autostart-set', async (event, enabled) => {
     return true;
 });
 
+// 读取本地真实大模型调用统计
+ipcMain.handle('stats-get', async () => {
+    return new Promise((resolve) => {
+        const statsPyPath = path.join(__dirname, 'inspect_stats.py');
+        const { exec } = require('child_process');
+        
+        exec(`python "${statsPyPath}"`, { encoding: 'utf8' }, (error, stdout, stderr) => {
+            if (error) {
+                console.error('Failed to execute inspect_stats.py:', error, stderr);
+                resolve({ success: false, error: error.message });
+                return;
+            }
+            try {
+                const data = JSON.parse(stdout);
+                resolve({ success: true, data });
+            } catch (err) {
+                console.error('Failed to parse stats JSON:', err, stdout);
+                resolve({ success: false, error: 'JSON解析错误' });
+            }
+        });
+    });
+});
+
 // 初始化应用
 app.whenReady().then(() => {
     createWindow();
