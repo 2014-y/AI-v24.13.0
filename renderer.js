@@ -679,58 +679,273 @@ function renderUsageCharts() {
                     <stop offset="100%" stop-color="${c.color}" stop-opacity="0"/>
                 </linearGradient>
             </defs>
-            <!-- 数据点 -->
-            ${values.map((v, i) => {
-                const x = padding + i * xStep;
-                const y = height - padding - v * yScale;
-                return `<circle cx="${x}" cy="${y}" r="4" fill="var(--text-primary)" stroke="var(--accent-color)" stroke-width="2"/>`;
-            }).join('')}
-            ${labels}
-        </svg>
-    `;
-
-    // B. 饼图 (各渠道调用占比)
-    const pieBox = document.getElementById('pie-chart-svg-box');
-    const data = [
-        { name: 'Agnes AI', percent: 60, color: 'var(--accent-color)' },
-        { name: '阿里百炼', percent: 25, color: '#ffb300' },
-        { name: '本地离线', percent: 15, color: '#00e676' }
-    ];
-
-    let totalAngle = 0;
-    let piePaths = '';
-    let legend = '';
-
-    data.forEach((item) => {
-        const angle = (item.percent / 100) * 360;
-        const radStart = (totalAngle - 90) * Math.PI / 180;
-        const radEnd = (totalAngle + angle - 90) * Math.PI / 180;
-
-        const x1 = 100 + 70 * Math.cos(radStart);
-        const y1 = 100 + 70 * Math.sin(radStart);
-        const x2 = 100 + 70 * Math.cos(radEnd);
-        const y2 = 100 + 70 * Math.sin(radEnd);
-
-        const largeArc = angle > 180 ? 1 : 0;
-        piePaths += `<path d="M 100 100 L ${x1} ${y1} A 70 70 0 ${largeArc} 1 ${x2} ${y2} Z" fill="${item.color}" stroke="var(--bg-card)" stroke-width="2" />`;
-        
-        legend += `
-            <g transform="translate(190, ${40 + totalAngle / 3.6 * 1.4})">
-                <rect width="12" height="12" rx="3" fill="${item.color}"/>
-                <text x="20" y="11" fill="var(--text-primary)" font-size="12">${item.name} (${item.percent}%)</text>
-            </g>
+            <!-- 渐变阴影填充 -->
+            <path d="${path} L ${coords[coords.length - 1].x} ${height - paddingBottom} L ${coords[0].x} ${height - paddingBottom} Z" fill="url(#${gradId})" />
+            <!-- 平滑曲线 -->
+            <path d="${path}" fill="none" stroke="${c.color}" stroke-width="${c.width}" stroke-linecap="round" />
         `;
-        totalAngle += angle;
     });
 
-    pieBox.innerHTML = `
-        <svg width="100%" height="100%" viewBox="0 0 320 200">
-            <!-- 环形挖空 -->
-            ${piePaths}
-            <circle cx="100" cy="100" r="40" fill="var(--bg-card)"/>
-            ${legend}
+    waveBox.innerHTML = `
+        <svg width="100%" height="100%" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+            ${gridHtml}
+            ${pathsHtml}
         </svg>
     `;
+
+    // B. 绑定表格 analysis Tab 切换事件
+    const btnLogs = document.getElementById('btn-stats-tab-logs');
+    const btnProviders = document.getElementById('btn-stats-tab-providers');
+    const btnModels = document.getElementById('btn-stats-tab-models');
+    const tableContainer = document.getElementById('stats-data-table-container');
+
+    const setActiveTab = (activeBtn) => {
+        [btnLogs, btnProviders, btnModels].forEach(btn => {
+            if (btn) {
+                btn.classList.remove('active');
+                btn.style.background = 'rgba(255,255,255,0.05)';
+                btn.style.borderColor = 'var(--border-color)';
+                btn.style.color = 'var(--text-secondary)';
+            }
+        });
+        if (activeBtn) {
+            activeBtn.classList.add('active');
+            activeBtn.style.background = 'var(--accent-color)';
+            activeBtn.style.borderColor = 'transparent';
+            activeBtn.style.color = 'white';
+        }
+    };
+
+    const renderLogsTable = () => {
+        tableContainer.innerHTML = `
+            <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+              <thead>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary);">
+                  <th style="padding: 8px;">请求时间</th>
+                  <th style="padding: 8px;">提供商</th>
+                  <th style="padding: 8px;">模型名称</th>
+                  <th style="padding: 8px;">输入 Tokens</th>
+                  <th style="padding: 8px;">输出 Tokens</th>
+                  <th style="padding: 8px;">缓存命中</th>
+                  <th style="padding: 8px;">耗时</th>
+                  <th style="padding: 8px;">状态</th>
+                </tr>
+              </thead>
+              <tbody style="color: var(--text-primary);">
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                  <td style="padding: 8px;">22:48:12</td>
+                  <td style="padding: 8px;"><span style="color: #ff9100; font-weight: 600;">DeepSeek</span></td>
+                  <td style="padding: 8px; font-family: monospace;">deepseek-chat</td>
+                  <td style="padding: 8px;">1,842</td>
+                  <td style="padding: 8px;">421</td>
+                  <td style="padding: 8px; color: #00e676;">🎯 360</td>
+                  <td style="padding: 8px;">1.2s</td>
+                  <td style="padding: 8px; color: #00e676;">🟢 成功</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                  <td style="padding: 8px;">22:47:35</td>
+                  <td style="padding: 8px;"><span style="color: #2979ff; font-weight: 600;">OpenAI</span></td>
+                  <td style="padding: 8px; font-family: monospace;">gpt-4o</td>
+                  <td style="padding: 8px;">3,124</td>
+                  <td style="padding: 8px;">890</td>
+                  <td style="padding: 8px; color: var(--text-secondary);">--</td>
+                  <td style="padding: 8px;">2.5s</td>
+                  <td style="padding: 8px; color: #00e676;">🟢 成功</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                  <td style="padding: 8px;">22:45:01</td>
+                  <td style="padding: 8px;"><span style="color: #8c52ff; font-weight: 600;">Gemini</span></td>
+                  <td style="padding: 8px; font-family: monospace;">gemini-1.5-pro</td>
+                  <td style="padding: 8px;">12,042</td>
+                  <td style="padding: 8px;">2,130</td>
+                  <td style="padding: 8px; color: #00e676;">🎯 1,200</td>
+                  <td style="padding: 8px;">3.1s</td>
+                  <td style="padding: 8px; color: #00e676;">🟢 成功</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                  <td style="padding: 8px;">22:41:22</td>
+                  <td style="padding: 8px;"><span style="color: #ff9100; font-weight: 600;">DeepSeek</span></td>
+                  <td style="padding: 8px; font-family: monospace;">deepseek-coder</td>
+                  <td style="padding: 8px;">5,420</td>
+                  <td style="padding: 8px;">1,120</td>
+                  <td style="padding: 8px; color: var(--text-secondary);">--</td>
+                  <td style="padding: 8px;">1.8s</td>
+                  <td style="padding: 8px; color: #00e676;">🟢 成功</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                  <td style="padding: 8px;">22:38:59</td>
+                  <td style="padding: 8px;"><span style="color: #2979ff; font-weight: 600;">OpenAI</span></td>
+                  <td style="padding: 8px; font-family: monospace;">gpt-4o-mini</td>
+                  <td style="padding: 8px;">850</td>
+                  <td style="padding: 8px;">320</td>
+                  <td style="padding: 8px; color: #00e676;">🎯 850</td>
+                  <td style="padding: 8px;">0.8s</td>
+                  <td style="padding: 8px; color: #00e676;">🟢 成功</td>
+                </tr>
+              </tbody>
+            </table>
+        `;
+    };
+
+    const renderProvidersTable = () => {
+        tableContainer.innerHTML = `
+            <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+              <thead>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary);">
+                  <th style="padding: 8px;">提供商</th>
+                  <th style="padding: 8px;">总请求数</th>
+                  <th style="padding: 8px;">总消耗 Tokens</th>
+                  <th style="padding: 8px;">占比</th>
+                  <th style="padding: 8px;">缓存命中数</th>
+                  <th style="padding: 8px;">节省成本</th>
+                </tr>
+              </thead>
+              <tbody style="color: var(--text-primary);">
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                  <td style="padding: 8px; font-weight: bold; color: #ff9100;">🌐 DeepSeek</td>
+                  <td style="padding: 8px;">742</td>
+                  <td style="padding: 8px;">112.4M</td>
+                  <td style="padding: 8px;">58.1%</td>
+                  <td style="padding: 8px;">2.4M</td>
+                  <td style="padding: 8px; color: #00e676;">$12.40</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                  <td style="padding: 8px; font-weight: bold; color: #2979ff;">⚡ OpenAI</td>
+                  <td style="padding: 8px;">410</td>
+                  <td style="padding: 8px;">58.2M</td>
+                  <td style="padding: 8px;">30.1%</td>
+                  <td style="padding: 8px;">1.1M</td>
+                  <td style="padding: 8px; color: #00e676;">$34.50</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                  <td style="padding: 8px; font-weight: bold; color: #8c52ff;">✨ Gemini</td>
+                  <td style="padding: 8px;">219</td>
+                  <td style="padding: 8px;">23.4M</td>
+                  <td style="padding: 8px;">11.8%</td>
+                  <td style="padding: 8px;">158K</td>
+                  <td style="padding: 8px; color: #00e676;">$1.20</td>
+                </tr>
+              </tbody>
+            </table>
+        `;
+    };
+
+    const renderModelsTable = () => {
+        tableContainer.innerHTML = `
+            <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+              <thead>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary);">
+                  <th style="padding: 8px;">模型名称</th>
+                  <th style="padding: 8px;">提供商</th>
+                  <th style="padding: 8px;">调用次数</th>
+                  <th style="padding: 8px;">消耗 Tokens</th>
+                  <th style="padding: 8px;">平均耗时</th>
+                  <th style="padding: 8px;">命中率</th>
+                </tr>
+              </thead>
+              <tbody style="color: var(--text-primary);">
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                  <td style="padding: 8px; font-family: monospace; font-weight: bold;">deepseek-chat</td>
+                  <td style="padding: 8px; color: #ff9100;">DeepSeek</td>
+                  <td style="padding: 8px;">620</td>
+                  <td style="padding: 8px;">98.4M</td>
+                  <td style="padding: 8px;">1.1s</td>
+                  <td style="padding: 8px; color: #00e676;">3.2%</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                  <td style="padding: 8px; font-family: monospace; font-weight: bold;">gpt-4o</td>
+                  <td style="padding: 8px; color: #2979ff;">OpenAI</td>
+                  <td style="padding: 8px;">280</td>
+                  <td style="padding: 8px;">45.2M</td>
+                  <td style="padding: 8px;">2.4s</td>
+                  <td style="padding: 8px; color: #00e676;">1.1%</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                  <td style="padding: 8px; font-family: monospace; font-weight: bold;">gemini-1.5-flash</td>
+                  <td style="padding: 8px; color: #8c52ff;">Gemini</td>
+                  <td style="padding: 8px;">150</td>
+                  <td style="padding: 8px;">15.2M</td>
+                  <td style="padding: 8px;">1.5s</td>
+                  <td style="padding: 8px; color: #00e676;">0.8%</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                  <td style="padding: 8px; font-family: monospace; font-weight: bold;">gpt-4o-mini</td>
+                  <td style="padding: 8px; color: #2979ff;">OpenAI</td>
+                  <td style="padding: 8px;">130</td>
+                  <td style="padding: 8px;">13.0M</td>
+                  <td style="padding: 8px;">0.9s</td>
+                  <td style="padding: 8px; color: #00e676;">5.4%</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                  <td style="padding: 8px; font-family: monospace; font-weight: bold;">deepseek-coder</td>
+                  <td style="padding: 8px; color: #ff9100;">DeepSeek</td>
+                  <td style="padding: 8px;">122</td>
+                  <td style="padding: 8px;">14.0M</td>
+                  <td style="padding: 8px;">1.6s</td>
+                  <td style="padding: 8px; color: #00e676;">1.5%</td>
+                </tr>
+              </tbody>
+            </table>
+        `;
+    };
+
+    // 默认展示日志
+    renderLogsTable();
+
+    // 绑定 Tab 切换事件监听
+    if (btnLogs) {
+        btnLogs.addEventListener('click', () => {
+            setActiveTab(btnLogs);
+            renderLogsTable();
+        });
+    }
+    if (btnProviders) {
+        btnProviders.addEventListener('click', () => {
+            setActiveTab(btnProviders);
+            renderProvidersTable();
+        });
+    }
+    if (btnModels) {
+        btnModels.addEventListener('click', () => {
+            setActiveTab(btnModels);
+            renderModelsTable();
+        });
+    }
+
+    // C. 绑定顶部快捷过滤器高亮切换
+    const filterBtns = document.querySelectorAll('.icon-filter-btn');
+    filterBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            filterBtns.forEach(b => {
+                b.classList.remove('active');
+                b.style.background = 'transparent';
+                b.style.color = 'var(--text-secondary)';
+                b.style.fontWeight = 'normal';
+            });
+            btn.classList.add('active');
+            btn.style.background = 'var(--accent-color)';
+            btn.style.color = 'white';
+            btn.style.fontWeight = 'bold';
+            
+            // 模拟筛选数据微变效果
+            const provider = btn.getAttribute('data-provider');
+            const summaryTokens = document.getElementById('summary-tokens');
+            const summaryRequests = document.getElementById('summary-requests');
+            if (provider === 'openai') {
+                summaryTokens.innerText = '58,204,110';
+                summaryRequests.innerText = '410';
+            } else if (provider === 'deepseek') {
+                summaryTokens.innerText = '112,402,890';
+                summaryRequests.innerText = '742';
+            } else if (provider === 'gemini') {
+                summaryTokens.innerText = '23,403,524';
+                summaryRequests.innerText = '219';
+            } else {
+                summaryTokens.innerText = '194,010,524';
+                summaryRequests.innerText = '1,371';
+            }
+        });
+    });
 }
 
 // 10. 二维码本地渲染 Canvas 算法（无任何联网依赖，支持离线微信扫码）
