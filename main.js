@@ -95,7 +95,7 @@ function createTray() {
             } 
         }
     ]);
-    tray.setToolTip('AI小助理 本地助手');
+    tray.setToolTip('AI助手 本地助手');
     tray.setContextMenu(contextMenu);
     tray.on('double-click', () => {
         mainWindow.show();
