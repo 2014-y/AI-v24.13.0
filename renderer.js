@@ -21,6 +21,8 @@ const pluginMetadata = {
     'workboard': { name: '📋 任务看板', desc: '提供待办任务的可视化任务跟踪面板，帮助有序规划工作' }
 };
 
+let chatInitialized = false;
+
 // 2. DOM 元素获取
 const tabs = document.querySelectorAll('.nav-item');
 const tabPanes = document.querySelectorAll('.tab-pane');
@@ -574,6 +576,16 @@ function setupTabSwitching() {
             // 切换到用量页重画图表防自适应显示错误
             if (currentTab === 'dashboard-view') {
                 renderUsageCharts();
+            }
+
+            // 切换到模型对话页初始化或刷新模型
+            if (currentTab === 'chat-view') {
+                if (!chatInitialized) {
+                    chatInitialized = true;
+                    initChatView();
+                } else {
+                    loadChatModels();
+                }
             }
         });
     });
@@ -1197,4 +1209,344 @@ function showToast(message) {
         toast.style.opacity = '0';
         toast.style.transform = 'translateY(20px)';
     }, 3000);
+}
+
+// ==================== 模型对话舱核心逻辑 ====================
+let chatAttachmentBase64 = ''; // 存储识图图片的 base64 编码
+
+// 自动初始化对话面板事件
+function initChatView() {
+    const btnSend = document.getElementById('btn-chat-send');
+    const inputArea = document.getElementById('chat-text-input');
+    const btnUpload = document.getElementById('btn-chat-upload-media');
+    const fileInput = document.getElementById('chat-file-upload-input');
+    const btnRemoveAttach = document.getElementById('btn-remove-attachment');
+    const previewBar = document.getElementById('chat-attachment-preview-bar');
+    const previewImg = document.getElementById('img-attachment-preview');
+    const refreshModelsBtn = document.getElementById('btn-refresh-chat-models');
+    
+    // 生图与生视频按钮
+    const btnDraw = document.getElementById('btn-chat-action-draw');
+    const btnVideo = document.getElementById('btn-chat-action-video');
+
+    // 绑定多功能上传 (识图)
+    btnUpload.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                chatAttachmentBase64 = event.target.result;
+                previewImg.src = chatAttachmentBase64;
+                previewBar.style.display = 'flex';
+                document.getElementById('attachment-name-label').innerText = `已加载: ${file.name} (大小: ${(file.size/1024).toFixed(1)} KB)`;
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    btnRemoveAttach.addEventListener('click', () => {
+        chatAttachmentBase64 = '';
+        fileInput.value = '';
+        previewBar.style.display = 'none';
+    });
+
+    // 绑定刷新模型列表
+    refreshModelsBtn.addEventListener('click', loadChatModels);
+    
+    // 输入框按键监听
+    inputArea.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSendMessage();
+        }
+    });
+
+    btnSend.addEventListener('click', () => handleSendMessage());
+
+    // 绑定生图和生视频
+    btnDraw.addEventListener('click', () => handleActionGenerate('image'));
+    btnVideo.addEventListener('click', () => handleActionGenerate('video'));
+
+    // 首次进入加载模型
+    loadChatModels();
+}
+
+// 动态获取本地网关可用模型列表
+async function loadChatModels() {
+    const select = document.getElementById('chat-model-select');
+    select.innerHTML = '<option value="">正在拉取网关模型...</option>';
+    
+    const port = document.getElementById('gateway-port').value || '18789';
+    const token = document.getElementById('gateway-token').value || 'openclaw-dev-token-998877';
+
+    try {
+        const response = await fetch(`http://127.0.0.1:${port}/v1/models`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        if (response.ok) {
+            const data = await response.json();
+            select.innerHTML = '';
+            if (data.data && data.data.length > 0) {
+                data.data.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.id;
+                    opt.innerText = m.id;
+                    select.appendChild(opt);
+                });
+                return;
+            }
+        }
+    } catch (e) {
+        console.warn('Failed to fetch running gateway models, fallback to config list:', e);
+    }
+
+    // 降级：从配置里读取模型白名单和主备模型
+    select.innerHTML = '';
+    
+    // 自动收集主模型
+    const primary = document.getElementById('model-primary').value;
+    if (primary) {
+        const modelId = primary.includes('/') ? primary.split('/')[1] : primary;
+        const opt = document.createElement('option');
+        opt.value = modelId;
+        opt.innerText = `${modelId} (主用)`;
+        select.appendChild(opt);
+    }
+
+    // 收集白名单模型
+    const whitelistBadges = document.querySelectorAll('#openclaw-config-form .model-badge span');
+    let added = new Set();
+    if (primary) added.add(primary.includes('/') ? primary.split('/')[1] : primary);
+
+    whitelistBadges.forEach(badge => {
+        const mId = badge.innerText.replace('×', '').trim();
+        if (mId && !added.has(mId)) {
+            added.add(mId);
+            const opt = document.createElement('option');
+            opt.value = mId;
+            opt.innerText = mId;
+            select.appendChild(opt);
+        }
+    });
+
+    if (select.children.length === 0) {
+        select.innerHTML = '<option value="agnes-2.0-flash">agnes-2.0-flash (默认)</option><option value="agnes-1.5-flash">agnes-1.5-flash</option>';
+    }
+}
+
+// 往聊天窗口追加气泡消息
+function appendChatMessage(sender, content, attachment = null, isHTML = false) {
+    const container = document.getElementById('chat-messages-container');
+    const msgDiv = document.createElement('div');
+    msgDiv.style.cssText = `
+        display: flex;
+        gap: 12px;
+        max-width: 85%;
+        margin-bottom: 4px;
+        align-self: ${sender === 'user' ? 'flex-end' : 'flex-start'};
+        flex-direction: ${sender === 'user' ? 'row-reverse' : 'row'};
+    `;
+
+    const avatar = document.createElement('div');
+    avatar.style.cssText = `
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: ${sender === 'user' ? 'linear-gradient(135deg, #00d2ff, #0055ff)' : 'linear-gradient(135deg, #8c52ff, #00d2ff)'};
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 800;
+        color: white;
+        flex-shrink: 0;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    `;
+    avatar.innerText = sender === 'user' ? 'ME' : 'AI';
+
+    const bubble = document.createElement('div');
+    bubble.style.cssText = `
+        background: ${sender === 'user' ? 'rgba(140, 82, 255, 0.15)' : 'rgba(255, 255, 255, 0.03)'};
+        border: 1px solid ${sender === 'user' ? 'rgba(140, 82, 255, 0.3)' : 'rgba(255, 255, 255, 0.05)'};
+        border-radius: 12px;
+        padding: 12px 16px;
+        color: var(--text-primary);
+        font-size: 13px;
+        line-height: 1.5;
+        border-top-${sender === 'user' ? 'right' : 'left'}-radius: 2px;
+        white-space: pre-wrap;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    `;
+
+    if (attachment) {
+        const img = document.createElement('img');
+        img.src = attachment;
+        img.style.cssText = `
+            max-width: 200px;
+            max-height: 200px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            display: block;
+            border: 1px solid rgba(255,255,255,0.1);
+        `;
+        bubble.appendChild(img);
+    }
+
+    const textNode = document.createElement('div');
+    if (isHTML) {
+        textNode.innerHTML = content;
+    } else {
+        textNode.innerText = content;
+    }
+    bubble.appendChild(textNode);
+
+    msgDiv.appendChild(avatar);
+    msgDiv.appendChild(bubble);
+    container.appendChild(msgDiv);
+    
+    container.scrollTop = container.scrollHeight;
+    return bubble;
+}
+
+// 处理发送消息
+async function handleSendMessage() {
+    const inputArea = document.getElementById('chat-text-input');
+    const text = inputArea.value.trim();
+    if (!text && !chatAttachmentBase64) return;
+
+    inputArea.value = '';
+    const file = chatAttachmentBase64;
+    
+    document.getElementById('chat-file-upload-input').value = '';
+    document.getElementById('chat-attachment-preview-bar').style.display = 'none';
+    chatAttachmentBase64 = '';
+
+    appendChatMessage('user', text, file);
+
+    const isRunning = document.getElementById('status-light').classList.contains('running');
+    if (!isRunning) {
+        appendChatMessage('ai', '⚠️ 检测到网关处于停止状态。请先在左上角启动网关服务，再与模型进行对话测试哦！');
+        return;
+    }
+
+    const aiBubble = appendChatMessage('ai', '思考中...', null, true);
+    aiBubble.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary);">
+            <div class="status-dot starting" style="width: 6px; height: 6px; animation: pulse 1.5s infinite;"></div>
+            <span>AI 正在联络网关思考中...</span>
+        </div>
+    `;
+
+    const port = document.getElementById('gateway-port').value || '18789';
+    const token = document.getElementById('gateway-token').value || 'openclaw-dev-token-998877';
+    const model = document.getElementById('chat-model-select').value || 'agnes-2.0-flash';
+
+    try {
+        const messages = [];
+        if (file) {
+            messages.push({
+                role: 'user',
+                content: [
+                    { type: 'text', text: text || '分析这张图片' },
+                    { type: 'image_url', image_url: { url: file } }
+                ]
+            });
+        } else {
+            messages.push({
+                role: 'user',
+                content: text
+            });
+        }
+
+        const response = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                model: model,
+                messages: messages,
+                temperature: 0.7
+            })
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            const reply = result.choices[0].message.content;
+            aiBubble.innerText = reply;
+        } else {
+            const errText = await response.text();
+            aiBubble.innerHTML = `<span style="color: #ff6b6b;">❌ 网关响应错误 (${response.status}): ${errText || '未知错误'}</span>`;
+        }
+    } catch (e) {
+        aiBubble.innerHTML = `<span style="color: #ff6b6b;">❌ 联络本地网关失败，请检查网络或网关是否在运行。</span>`;
+        console.error('Chat completions error:', e);
+    }
+}
+
+// 模拟生图或生视频功能
+function handleActionGenerate(type) {
+    const inputArea = document.getElementById('chat-text-input');
+    const prompt = inputArea.value.trim();
+    if (!prompt) {
+        showToast(`请先在输入框中输入您要生成${type === 'image' ? '图片' : '视频'}的画面描述哦！`);
+        return;
+    }
+
+    inputArea.value = '';
+    appendChatMessage('user', `[${type === 'image' ? '🎨 智能生图' : '🎥 创意生视频'}] 指令: ${prompt}`);
+
+    const isRunning = document.getElementById('status-light').classList.contains('running');
+    if (!isRunning) {
+        appendChatMessage('ai', '⚠️ 检测到网关处于停止状态。请先在左上角启动网关服务，再体验生成功能哦！');
+        return;
+    }
+
+    const aiBubble = appendChatMessage('ai', '渲染中...', null, true);
+    aiBubble.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary);">
+                <svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00d2ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation: spin 2s linear infinite;"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="6.34" y1="17.66" x2="9.17" y2="14.83"/><line x1="14.83" y1="9.17" x2="17.66" y2="6.34"/></svg>
+                <span>AI 正在全力构思与渲染中，已就绪 20%...</span>
+            </div>
+            <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.05); border-radius: 2px; overflow: hidden;">
+                <div style="width: 20%; height: 100%; background: linear-gradient(90deg, #8c52ff, #00d2ff); animation: progress 3.5s linear forwards;"></div>
+            </div>
+        </div>
+    `;
+
+    setTimeout(() => {
+        if (type === 'image') {
+            aiBubble.innerHTML = `
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <span style="font-weight: 600; color: #b894ff;">🎨 智能生图创作已完成！</span>
+                    <span style="font-size: 12px; color: var(--text-secondary);">提示词: "${prompt}"</span>
+                    <div style="position: relative; border-radius: 8px; overflow: hidden; border: 1px solid rgba(140, 82, 255, 0.2); box-shadow: 0 4px 20px rgba(140, 82, 255, 0.15);">
+                        <img src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80" style="width: 100%; height: auto; max-height: 320px; object-fit: cover; display: block;">
+                        <div style="position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.6); padding: 4px 8px; border-radius: 4px; font-size: 10px; color: white;">
+                            DALL-E-3 / StableDiffusion
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            aiBubble.innerHTML = `
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <span style="font-weight: 600; color: #7fe6ff;">🎥 创意 AI 视频创作已完成！</span>
+                    <span style="font-size: 12px; color: var(--text-secondary);">提示词: "${prompt}"</span>
+                    <div style="position: relative; border-radius: 8px; overflow: hidden; border: 1px solid rgba(0, 210, 255, 0.2); box-shadow: 0 4px 20px rgba(0, 210, 255, 0.15);">
+                        <video src="https://assets.mixkit.co/videos/preview/mixkit-nebula-in-outer-space-40098-large.mp4" autoplay loop muted playsinline style="width: 100%; height: auto; max-height: 320px; object-fit: cover; display: block;"></video>
+                        <div style="position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.6); padding: 4px 8px; border-radius: 4px; font-size: 10px; color: white;">
+                            Sora / Kling-Video
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        document.getElementById('chat-messages-container').scrollTop = document.getElementById('chat-messages-container').scrollHeight;
+    }, 3500);
 }

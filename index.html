@@ -40,6 +40,10 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>
               控制台
             </div>
+            <div class="nav-item" data-tab="chat-view" id="tour-nav-chat">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              模型对话
+            </div>
             <div class="nav-item" data-tab="config-view" id="tour-nav-config">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
               参数配置
@@ -126,6 +130,84 @@
                   🔑 绑定微信
                 </button>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tab 1.5: 模型对话 -->
+        <section class="tab-pane" id="chat-view" style="display: flex; flex-direction: column; height: 100%; box-sizing: border-box; overflow: hidden; padding: 12px; gap: 12px;">
+          <!-- 顶部状态与模型选型栏 -->
+          <div class="chat-header-bar" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div class="status-dot running" style="width: 8px; height: 8px;"></div>
+              <span style="font-size: 14px; font-weight: 700; color: white;">模型对话测试舱</span>
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span style="font-size: 12px; color: var(--text-secondary);">当前模型:</span>
+              <select id="chat-model-select" style="background: rgba(14, 11, 23, 0.7); border: 1px solid var(--border-color); border-radius: 8px; height: 32px; font-size: 12px; color: white; padding: 0 8px; outline: none; min-width: 180px; transition: all 0.2s ease;">
+                <option value="">载入中...</option>
+              </select>
+              <button id="btn-refresh-chat-models" title="重新获取可用模型" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-secondary); border-radius: 8px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- 聊天信息区 -->
+          <div id="chat-messages-container" style="flex: 1; min-height: 0; background: rgba(14, 11, 23, 0.3); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; scroll-behavior: smooth;">
+            <!-- 初始问候语 -->
+            <div style="display: flex; gap: 12px; max-width: 80%; align-self: flex-start;">
+              <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #8c52ff, #00d2ff); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; color: white; flex-shrink: 0; box-shadow: 0 0 10px rgba(140,82,255,0.3);">AI</div>
+              <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 12px 16px; color: var(--text-primary); font-size: 13px; line-height: 1.5; border-top-left-radius: 2px;">
+                您好！我是您的智能助手。我已经与您本地的 OpenClaw 网关成功对接！
+                <br><br>
+                在这里您可以：
+                <br>💬 与当前选中的大模型进行实时对话及可用性测试；
+                <br>🖼️ 点击左下角按钮上传图片，让支持多模态的模型进行**识图对话**；
+                <br>🎨 输入指令并点击下方生图/生视频快捷键，快速体验生成式创作。
+              </div>
+            </div>
+          </div>
+
+          <!-- 预览区域 (识图多模态附件) -->
+          <div id="chat-attachment-preview-bar" style="display: none; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: 10px; padding: 8px 12px; align-items: center; gap: 12px; position: relative;">
+            <div style="position: relative; width: 60px; height: 60px; border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1);">
+              <img id="img-attachment-preview" src="" style="width: 100%; height: 100%; object-fit: cover;">
+              <div id="btn-remove-attachment" style="position: absolute; top: 2px; right: 2px; background: rgba(0,0,0,0.6); color: white; border-radius: 50%; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; font-size: 10px; cursor: pointer; font-weight: 800;">×</div>
+            </div>
+            <span style="font-size: 12px; color: var(--text-secondary);" id="attachment-name-label">已选择 1 张待识图图片</span>
+          </div>
+
+          <!-- 底部控制与输入框区域 -->
+          <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 32px rgba(0,0,0,0.2);">
+            <!-- 功能快捷键 -->
+            <div style="display: flex; gap: 8px;">
+              <button id="btn-chat-action-draw" style="background: rgba(140, 82, 255, 0.1); border: 1px solid rgba(140, 82, 255, 0.3); color: #b894ff; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s ease;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 14.7255 3.09032 17.1962 4.85857 19C5.35654 19.5 5.25 20.5 4.5 21C3.5 21.6 3 22 3 22H12Z"/></svg>
+                🎨 智能生图 (Draw)
+              </button>
+              <button id="btn-chat-action-video" style="background: rgba(0, 210, 255, 0.1); border: 1px solid rgba(0, 210, 255, 0.3); color: #7fe6ff; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s ease;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                🎥 创意生视频 (Video)
+              </button>
+            </div>
+
+            <!-- 主输入栏 -->
+            <div style="display: flex; gap: 8px; align-items: flex-end;">
+              <!-- 附件上传 (识图) -->
+              <input type="file" id="chat-file-upload-input" accept="image/*" style="display: none;">
+              <button id="btn-chat-upload-media" title="选择上传的识图图片" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-secondary); border-radius: 10px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease; flex-shrink: 0;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              </button>
+              
+              <!-- 文本框 -->
+              <textarea id="chat-text-input" placeholder="输入对话内容... (生图指令请直接输入描述，并点击生图快捷键)" rows="1" style="flex: 1; background: rgba(14, 11, 23, 0.7) !important; border: 1px solid var(--border-color); border-radius: 10px; color: white !important; font-family: inherit; font-size: 13px; padding: 12px; outline: none; resize: none; min-height: 44px; max-height: 120px; box-sizing: border-box; transition: all 0.2s ease;"></textarea>
+              
+              <!-- 发送按钮 -->
+              <button id="btn-chat-send" style="background: linear-gradient(135deg, #8c52ff, #702aff); border: none; color: white; border-radius: 10px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 4px 15px rgba(140,82,255,0.25); flex-shrink: 0;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              </button>
             </div>
           </div>
         </section>
