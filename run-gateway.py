@@ -16,7 +16,7 @@ def find_node_exe():
             node_exe = os.path.join(nvm_dir, entry, "node.exe")
             if os.path.isfile(node_exe):
                 return node_exe
-    prog_files = r"C:\Program Files\nodejs\node.exe"
+    prog_files = os.path.join(os.environ.get("ProgramFiles"), "nodejs", "node.exe")
     if os.path.isfile(prog_files):
         return prog_files
     return "node"
@@ -29,7 +29,7 @@ def find_openclaw_index():
             idx = os.path.join(nvm_dir, entry, "node_modules", "openclaw", "dist", "index.js")
             if os.path.isfile(idx):
                 return idx
-    prog_files = r"C:\Program Files\nodejs\node_modules\openclaw\dist\index.js"
+    prog_files = os.path.join(os.environ.get("ProgramFiles"), "nodejs", "node_modules", "openclaw", "dist", "index.js")
     if os.path.isfile(prog_files):
         return prog_files
     return None

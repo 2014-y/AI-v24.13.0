@@ -16,7 +16,7 @@ from datetime import datetime
 OPENCLAW_DIR = Path(os.environ.get('USERPROFILE', '')) / '.openclaw'
 TRAINING_DATA_DIR = OPENCLAW_DIR / "learning_data"
 STATE_FILE = OPENCLAW_DIR / "auto-finetune-state.json"
-OLLAMA_MODELS_DIR = Path(os.environ.get("OLLAMA_MODELS", r"D:\Ollama\Models"))
+OLLAMA_MODELS_DIR = Path(os.environ.get("OLLAMA_MODELS", os.path.join(os.environ.get("OLLAMA_MODELS_PARENT", os.environ.get("USERPROFILE", ".")), "Ollama", "Models")))
 CHECKPOINT_DIR = OPENCLAW_DIR / "fine-tune-checkpoint"
 SCRIPT_DIR = Path(__file__).parent
 
