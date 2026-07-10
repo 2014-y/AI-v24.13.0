@@ -47,6 +47,7 @@
   "build": {
     "appId": "com.2014y.aigateway",
     "productName": "AI小助理",
+    "asar": false,
     "directories": {
       "output": "dist"
     },
