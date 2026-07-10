@@ -780,25 +780,7 @@ async function renderUsageCharts() {
     const renderLogsTable = () => {
         const logs = stats.logs || [];
         if (logs.length === 0) {
-            tableContainer.innerHTML = `
-                <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
-                  <thead>
-                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary);">
-                      <th style="padding: 8px;">请求时间</th>
-                      <th style="padding: 8px;">提供商</th>
-                      <th style="padding: 8px;">模型名称</th>
-                      <th style="padding: 8px;">输入 Tokens</th>
-                      <th style="padding: 8px;">输出 Tokens</th>
-                      <th style="padding: 8px;">缓存命中</th>
-                      <th style="padding: 8px;">耗时</th>
-                      <th style="padding: 8px;">状态</th>
-                    </tr>
-                  </thead>
-                  <tbody style="color: var(--text-primary);">
-                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);"><td style="padding: 8px;">22:48:12</td><td style="padding: 8px;"><span style="color: #ff9100; font-weight: 600;">DeepSeek</span></td><td style="padding: 8px;">deepseek-chat</td><td style="padding: 8px;">1,842</td><td style="padding: 8px;">421</td><td style="padding: 8px; color: #00e676;">🎯 360</td><td style="padding: 8px;">1.2s</td><td style="padding: 8px; color: #00e676;">🟢 成功</td></tr>
-                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);"><td style="padding: 8px;">22:47:35</td><td style="padding: 8px;"><span style="color: #2979ff; font-weight: 600;">OpenAI</span></td><td style="padding: 8px;">gpt-4o</td><td style="padding: 8px;">3,124</td><td style="padding: 8px;">890</td><td style="padding: 8px;">--</td><td style="padding: 8px;">2.5s</td><td style="padding: 8px; color: #00e676;">🟢 成功</td></tr>
-                  </tbody>
-                </table>`;
+            tableContainer.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-secondary);">暂无真实请求日志数据</div>`;
             return;
         }
         
@@ -843,17 +825,7 @@ async function renderUsageCharts() {
         const provs = stats.providers || {};
         const keys = Object.keys(provs);
         if (keys.length === 0) {
-            tableContainer.innerHTML = `
-                <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
-                  <thead>
-                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary);">
-                      <th style="padding: 8px;">提供商</th><th style="padding: 8px;">总请求数</th><th style="padding: 8px;">总消耗 Tokens</th><th style="padding: 8px;">占比</th><th style="padding: 8px;">缓存命中数</th>
-                    </tr>
-                  </thead>
-                  <tbody style="color: var(--text-primary);">
-                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);"><td style="padding: 8px; font-weight: bold; color: #ff9100;">🌐 DeepSeek</td><td style="padding: 8px;">742</td><td style="padding: 8px;">112.4M</td><td style="padding: 8px;">58.1%</td><td style="padding: 8px;">2.4M</td></tr>
-                  </tbody>
-                </table>`;
+            tableContainer.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-secondary);">暂无真实提供商数据</div>`;
             return;
         }
 
@@ -865,7 +837,7 @@ async function renderUsageCharts() {
                   <td style="padding: 8px; font-weight: bold; color: #ff9100;">🌐 ${k}</td>
                   <td style="padding: 8px;">${p.requests}</td>
                   <td style="padding: 8px;">${p.tokens.toLocaleString()}</td>
-                  <td style="padding: 8px;">${((p.tokens / stats.total_tokens) * 100).toFixed(1)}%</td>
+                  <td style="padding: 8px;">${stats.total_tokens > 0 ? ((p.tokens / stats.total_tokens) * 100).toFixed(1) : 0}%</td>
                   <td style="padding: 8px; color: #00e676;">${p.hit > 0 ? p.hit.toLocaleString() : '--'}</td>
                 </tr>
             `;
@@ -893,17 +865,7 @@ async function renderUsageCharts() {
         const modelsMap = stats.models || {};
         const keys = Object.keys(modelsMap);
         if (keys.length === 0) {
-            tableContainer.innerHTML = `
-                <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
-                  <thead>
-                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary);">
-                      <th style="padding: 8px;">模型名称</th><th style="padding: 8px;">提供商</th><th style="padding: 8px;">调用次数</th><th style="padding: 8px;">消耗 Tokens</th>
-                    </tr>
-                  </thead>
-                  <tbody style="color: var(--text-primary);">
-                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);"><td style="padding: 8px; font-family: monospace;">deepseek-chat</td><td style="padding: 8px; color: #ff9100;">DeepSeek</td><td style="padding: 8px;">620</td><td style="padding: 8px;">98.4M</td></tr>
-                  </tbody>
-                </table>`;
+            tableContainer.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-secondary);">暂无真实模型数据</div>`;
             return;
         }
 
@@ -916,8 +878,8 @@ async function renderUsageCharts() {
                   <td style="padding: 8px; color: #2979ff;">${m.provider}</td>
                   <td style="padding: 8px;">${m.calls}</td>
                   <td style="padding: 8px;">${m.tokens.toLocaleString()}</td>
-                  <td style="padding: 8px;">${(m.duration / m.calls).toFixed(2)}s</td>
-                  <td style="padding: 8px; color: #00e676;">${((m.hit / m.tokens) * 100).toFixed(1)}%</td>
+                  <td style="padding: 8px;">${m.calls > 0 ? (m.duration / m.calls).toFixed(2) : 0}s</td>
+                  <td style="padding: 8px; color: #00e676;">${m.tokens > 0 ? ((m.hit / m.tokens) * 100).toFixed(1) : 0}%</td>
                 </tr>
             `;
         });
@@ -941,6 +903,19 @@ async function renderUsageCharts() {
         `;
     };
 
+    // 动态生成快捷提供商过滤按钮，实现 100% 依据真实数据自适应渲染
+    const filtersContainer = document.getElementById('stats-provider-filters');
+    if (filtersContainer) {
+        let filtersHtml = `<span class="icon-filter-btn active" data-provider="all" title="全部" style="cursor: pointer; font-size: 11px; padding: 4px 8px; border-radius: 6px; background: var(--accent-color); color: white; font-weight: bold; transition: all 0.2s ease;">ALL</span>`;
+        
+        const keys = Object.keys(stats.providers || {});
+        keys.forEach(k => {
+            const displayLabel = k.toUpperCase().slice(0, 3);
+            filtersHtml += `<span class="icon-filter-btn" data-provider="${k}" title="${k}" style="cursor: pointer; font-size: 11px; padding: 4px 8px; border-radius: 6px; color: var(--text-secondary); transition: all 0.2s ease; margin-left: 4px;">${displayLabel}</span>`;
+        });
+        filtersContainer.innerHTML = filtersHtml;
+    }
+
     renderLogsTable();
 
     if (btnLogs) {
@@ -953,35 +928,38 @@ async function renderUsageCharts() {
         btnModels.addEventListener('click', () => { setActiveTab(btnModels); renderModelsTable(); });
     }
 
-    // 绑定快捷筛选按钮
-    const filterBtns = document.querySelectorAll('.icon-filter-btn');
-    filterBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            filterBtns.forEach(b => {
-                b.classList.remove('active');
-                b.style.background = 'transparent';
-                b.style.color = 'var(--text-secondary)';
-                b.style.fontWeight = 'normal';
+    // 动态绑定快捷筛选按钮
+    const bindFilterEvents = () => {
+        const filterBtns = document.querySelectorAll('.icon-filter-btn');
+        filterBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                filterBtns.forEach(b => {
+                    b.classList.remove('active');
+                    b.style.background = 'transparent';
+                    b.style.color = 'var(--text-secondary)';
+                    b.style.fontWeight = 'normal';
+                });
+                btn.classList.add('active');
+                btn.style.background = 'var(--accent-color)';
+                btn.style.color = 'white';
+                btn.style.fontWeight = 'bold';
+                
+                const provider = btn.getAttribute('data-provider');
+                const summaryTokens = document.getElementById('summary-tokens');
+                const summaryRequests = document.getElementById('summary-requests');
+                
+                if (provider === 'all') {
+                    summaryTokens.innerText = stats.total_tokens.toLocaleString();
+                    summaryRequests.innerText = stats.total_requests.toLocaleString();
+                } else {
+                    const pInfo = (stats.providers || {})[provider] || { tokens: 0, requests: 0 };
+                    summaryTokens.innerText = pInfo.tokens.toLocaleString();
+                    summaryRequests.innerText = pInfo.requests.toLocaleString();
+                }
             });
-            btn.classList.add('active');
-            btn.style.background = 'var(--accent-color)';
-            btn.style.color = 'white';
-            btn.style.fontWeight = 'bold';
-            
-            const provider = btn.getAttribute('data-provider');
-            const summaryTokens = document.getElementById('summary-tokens');
-            const summaryRequests = document.getElementById('summary-requests');
-            
-            if (provider === 'all') {
-                summaryTokens.innerText = stats.total_tokens.toLocaleString();
-                summaryRequests.innerText = stats.total_requests.toLocaleString();
-            } else {
-                const pInfo = (stats.providers || {})[provider] || { tokens: 0, requests: 0 };
-                summaryTokens.innerText = pInfo.tokens.toLocaleString();
-                summaryRequests.innerText = pInfo.requests.toLocaleString();
-            }
         });
-    });
+    };
+    bindFilterEvents();
 }
 
 // 10. 二维码本地渲染 Canvas 算法（无任何联网依赖，支持离线微信扫码）

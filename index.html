@@ -221,11 +221,8 @@
             <!-- 顶栏过滤工具组 -->
             <div class="stats-toolbar" style="display: flex; align-items: center; gap: 8px;">
               <!-- 快捷大模型厂家筛选小图标 -->
-              <div class="provider-filter-icons" style="display: flex; gap: 4px; background: rgba(0,0,0,0.25); padding: 4px; border-radius: 8px; border: 1px solid var(--border-color);">
+              <div class="provider-filter-icons" id="stats-provider-filters" style="display: flex; gap: 4px; background: rgba(0,0,0,0.25); padding: 4px; border-radius: 8px; border: 1px solid var(--border-color);">
                 <span class="icon-filter-btn active" data-provider="all" title="全部" style="cursor: pointer; font-size: 11px; padding: 4px 8px; border-radius: 6px; background: var(--accent-color); color: white; font-weight: bold; transition: all 0.2s ease;">ALL</span>
-                <span class="icon-filter-btn" data-provider="openai" title="OpenAI" style="cursor: pointer; font-size: 11px; padding: 4px 8px; border-radius: 6px; color: var(--text-secondary); transition: all 0.2s ease;">OAI</span>
-                <span class="icon-filter-btn" data-provider="deepseek" title="DeepSeek" style="cursor: pointer; font-size: 11px; padding: 4px 8px; border-radius: 6px; color: var(--text-secondary); transition: all 0.2s ease;">DS</span>
-                <span class="icon-filter-btn" data-provider="gemini" title="Gemini" style="cursor: pointer; font-size: 11px; padding: 4px 8px; border-radius: 6px; color: var(--text-secondary); transition: all 0.2s ease;">GEM</span>
               </div>
               <select class="toolbar-select" id="stats-source-select" style="height: 30px; font-size: 12px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); padding: 0 8px; outline: none; cursor: pointer;">
                 <option value="all">全部来源</option>
