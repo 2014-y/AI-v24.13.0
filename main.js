@@ -138,8 +138,11 @@ ipcMain.on('gateway-action', (event, action) => {
         }
 
         try {
-            // 找到内置的 openclaw 运行入口
-            const openclawEntry = require.resolve('openclaw/dist/index.js');
+            // 优先通过物理路径直接定位（完美避开打包后 Node.js 模块 exports 对子路径文件的加载限制）
+            let openclawEntry = path.join(__dirname, 'node_modules', 'openclaw', 'dist', 'index.js');
+            if (!fs.existsSync(openclawEntry)) {
+                openclawEntry = require.resolve('openclaw/dist/index.js');
+            }
             
             // 强制使用打包内置的原生独立 Node 运行时（实现 100% 闭环，免装全局 Node 依赖）
             const nodeExePath = path.join(__dirname, '.node-sandbox', 'node.exe');
