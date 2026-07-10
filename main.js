@@ -441,7 +441,7 @@ ipcMain.handle('open-external', async (event, url) => {
                     if (!resolved) {
                         resolved = true;
                         child.kill();
-                        shell.openExternal("http://127.0.0.1:18789/acp/chat?key=openclaw-dev-token-998877&apiKey=openclaw-dev-token-998877&session=main");
+                        shell.openExternal("http://127.0.0.1:18789/acp/chat?token=openclaw-dev-token-998877&key=openclaw-dev-token-998877&apiKey=openclaw-dev-token-998877&session=main");
                         resolve(false);
                     }
                 }, 5000);
@@ -449,7 +449,7 @@ ipcMain.handle('open-external', async (event, url) => {
                 child.on('exit', () => {
                     if (!resolved) {
                         resolved = true;
-                        shell.openExternal("http://127.0.0.1:18789/acp/chat?key=openclaw-dev-token-998877&apiKey=openclaw-dev-token-998877&session=main");
+                        shell.openExternal("http://127.0.0.1:18789/acp/chat?token=openclaw-dev-token-998877&key=openclaw-dev-token-998877&apiKey=openclaw-dev-token-998877&session=main");
                         resolve(false);
                     }
                 });
