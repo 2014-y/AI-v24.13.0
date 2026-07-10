@@ -412,7 +412,7 @@ body.maximized .app-container {
 }
 
 .console-right {
-  width: 260px;
+  width: 180px;
   display: flex;
   flex-direction: column;
   gap: 20px;
