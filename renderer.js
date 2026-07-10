@@ -22,6 +22,7 @@ const pluginMetadata = {
 };
 
 let chatInitialized = false;
+let statsRefreshInterval = null;
 
 // 2. DOM 元素获取
 const tabs = document.querySelectorAll('.nav-item');
@@ -641,6 +642,64 @@ async function renderUsageCharts() {
         const res = await window.api.getStatsData();
         if (res && res.success && res.data) {
             stats = res.data;
+            window.lastFetchedStats = res.data;
+
+            // 动态填充提供商下拉框 (同时保留用户当前的选中态)
+            const sourceSelect = document.getElementById('stats-source-select');
+            const modelSelect = document.getElementById('stats-model-select');
+            if (sourceSelect) {
+                const curVal = sourceSelect.value || 'all';
+                const providers = new Set();
+                (stats.logs || []).forEach(log => {
+                    if (log.provider) providers.add(log.provider);
+                });
+                let optHtml = '<option value="all">全部来源</option>';
+                providers.forEach(p => {
+                    optHtml += `<option value="${p}">${p}</option>`;
+                });
+                sourceSelect.innerHTML = optHtml;
+                // 仅当新生成的选项中包含该值时才还原，否则退回 'all'
+                if (Array.from(sourceSelect.options).some(opt => opt.value === curVal)) {
+                    sourceSelect.value = curVal;
+                } else {
+                    sourceSelect.value = 'all';
+                }
+            }
+            if (modelSelect) {
+                const curVal = modelSelect.value || 'all';
+                const models = new Set();
+                (stats.logs || []).forEach(log => {
+                    if (log.model) models.add(log.model);
+                });
+                let optHtml = '<option value="all">全部模型</option>';
+                models.forEach(m => {
+                    optHtml += `<option value="${m}">${m}</option>`;
+                });
+                modelSelect.innerHTML = optHtml;
+                if (Array.from(modelSelect.options).some(opt => opt.value === curVal)) {
+                    modelSelect.value = curVal;
+                } else {
+                    modelSelect.value = 'all';
+                }
+            }
+
+            // 绑定联动筛选事件
+            if (sourceSelect && !sourceSelect.dataset.bound) {
+                sourceSelect.dataset.bound = "true";
+                sourceSelect.addEventListener('change', applyStatsFilters);
+            }
+            if (modelSelect && !modelSelect.dataset.bound) {
+                modelSelect.dataset.bound = "true";
+                modelSelect.addEventListener('change', applyStatsFilters);
+            }
+            const timeSelect = document.getElementById('stats-time-select');
+            if (timeSelect && !timeSelect.dataset.bound) {
+                timeSelect.dataset.bound = "true";
+                timeSelect.addEventListener('change', applyStatsFilters);
+            }
+
+            // 初始化自动刷新控制
+            setupStatsAutoRefresh();
         }
     } catch (err) {
         console.error('Failed to get real stats data:', err);
@@ -986,22 +1045,419 @@ async function renderUsageCharts() {
                 btn.style.color = 'white';
                 btn.style.fontWeight = 'bold';
                 
-                const provider = btn.getAttribute('data-provider');
-                const summaryTokens = document.getElementById('summary-tokens');
-                const summaryRequests = document.getElementById('summary-requests');
-                
-                if (provider === 'all') {
-                    summaryTokens.innerText = stats.total_tokens.toLocaleString();
-                    summaryRequests.innerText = stats.total_requests.toLocaleString();
-                } else {
-                    const pInfo = (stats.providers || {})[provider] || { tokens: 0, requests: 0 };
-                    summaryTokens.innerText = pInfo.tokens.toLocaleString();
-                    summaryRequests.innerText = pInfo.requests.toLocaleString();
-                }
+                // 快捷提供商按钮变动时，直接触发全局联动筛选
+                applyStatsFilters();
             });
         });
     };
     bindFilterEvents();
+}
+
+// 自动刷新统计看板控制
+function setupStatsAutoRefresh() {
+    const refreshSelect = document.getElementById('stats-refresh-select');
+    if (!refreshSelect) return;
+    
+    const triggerInterval = () => {
+        if (statsRefreshInterval) {
+            clearInterval(statsRefreshInterval);
+            statsRefreshInterval = null;
+        }
+        if (refreshSelect.value === '30s') {
+            statsRefreshInterval = setInterval(() => {
+                if (currentTab === 'dashboard-view') {
+                    renderUsageCharts();
+                }
+            }, 30000);
+        }
+    };
+    
+    if (!refreshSelect.dataset.bound) {
+        refreshSelect.dataset.bound = "true";
+        refreshSelect.addEventListener('change', triggerInterval);
+    }
+    triggerInterval();
+}
+
+// 核心：用量监控看板全维度超级联动筛选
+function applyStatsFilters() {
+    const rawData = window.lastFetchedStats;
+    if (!rawData) return;
+
+    const sourceSelect = document.getElementById('stats-source-select');
+    const modelSelect = document.getElementById('stats-model-select');
+    const timeSelect = document.getElementById('stats-time-select');
+    
+    // 获取快捷提供商筛选
+    const activeFilterBtn = document.querySelector('.icon-filter-btn.active');
+    const providerFilter = activeFilterBtn ? activeFilterBtn.getAttribute('data-provider') : 'all';
+
+    const selectedSource = sourceSelect ? sourceSelect.value : 'all';
+    const selectedModel = modelSelect ? modelSelect.value : 'all';
+    const selectedTime = timeSelect ? timeSelect.value : 'today';
+
+    let logs = rawData.logs || [];
+
+    // 1. 时间筛选器过滤 (此处做基础兼容)
+    if (selectedTime === 'today') {
+        // 维持
+    }
+
+    // 2. 快捷提供商按钮过滤
+    if (providerFilter !== 'all') {
+        logs = logs.filter(log => log.provider.toLowerCase() === providerFilter.toLowerCase());
+    }
+
+    // 3. 下拉来源过滤 (兼容硬编码选项与动态提供商名)
+    if (selectedSource !== 'all') {
+        if (selectedSource === 'gateway') {
+            // 保留全部网关
+        } else if (selectedSource === 'plugins') {
+            logs = [];
+        } else {
+            logs = logs.filter(log => log.provider === selectedSource);
+        }
+    }
+
+    // 4. 下拉模型过滤
+    if (selectedModel !== 'all') {
+        if (selectedModel === 'primary') {
+            const primaryModel = document.getElementById('model-primary').value || '';
+            const modelId = primaryModel.includes('/') ? primaryModel.split('/')[1] : primaryModel;
+            logs = logs.filter(log => log.model.includes(modelId));
+        } else if (selectedModel === 'fallback') {
+            const fallbackModel = document.getElementById('model-fallback').value || '';
+            const modelId = fallbackModel.includes('/') ? fallbackModel.split('/')[1] : fallbackModel;
+            logs = logs.filter(log => log.model.includes(modelId));
+        } else {
+            logs = logs.filter(log => log.model === selectedModel);
+        }
+    }
+
+    // 5. 基于过滤后的 logs 重算汇总卡片指标
+    const total_tokens = logs.reduce((sum, log) => sum + log.input + log.output, 0);
+    const total_requests = logs.length;
+    const sub_input_tokens = logs.reduce((sum, log) => sum + log.input, 0);
+    const sub_output_tokens = logs.reduce((sum, log) => sum + log.output, 0);
+    const sub_hit_tokens = logs.reduce((sum, log) => sum + (log.hit || 0), 0);
+    const hit_rate = total_tokens > 0 ? (sub_hit_tokens / total_tokens) * 100 : 0;
+    
+    // 输入 $0.002/1k, 输出 $0.008/1k 粗略估算成本
+    const total_cost = logs.reduce((sum, log) => sum + (log.input * 0.000002 + log.output * 0.000008), 0);
+
+    // 更新指标卡片
+    document.getElementById('summary-tokens').innerText = total_tokens.toLocaleString();
+    const tokensApprox = document.getElementById('summary-tokens-approx');
+    if (tokensApprox) {
+        if (total_tokens < 10000) {
+            tokensApprox.style.display = 'none';
+        } else {
+            tokensApprox.style.display = 'inline';
+            if (total_tokens >= 100000000) {
+                tokensApprox.innerText = `≈ ${(total_tokens / 100000000).toFixed(2)} 亿`;
+            } else {
+                tokensApprox.innerText = `≈ ${(total_tokens / 10000).toFixed(1)} 万`;
+            }
+        }
+    }
+    document.getElementById('summary-requests').innerText = total_requests.toLocaleString();
+    document.getElementById('summary-cost').innerText = `$${total_cost.toFixed(4)}`;
+    document.getElementById('sub-input').innerText = sub_input_tokens >= 100000000 
+        ? `${(sub_input_tokens / 100000000).toFixed(2)} 亿` 
+        : `${(sub_input_tokens / 10000).toFixed(1)} 万`;
+    
+    document.getElementById('sub-output').innerText = sub_output_tokens >= 10000 
+        ? `${(sub_output_tokens / 10000).toFixed(1)} 万` 
+        : sub_output_tokens.toLocaleString();
+        
+    document.getElementById('sub-hit').innerText = sub_hit_tokens >= 10000 
+        ? `${(sub_hit_tokens / 10000).toFixed(1)} 万` 
+        : sub_hit_tokens.toLocaleString();
+        
+    document.getElementById('hit-rate-val').innerText = `${hit_rate.toFixed(1)}%`;
+    document.getElementById('hit-rate-bar').style.width = `${hit_rate}%`;
+
+    // 6. 重置 hourly_trend 重新计算绘图数据
+    const hours = ['00:00', '02:00', '04:00', '06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'];
+    let lineData = {
+        cost: Array(12).fill(0),
+        cacheCreate: Array(12).fill(0),
+        cacheHit: Array(12).fill(0),
+        input: Array(12).fill(0),
+        output: Array(12).fill(0)
+    };
+
+    logs.forEach(log => {
+        const timePart = log.time.split(' ')[1] || log.time;
+        const hr = parseInt(timePart.split(':')[0]);
+        if (!isNaN(hr)) {
+            const roundedHr = Math.floor(hr / 2) * 2;
+            const hourStr = (roundedHr < 10 ? '0' : '') + roundedHr + ':00';
+            const idx = hours.indexOf(hourStr);
+            if (idx !== -1) {
+                lineData.input[idx] += log.input;
+                lineData.output[idx] += log.output;
+                lineData.cacheHit[idx] += (log.hit || 0);
+            }
+        }
+    });
+
+    const norm = (v) => Math.min(100, Math.max(2, (v / 20000.0) * 100));
+    const processedLineData = {
+        cost: lineData.input.map((v, i) => norm(v * 0.000002 + lineData.output[i] * 0.000008)),
+        cacheCreate: lineData.input.map(v => norm(v * 0.15)),
+        cacheHit: lineData.cacheHit.map(v => norm(v)),
+        input: lineData.input.map(v => norm(v)),
+        output: lineData.output.map(v => norm(v))
+    };
+
+    // 重新绘制 SVG 趋势折线图 (配合筛选丝滑抖动)
+    const waveBox = document.getElementById('stats-wave-chart-box');
+    if (waveBox) {
+        const width = 600;
+        const height = 200;
+        const paddingLeft = 40;
+        const paddingRight = 20;
+        const paddingTop = 20;
+        const paddingBottom = 30;
+        const plotWidth = width - paddingLeft - paddingRight;
+        const plotHeight = height - paddingTop - paddingBottom;
+
+        let gridHtml = '';
+        const yLines = 4;
+        for (let i = 0; i <= yLines; i++) {
+            const y = paddingTop + (plotHeight / yLines) * i;
+            gridHtml += `<line x1="${paddingLeft}" y1="${y}" x2="${width - paddingRight}" y2="${y}" stroke="rgba(255,255,255,0.04)" />`;
+            const labelVal = Math.round(20000 * (1 - i / yLines));
+            gridHtml += `<text x="${paddingLeft - 8}" y="${y + 4}" fill="var(--text-secondary)" font-size="9" text-anchor="end">${labelVal}k</text>`;
+        }
+
+        hours.forEach((h, idx) => {
+            const x = paddingLeft + (plotWidth / (hours.length - 1)) * idx;
+            gridHtml += `<text x="${x}" y="${height - 10}" fill="var(--text-secondary)" font-size="9" text-anchor="middle">${h}</text>`;
+            gridHtml += `<line x1="${x}" y1="${paddingTop}" x2="${x}" y2="${height - paddingBottom}" stroke="rgba(255,255,255,0.02)" stroke-dasharray="2,2" />`;
+        });
+
+        const getCurvePath = (values) => {
+            let path = '';
+            const len = values.length;
+            const coords = values.map((val, idx) => {
+                const x = paddingLeft + (plotWidth / (len - 1)) * idx;
+                const y = paddingTop + plotHeight * (1 - val / 100);
+                return { x, y };
+            });
+
+            path += `M ${coords[0].x} ${coords[0].y}`;
+            for (let i = 0; i < len - 1; i++) {
+                const p1 = coords[i];
+                const p2 = coords[i+1];
+                const cpX1 = p1.x + (p2.x - p1.x) / 2;
+                const cpY1 = p1.y;
+                const cpX2 = p2.x - (p2.x - p1.x) / 2;
+                const cpY2 = p2.y;
+                path += ` C ${cpX1} ${cpY1}, ${cpX2} ${cpY2}, ${p2.x} ${p2.y}`;
+            }
+            return { path, coords };
+        };
+
+        const curves = [
+            { key: 'cost', color: '#ff5252', width: 2, fillOpacity: 0.05 },
+            { key: 'cacheCreate', color: '#ff9100', width: 2, fillOpacity: 0.03 },
+            { key: 'cacheHit', color: '#2979ff', width: 2.5, fillOpacity: 0.08 },
+            { key: 'input', color: '#00e676', width: 3, fillOpacity: 0.1 },
+            { key: 'output', color: 'var(--accent-color)', width: 2.5, fillOpacity: 0.08 }
+        ];
+
+        let pathsHtml = '';
+        curves.forEach((c) => {
+            const { path, coords } = getCurvePath(processedLineData[c.key]);
+            const gradId = `grad-${c.key}`;
+            pathsHtml += `
+                <defs>
+                    <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="${c.color}" stop-opacity="${c.fillOpacity}"/>
+                        <stop offset="100%" stop-color="${c.color}" stop-opacity="0"/>
+                    </linearGradient>
+                </defs>
+                <path d="${path} L ${coords[coords.length - 1].x} ${height - paddingBottom} L ${coords[0].x} ${height - paddingBottom} Z" fill="url(#${gradId})" />
+                <path d="${path}" fill="none" stroke="${c.color}" stroke-width="${c.width}" stroke-linecap="round" />
+            `;
+        });
+
+        waveBox.innerHTML = `
+            <svg width="100%" height="100%" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+                ${gridHtml}
+                ${pathsHtml}
+            </svg>
+        `;
+    }
+
+    // 7. 生成过滤后的统计快照并覆盖刷新数据表格
+    const mockFilteredStats = {
+        logs: logs,
+        providers: {},
+        models: {},
+        total_tokens: total_tokens
+    };
+
+    logs.forEach(log => {
+        if (!mockFilteredStats.providers[log.provider]) {
+            mockFilteredStats.providers[log.provider] = { tokens: 0, requests: 0, hit: 0 };
+        }
+        mockFilteredStats.providers[log.provider].tokens += log.input + log.output;
+        mockFilteredStats.providers[log.provider].requests += 1;
+        mockFilteredStats.providers[log.provider].hit += (log.hit || 0);
+
+        if (!mockFilteredStats.models[log.model]) {
+            mockFilteredStats.models[log.model] = { tokens: 0, provider: log.provider, calls: 0, duration: 0, hit: 0 };
+        }
+        mockFilteredStats.models[log.model].tokens += log.input + log.output;
+        mockFilteredStats.models[log.model].calls += 1;
+        mockFilteredStats.models[log.model].hit += (log.hit || 0);
+        
+        const sec = parseFloat(log.duration.replace('s',''));
+        mockFilteredStats.models[log.model].duration += isNaN(sec) ? 1.0 : sec;
+    });
+
+    // 临时侵入并渲染底层表格后恢复
+    const realStats = window.lastFetchedStats;
+    window.lastFetchedStats = mockFilteredStats;
+
+    const btnLogs = document.getElementById('btn-stats-tab-logs');
+    const btnProviders = document.getElementById('btn-stats-tab-providers');
+    const btnModels = document.getElementById('btn-stats-tab-models');
+    const tableContainer = document.getElementById('stats-data-table-container');
+
+    const renderLogsTable = () => {
+        const list = mockFilteredStats.logs || [];
+        if (list.length === 0) {
+            tableContainer.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-secondary);">暂无符合筛选条件的日志</div>`;
+            return;
+        }
+        let rowsHtml = '';
+        list.forEach(log => {
+            rowsHtml += `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                  <td style="padding: 8px;">${log.time}</td>
+                  <td style="padding: 8px;"><span style="color: #ff9100; font-weight: 600;">${log.provider}</span></td>
+                  <td style="padding: 8px; font-family: monospace;">${log.model}</td>
+                  <td style="padding: 8px;">${log.input.toLocaleString()}</td>
+                  <td style="padding: 8px;">${log.output.toLocaleString()}</td>
+                  <td style="padding: 8px; color: #00e676;">${log.hit > 0 ? `🎯 ${log.hit.toLocaleString()}` : '--'}</td>
+                  <td style="padding: 8px;">${log.duration}</td>
+                  <td style="padding: 8px; color: #00e676;">${log.status}</td>
+                </tr>
+            `;
+        });
+        tableContainer.innerHTML = `
+            <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+              <thead>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary);">
+                  <th style="padding: 8px;">请求时间</th>
+                  <th style="padding: 8px;">提供商</th>
+                  <th style="padding: 8px;">模型名称</th>
+                  <th style="padding: 8px;">输入 Tokens</th>
+                  <th style="padding: 8px;">输出 Tokens</th>
+                  <th style="padding: 8px;">缓存命中</th>
+                  <th style="padding: 8px;">耗时</th>
+                  <th style="padding: 8px;">状态</th>
+                </tr>
+              </thead>
+              <tbody style="color: var(--text-primary);">
+                ${rowsHtml}
+              </tbody>
+            </table>
+        `;
+    };
+
+    const renderProvidersTable = () => {
+        const provs = mockFilteredStats.providers || {};
+        const keys = Object.keys(provs);
+        if (keys.length === 0) {
+            tableContainer.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-secondary);">暂无符合筛选条件的提供商</div>`;
+            return;
+        }
+        let rowsHtml = '';
+        keys.forEach(k => {
+            const p = provs[k];
+            rowsHtml += `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                  <td style="padding: 8px; font-weight: bold; color: #ff9100;">🌐 ${k}</td>
+                  <td style="padding: 8px;">${p.requests}</td>
+                  <td style="padding: 8px;">${p.tokens.toLocaleString()}</td>
+                  <td style="padding: 8px;">${mockFilteredStats.total_tokens > 0 ? ((p.tokens / mockFilteredStats.total_tokens) * 100).toFixed(1) : 0}%</td>
+                  <td style="padding: 8px; color: #00e676;">${p.hit > 0 ? p.hit.toLocaleString() : '--'}</td>
+                </tr>
+            `;
+        });
+        tableContainer.innerHTML = `
+            <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+              <thead>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary);">
+                  <th style="padding: 8px;">提供商</th>
+                  <th style="padding: 8px;">总请求数</th>
+                  <th style="padding: 8px;">总消耗 Tokens</th>
+                  <th style="padding: 8px;">占比</th>
+                  <th style="padding: 8px;">缓存命中数</th>
+                </tr>
+              </thead>
+              <tbody style="color: var(--text-primary);">
+                ${rowsHtml}
+              </tbody>
+            </table>
+        `;
+    };
+
+    const renderModelsTable = () => {
+        const modelsMap = mockFilteredStats.models || {};
+        const keys = Object.keys(modelsMap);
+        if (keys.length === 0) {
+            tableContainer.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-secondary);">暂无符合筛选条件的模型</div>`;
+            return;
+        }
+        let rowsHtml = '';
+        keys.forEach(k => {
+            const m = modelsMap[k];
+            rowsHtml += `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                  <td style="padding: 8px; font-family: monospace; font-weight: bold;">${k}</td>
+                  <td style="padding: 8px; color: #2979ff;">${m.provider}</td>
+                  <td style="padding: 8px;">${m.calls}</td>
+                  <td style="padding: 8px;">${m.tokens.toLocaleString()}</td>
+                  <td style="padding: 8px;">${m.calls > 0 ? (m.duration / m.calls).toFixed(2) : 0}s</td>
+                  <td style="padding: 8px; color: #00e676;">${m.tokens > 0 ? ((m.hit / m.tokens) * 100).toFixed(1) : 0}%</td>
+                </tr>
+            `;
+        });
+        tableContainer.innerHTML = `
+            <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+              <thead>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary);">
+                  <th style="padding: 8px;">模型名称</th>
+                  <th style="padding: 8px;">提供商</th>
+                  <th style="padding: 8px;">呼叫次数</th>
+                  <th style="padding: 8px;">总消耗 Tokens</th>
+                  <th style="padding: 8px;">平均耗时</th>
+                  <th style="padding: 8px;">缓存命中率</th>
+                </tr>
+              </thead>
+              <tbody style="color: var(--text-primary);">
+                ${rowsHtml}
+              </tbody>
+            </table>
+        `;
+    };
+
+    // 执行当前选中子选项卡的刷新
+    if (btnLogs && btnLogs.classList.contains('active')) {
+        renderLogsTable();
+    } else if (btnProviders && btnProviders.classList.contains('active')) {
+        renderProvidersTable();
+    } else if (btnModels && btnModels.classList.contains('active')) {
+        renderModelsTable();
+    }
+
+    window.lastFetchedStats = realStats; // 还原
 }
 
 // 10. 二维码本地渲染 Canvas 算法（无任何联网依赖，支持离线微信扫码）
