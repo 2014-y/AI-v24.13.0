@@ -23,11 +23,15 @@ const pluginMetadata = {
 
 let chatInitialized = false;
 let statsRefreshInterval = null;
+let globalRenderLogsTable = null;
+let globalRenderProvidersTable = null;
+let globalRenderModelsTable = null;
 
 // 2. DOM 元素获取
 const tabs = document.querySelectorAll('.nav-item');
 const tabPanes = document.querySelectorAll('.tab-pane');
 const winBtnMinimize = document.getElementById('win-btn-minimize');
+const winBtnMaximize = document.getElementById('win-btn-maximize');
 const winBtnClose = document.getElementById('win-btn-close');
 
 const statusLight = document.getElementById('status-light');
@@ -67,6 +71,9 @@ async function init() {
 
     // 初始化窗口控制
     winBtnMinimize.addEventListener('click', () => window.api.windowAction('minimize'));
+    if (winBtnMaximize) {
+        winBtnMaximize.addEventListener('click', () => window.api.windowAction('maximize'));
+    }
     winBtnClose.addEventListener('click', () => window.api.windowAction('close'));
 
     // 网关开关按钮监听
@@ -879,7 +886,8 @@ async function renderUsageCharts() {
     };
 
     const renderLogsTable = () => {
-        const logs = stats.logs || [];
+        globalRenderLogsTable = renderLogsTable;
+        const logs = (window.lastFetchedStats || stats).logs || [];
         if (logs.length === 0) {
             tableContainer.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-secondary);">暂无真实请求日志数据</div>`;
             return;
@@ -923,7 +931,8 @@ async function renderUsageCharts() {
     };
 
     const renderProvidersTable = () => {
-        const provs = stats.providers || {};
+        globalRenderProvidersTable = renderProvidersTable;
+        const provs = (window.lastFetchedStats || stats).providers || {};
         const keys = Object.keys(provs);
         if (keys.length === 0) {
             tableContainer.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-secondary);">暂无真实提供商数据</div>`;
@@ -963,7 +972,8 @@ async function renderUsageCharts() {
     };
 
     const renderModelsTable = () => {
-        const modelsMap = stats.models || {};
+        globalRenderModelsTable = renderModelsTable;
+        const modelsMap = (window.lastFetchedStats || stats).models || {};
         const keys = Object.keys(modelsMap);
         if (keys.length === 0) {
             tableContainer.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-secondary);">暂无真实模型数据</div>`;
@@ -1326,135 +1336,14 @@ function applyStatsFilters() {
     const btnLogs = document.getElementById('btn-stats-tab-logs');
     const btnProviders = document.getElementById('btn-stats-tab-providers');
     const btnModels = document.getElementById('btn-stats-tab-models');
-    const tableContainer = document.getElementById('stats-data-table-container');
 
-    const renderLogsTable = () => {
-        const list = mockFilteredStats.logs || [];
-        if (list.length === 0) {
-            tableContainer.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-secondary);">暂无符合筛选条件的日志</div>`;
-            return;
-        }
-        let rowsHtml = '';
-        list.forEach(log => {
-            rowsHtml += `
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
-                  <td style="padding: 8px;">${log.time}</td>
-                  <td style="padding: 8px;"><span style="color: #ff9100; font-weight: 600;">${log.provider}</span></td>
-                  <td style="padding: 8px; font-family: monospace;">${log.model}</td>
-                  <td style="padding: 8px;">${log.input.toLocaleString()}</td>
-                  <td style="padding: 8px;">${log.output.toLocaleString()}</td>
-                  <td style="padding: 8px; color: #00e676;">${log.hit > 0 ? `🎯 ${log.hit.toLocaleString()}` : '--'}</td>
-                  <td style="padding: 8px;">${log.duration}</td>
-                  <td style="padding: 8px; color: #00e676;">${log.status}</td>
-                </tr>
-            `;
-        });
-        tableContainer.innerHTML = `
-            <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
-              <thead>
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary);">
-                  <th style="padding: 8px;">请求时间</th>
-                  <th style="padding: 8px;">提供商</th>
-                  <th style="padding: 8px;">模型名称</th>
-                  <th style="padding: 8px;">输入 Tokens</th>
-                  <th style="padding: 8px;">输出 Tokens</th>
-                  <th style="padding: 8px;">缓存命中</th>
-                  <th style="padding: 8px;">耗时</th>
-                  <th style="padding: 8px;">状态</th>
-                </tr>
-              </thead>
-              <tbody style="color: var(--text-primary);">
-                ${rowsHtml}
-              </tbody>
-            </table>
-        `;
-    };
-
-    const renderProvidersTable = () => {
-        const provs = mockFilteredStats.providers || {};
-        const keys = Object.keys(provs);
-        if (keys.length === 0) {
-            tableContainer.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-secondary);">暂无符合筛选条件的提供商</div>`;
-            return;
-        }
-        let rowsHtml = '';
-        keys.forEach(k => {
-            const p = provs[k];
-            rowsHtml += `
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
-                  <td style="padding: 8px; font-weight: bold; color: #ff9100;">🌐 ${k}</td>
-                  <td style="padding: 8px;">${p.requests}</td>
-                  <td style="padding: 8px;">${p.tokens.toLocaleString()}</td>
-                  <td style="padding: 8px;">${mockFilteredStats.total_tokens > 0 ? ((p.tokens / mockFilteredStats.total_tokens) * 100).toFixed(1) : 0}%</td>
-                  <td style="padding: 8px; color: #00e676;">${p.hit > 0 ? p.hit.toLocaleString() : '--'}</td>
-                </tr>
-            `;
-        });
-        tableContainer.innerHTML = `
-            <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
-              <thead>
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary);">
-                  <th style="padding: 8px;">提供商</th>
-                  <th style="padding: 8px;">总请求数</th>
-                  <th style="padding: 8px;">总消耗 Tokens</th>
-                  <th style="padding: 8px;">占比</th>
-                  <th style="padding: 8px;">缓存命中数</th>
-                </tr>
-              </thead>
-              <tbody style="color: var(--text-primary);">
-                ${rowsHtml}
-              </tbody>
-            </table>
-        `;
-    };
-
-    const renderModelsTable = () => {
-        const modelsMap = mockFilteredStats.models || {};
-        const keys = Object.keys(modelsMap);
-        if (keys.length === 0) {
-            tableContainer.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-secondary);">暂无符合筛选条件的模型</div>`;
-            return;
-        }
-        let rowsHtml = '';
-        keys.forEach(k => {
-            const m = modelsMap[k];
-            rowsHtml += `
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
-                  <td style="padding: 8px; font-family: monospace; font-weight: bold;">${k}</td>
-                  <td style="padding: 8px; color: #2979ff;">${m.provider}</td>
-                  <td style="padding: 8px;">${m.calls}</td>
-                  <td style="padding: 8px;">${m.tokens.toLocaleString()}</td>
-                  <td style="padding: 8px;">${m.calls > 0 ? (m.duration / m.calls).toFixed(2) : 0}s</td>
-                  <td style="padding: 8px; color: #00e676;">${m.tokens > 0 ? ((m.hit / m.tokens) * 100).toFixed(1) : 0}%</td>
-                </tr>
-            `;
-        });
-        tableContainer.innerHTML = `
-            <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
-              <thead>
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary);">
-                  <th style="padding: 8px;">模型名称</th>
-                  <th style="padding: 8px;">提供商</th>
-                  <th style="padding: 8px;">呼叫次数</th>
-                  <th style="padding: 8px;">总消耗 Tokens</th>
-                  <th style="padding: 8px;">平均耗时</th>
-                  <th style="padding: 8px;">缓存命中率</th>
-                </tr>
-              </thead>
-              <tbody style="color: var(--text-primary);">
-                ${rowsHtml}
-              </tbody>
-            </table>
-        `;
-    };
-
-    // 执行当前选中子选项卡的刷新
-    if (btnLogs && btnLogs.classList.contains('active')) {
-        renderLogsTable();
-    } else if (btnProviders && btnProviders.classList.contains('active')) {
-        renderProvidersTable();
-    } else if (btnModels && btnModels.classList.contains('active')) {
-        renderModelsTable();
+    // 执行当前选中子选项卡的刷新 (直接调用局部钩子，无缝复用原闭包逻辑)
+    if (btnLogs && btnLogs.classList.contains('active') && globalRenderLogsTable) {
+        globalRenderLogsTable();
+    } else if (btnProviders && btnProviders.classList.contains('active') && globalRenderProvidersTable) {
+        globalRenderProvidersTable();
+    } else if (btnModels && btnModels.classList.contains('active') && globalRenderModelsTable) {
+        globalRenderModelsTable();
     }
 
     window.lastFetchedStats = realStats; // 还原

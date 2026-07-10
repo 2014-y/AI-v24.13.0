@@ -16,6 +16,7 @@
       </div>
       <div class="window-controls">
         <button class="window-btn minimize" id="win-btn-minimize" title="最小化"></button>
+        <button class="window-btn maximize" id="win-btn-maximize" title="最大化/还原"></button>
         <button class="window-btn close" id="win-btn-close" title="退出并缩入托盘"></button>
       </div>
     </header>
@@ -320,11 +321,11 @@
                 <option value="primary">主用模型</option>
                 <option value="fallback">备用模型</option>
               </select>
-              <select class="toolbar-select" style="height: 30px; font-size: 12px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); padding: 0 8px; outline: none; cursor: pointer;">
+              <select class="toolbar-select" id="stats-refresh-select" style="height: 30px; font-size: 12px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); padding: 0 8px; outline: none; cursor: pointer;">
                 <option value="30s">🔄 30s 刷新</option>
                 <option value="manual">手动刷新</option>
               </select>
-              <select class="toolbar-select" style="height: 30px; font-size: 12px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); padding: 0 8px; outline: none; cursor: pointer;">
+              <select class="toolbar-select" id="stats-time-select" style="height: 30px; font-size: 12px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); padding: 0 8px; outline: none; cursor: pointer;">
                 <option value="today">📅 当天</option>
                 <option value="7days">最近7天</option>
               </select>

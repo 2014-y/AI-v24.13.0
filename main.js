@@ -123,6 +123,12 @@ ipcMain.on('window-action', (event, action) => {
     if (!mainWindow) return;
     if (action === 'minimize') {
         mainWindow.minimize();
+    } else if (action === 'maximize') {
+        if (mainWindow.isMaximized()) {
+            mainWindow.unmaximize();
+        } else {
+            mainWindow.maximize();
+        }
     } else if (action === 'close') {
         mainWindow.close();
     }
