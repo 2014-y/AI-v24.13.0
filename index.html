@@ -265,6 +265,34 @@
       </div>
     </div>
 
+    <!-- 6. 自定义厂家添加模态弹窗 -->
+    <div class="modal-overlay" id="add-provider-modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>➕ 添加自定义大模型提供商</h3>
+          <span class="modal-close" id="modal-close-btn">&times;</span>
+        </div>
+        <div class="modal-body">
+          <div class="form-field">
+            <label for="new-provider-id" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; display: block;">厂商唯一标识 (仅限小写字母与数字)</label>
+            <input type="text" id="new-provider-id" placeholder="例如: deepseek, openai" style="width: 100%; box-sizing: border-box;">
+          </div>
+          <div class="form-field" style="margin-top: 15px;">
+            <label for="new-provider-url" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; display: block;">Base URL (API 端点)</label>
+            <input type="text" id="new-provider-url" value="https://api.example.com/v1" style="width: 100%; box-sizing: border-box;">
+          </div>
+          <div class="form-field" style="margin-top: 15px;">
+            <label for="new-provider-key" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; display: block;">API Key (授权密钥)</label>
+            <input type="password" id="new-provider-key" placeholder="可暂不填，稍后在卡片中编辑" style="width: 100%; box-sizing: border-box;">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-cancel" id="modal-cancel-btn">取消</button>
+          <button type="button" class="btn-primary" id="modal-confirm-btn" style="width: auto; padding: 8px 24px;">确认添加</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script src="renderer.js"></script>

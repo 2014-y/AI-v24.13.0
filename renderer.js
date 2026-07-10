@@ -343,14 +343,36 @@ function updateModelsDatalist() {
     }
 }
 
-// 添加厂家按钮绑定
-document.getElementById('btn-add-provider').addEventListener('click', () => {
-    const providerName = prompt("请输入新厂商（大模型提供商）的唯一标识（仅限小写字母/数字, 例如: deepseek, openai）：");
-    if (!providerName) return;
+// 添加厂家模态弹窗交互
+const addProviderModal = document.getElementById('add-provider-modal');
+const newProviderIdInput = document.getElementById('new-provider-id');
+const newProviderUrlInput = document.getElementById('new-provider-url');
+const newProviderKeyInput = document.getElementById('new-provider-key');
 
-    const key = providerName.trim().toLowerCase();
+document.getElementById('btn-add-provider').addEventListener('click', () => {
+    newProviderIdInput.value = '';
+    newProviderUrlInput.value = 'https://api.example.com/v1';
+    newProviderKeyInput.value = '';
+    addProviderModal.classList.add('active');
+    newProviderIdInput.focus();
+});
+
+const closeAddProviderModal = () => {
+    addProviderModal.classList.remove('active');
+};
+document.getElementById('modal-close-btn').addEventListener('click', closeAddProviderModal);
+document.getElementById('modal-cancel-btn').addEventListener('click', closeAddProviderModal);
+
+document.getElementById('modal-confirm-btn').addEventListener('click', () => {
+    const providerName = newProviderIdInput.value.trim();
+    if (!providerName) {
+        alert("请输入厂商标识！");
+        return;
+    }
+
+    const key = providerName.toLowerCase();
     if (!/^[a-z0-9_-]+$/.test(key)) {
-        alert("格式错误！厂商标识仅能由小写字母、数字及中划线组成。");
+        alert("格式错误！厂商标识仅能由小写字母、数字及中划线/下划线组成。");
         return;
     }
 
@@ -360,12 +382,13 @@ document.getElementById('btn-add-provider').addEventListener('click', () => {
     }
 
     localProviders[key] = {
-        baseUrl: "https://api.example.com/v1",
-        apiKey: "",
+        baseUrl: newProviderUrlInput.value.trim() || "https://api.example.com/v1",
+        apiKey: newProviderKeyInput.value.trim(),
         api: "openai-completions",
         models: []
     };
 
+    closeAddProviderModal();
     renderProvidersList();
     updateModelsDatalist();
 });
