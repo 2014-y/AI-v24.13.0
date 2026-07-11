@@ -12,19 +12,24 @@ contextBridge.exposeInMainWorld('api', {
     readConfig: () => ipcRenderer.invoke('config-read'),
     saveConfig: (newConfig) => ipcRenderer.invoke('config-save', newConfig),
     clearWeChatSession: () => ipcRenderer.invoke('wechat-clear'),
+    checkWeChatStatus: () => ipcRenderer.invoke('wechat-check-status'),
     triggerWeChatLogin: () => ipcRenderer.invoke('wechat-login'),
     cancelWeChatLogin: () => ipcRenderer.invoke('wechat-login-cancel'),
+    readSystemLogs: () => ipcRenderer.invoke('read-system-logs'),
+    clearSystemLogs: () => ipcRenderer.invoke('clear-system-logs'),
     getStatsData: () => ipcRenderer.invoke('stats-get'),
     
     // 开机自启
     getAutoStart: () => ipcRenderer.invoke('autostart-get'),
     setAutoStart: (enabled) => ipcRenderer.invoke('autostart-set', enabled),
     openExternal: (url) => ipcRenderer.invoke('open-external', url),
+    getDashboardUrl: () => ipcRenderer.invoke('get-dashboard-url'),
     
     // 主进程向渲染进程的数据推送回调
     onLogReceived: (callback) => ipcRenderer.on('gateway-log', (event, data) => callback(data)),
     onStatusChanged: (callback) => ipcRenderer.on('gateway-status', (event, status) => callback(status)),
     onQrCodeReceived: (callback) => ipcRenderer.on('gateway-qrcode', (event, url) => callback(url)),
     onControlTriggered: (callback) => ipcRenderer.on('gateway-control-trigger', (event, action) => callback(action)),
-    onMaximizedStatus: (callback) => ipcRenderer.on('window-maximized-status', (event, isMaximized) => callback(isMaximized))
+    onMaximizedStatus: (callback) => ipcRenderer.on('window-maximized-status', (event, isMaximized) => callback(isMaximized)),
+    getAppStartTime: () => ipcRenderer.invoke('get-app-start-time')
 });

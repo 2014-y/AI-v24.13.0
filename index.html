@@ -12,7 +12,7 @@
     <header class="title-bar">
       <div class="title-logo-zone">
         <img src="config/icon.jpg" width="20" height="20" style="border-radius: 4px; object-fit: cover;">
-        <span>AI助手 v24.13.0</span>
+        <span>AI助手</span>
       </div>
       <div class="window-controls">
         <button class="window-btn minimize" id="win-btn-minimize" title="最小化"></button>
@@ -30,59 +30,79 @@
           <div class="status-badge-container" id="tour-status">
             <div class="status-dot" id="status-light"></div>
             <div class="status-text-zone">
-              <h4>网关核心状态</h4>
-              <p id="status-label">已停止</p>
+              <h4>网关通道状态</h4>
+              <p id="status-label">未启用</p>
             </div>
+            <!-- 未启用状态下显示的应用图标 -->
+            <img src="config/icon.jpg" class="status-app-icon" id="sidebar-status-icon" style="width: 24px; height: 24px; border-radius: 4px; object-fit: cover; margin-left: auto; transition: all 0.3s ease;">
+            <!-- 启动/运行状态下显示的进度百分比 -->
+            <div class="status-percentage" id="sidebar-status-percentage" style="display: none;">0%</div>
           </div>
           
           <!-- Tab 导航 -->
           <nav class="sidebar-nav">
             <div class="nav-item active" data-tab="console-view" id="tour-nav-console">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="15" x2="23" y2="15"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="15" x2="4" y2="15"/></svg>
               控制台
             </div>
             <div class="nav-item" data-tab="chat-view" id="tour-nav-chat">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-              模型对话
+              模型会话
             </div>
             <div class="nav-item" data-tab="config-view" id="tour-nav-config">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-              参数配置
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8V5"/><circle cx="12" cy="4" r="1"/><circle cx="8.5" cy="13" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.5" cy="13" r="1.5" fill="currentColor" stroke="none"/><path d="M9 17h6"/></svg>
+              模型配置
             </div>
             <div class="nav-item" data-tab="plugins-view" id="tour-nav-plugins">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
-              插件开关
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg>
+              插件管理
             </div>
             <div class="nav-item" data-tab="dashboard-view" id="tour-nav-stats">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
               用量监控
+            </div>
+            <div class="nav-item" data-tab="openclaw-panel-view" id="btn-nav-openclaw-web">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <!-- 龙虾左螯 -->
+                <path d="M12 11c-2-1-4-3-4-6.5C8 3 10.5 3.5 11 5.5"/>
+                <path d="M9 4.5c-1.5.5-2 2-1.5 3"/>
+                <!-- 龙虾右螯 -->
+                <path d="M12 11c2-1 4-3 4-6.5C16 3 13.5 3.5 13 5.5"/>
+                <path d="M15 4.5c1.5.5 2 2 1.5 3"/>
+                <!-- 龙虾身体 -->
+                <path d="M12 8c-1.2 0-2 1.5-2 3.5v5c0 1.5.8 2.5 2 3.5 1.2-1 2-2 2-3.5v-5c0-2-.8-3.5-2-3.5z"/>
+                <!-- 触角 -->
+                <path d="M11 8c-1-2-2.5-3-4.5-3.5"/>
+                <path d="M13 8c1-2 2.5-3 4.5-3.5"/>
+              </svg>
+              OpenClaw 面板
+            </div>
+            
+            <!-- 新增“系统日志”菜单项 -->
+            <div class="nav-item" data-tab="system-logs-view" id="tour-nav-system-logs">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              系统日志
+            </div>
+
+            <div class="nav-item" data-tab="settings-view" id="tour-nav-settings">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              系统设置
             </div>
             <div class="nav-item" data-tab="about-view" id="tour-nav-about">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-              关于
-            </div>
-            <div class="nav-item" id="btn-nav-openclaw-web" style="margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-color)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-              OpenClaw 面板
+              关于AI助手
             </div>
           </nav>
         </div>
 
         <div class="sidebar-bottom">
-          <!-- 主题选择器 -->
-          <div class="theme-picker-panel" id="tour-themes">
-            <span>界面主题</span>
-            <div class="theme-dots">
-              <div class="theme-dot dark" id="theme-btn-dark" title="暗黑流光"></div>
-              <div class="theme-dot aurora" id="theme-btn-aurora" title="极光霓虹"></div>
-              <div class="theme-dot light" id="theme-btn-light" title="白昼明亮"></div>
-            </div>
-          </div>
-          
-          <!-- 系统设置 -->
-          <div class="settings-bar">
-            <span>开机自启</span>
-            <input type="checkbox" id="autostart-toggle">
+          <!-- 侧边栏折叠/展开开关 -->
+          <div class="collapse-toggle-btn" id="btn-sidebar-toggle" title="折叠/展开侧边栏">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
           </div>
         </div>
       </aside>
@@ -92,16 +112,47 @@
         
         <!-- Tab 1: 控制台 -->
         <section class="tab-pane active" id="console-view">
-          <div class="view-header">
-            <h2>网关控制台</h2>
-            <p>实时监控本地 AI 助手的消息处理流与日志输出</p>
+          <div class="view-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <h2 style="margin: 0;">网关控制台</h2>
+              <p style="margin: 4px 0 0 0;">实时监控本地 AI 助手的消息处理流与日志输出</p>
+            </div>
+            <!-- 右上角科技风实时监控时钟 -->
+            <div class="console-clock-zone" style="text-align: right; font-family: var(--font-mono); line-height: 1.2; user-select: none;">
+              <div id="console-clock-date" style="font-size: 14px; color: var(--text-secondary); letter-spacing: 0.8px; margin-bottom: 4px;">获取中...</div>
+              <div id="console-clock-time" style="font-size: 32px; font-weight: 700; color: #a855f7; text-shadow: 0 0 12px rgba(168, 85, 247, 0.5);">00:00:00</div>
+            </div>
           </div>
           
           <div class="console-grid">
             <!-- 终端日志区域 -->
-            <div class="console-left" id="tour-log-terminal">
-              <div class="log-terminal" id="log-terminal-output">Ready. Click START to launch Gateway...</div>
-            </div>
+             <div class="console-left stopped" id="tour-log-terminal">
+               <!-- 极客科技风半透明机器人背景底纹 -->
+               <svg class="terminal-bg-robot" viewBox="0 0 100 100" fill="none" stroke="currentColor">
+                 <rect x="25" y="25" width="50" height="40" rx="10" stroke-width="2"/>
+                 <line x1="25" y1="45" x2="18" y2="45" stroke-width="2"/>
+                 <line x1="75" y1="45" x2="82" y2="45" stroke-width="2"/>
+                 <line x1="50" y1="25" x2="50" y2="15" stroke-width="2"/>
+                 <circle cx="50" cy="13" r="3" fill="currentColor"/>
+                 <circle cx="40" cy="42" r="3.5" fill="currentColor"/>
+                 <circle cx="60" cy="42" r="3.5" fill="currentColor"/>
+                 <path d="M42 54 Q 50 58 58 54" stroke-width="2" stroke-linecap="round"/>
+                 <rect x="42" y="65" width="16" height="8" rx="2" stroke-width="2"/>
+                 <path d="M22 82 C 22 75, 78 75, 78 82" stroke-width="2" stroke-linecap="round"/>
+               </svg>
+               <div class="log-terminal" id="log-terminal-output">&gt;&gt;&gt; AI-Assistant Local Daemon Initialized.
+&gt;&gt;&gt; [系统状态] 核心进程检测完成，当前处于【已停止】闲置状态。
+&gt;&gt;&gt; [操作指引] 请点击右侧“启动网关”按钮，拉起本地 AI 服务总线...</div>
+               <div class="terminal-progress-container" id="terminal-progress-bar-container" style="display: none;">
+                 <div class="terminal-progress-track">
+                   <div class="terminal-progress-fill" id="terminal-progress-bar-fill"></div>
+                 </div>
+                 <div class="terminal-progress-text">
+                   <span id="terminal-progress-bar-text">网关正在启动中...</span>
+                   <span id="terminal-progress-bar-percent">0%</span>
+                 </div>
+               </div>
+             </div>
             
             <!-- 快捷控制与统计卡片 -->
             <div class="console-right">
@@ -115,37 +166,60 @@
                 <span id="btn-label-text">启动网关</span>
               </button>
               
-              <div class="stat-card-mini">
-                <span>网关监听端口</span>
-                <div class="stat-card-name-val" id="stat-port">18789</div>
+              <div class="console-stats-grid">
+                <div class="stat-card-mini">
+                  <span>网关监听端口</span>
+                  <div class="stat-card-name-val" id="stat-port">18789</div>
+                </div>
+                <div class="stat-card-mini">
+                  <span>运行内存占用</span>
+                  <div class="stat-card-name-val" id="stat-mem">-- MB</div>
+                </div>
+                <div class="stat-card-mini">
+                  <span>网关运行时间</span>
+                  <div class="stat-card-name-val" id="stat-uptime">--:--:--</div>
+                </div>
+                <div class="stat-card-mini">
+                  <span>今日请求次数</span>
+                  <div class="stat-card-name-val" id="stat-total-requests">0 次</div>
+                </div>
+                <div class="stat-card-mini" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 48px;">
+                  <span style="font-size: 10px; color: var(--text-secondary); margin-bottom: 2px;">微信通道状态</span>
+                  <div class="stat-card-name-val" id="stat-wechat-status" style="font-size: 13px; font-weight: bold; color: #ff5252;">未绑定</div>
+                </div>
               </div>
-              <div class="stat-card-mini">
-                <span>运行内存占用</span>
-                <div class="stat-card-name-val" id="stat-mem">-- MB</div>
-              </div>
-              <div class="stat-card-mini">
-                <span>活跃通信通道</span>
-                <div class="stat-card-name-val" id="stat-channels">WeChat / WA</div>
-              </div>
-              <div class="wechat-control-group" style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px; width: 100%;">
-                <button class="btn-wechat-unbind" id="wechat-unbind-btn" title="点击清空微信登录缓存，以解绑微信号" style="margin-top: 0; width: 100%;">
-                  💬 微信解绑
-                </button>
+              <div class="wechat-control-group" style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px; width: 100%;">
                 <button class="btn-wechat-bind" id="wechat-bind-btn" title="点击手动生成登录二维码，以绑定微信" style="width: 100%;">
                   🔑 绑定微信
                 </button>
+                
+                <!-- 微信绑定详细信息容器，默认隐藏 -->
+                <div id="wechat-details-panel" style="display: none; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; font-size: 11px; margin-bottom: 4px; width: 100%; box-sizing: border-box; line-height: 1.6; color: var(--text-secondary); text-align: left;">
+                  <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed rgba(255,255,255,0.08); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">👤 绑定账户凭证</div>
+                  <div><span style="color: var(--text-secondary);">账户标识: </span><span id="wechat-detail-id" style="font-family: var(--font-mono); color: white; font-weight: bold;">--</span></div>
+                  <div><span style="color: var(--text-secondary);">绑定时间: </span><span id="wechat-detail-time" style="color: white;">--</span></div>
+                  <div><span style="color: var(--text-secondary);">通道协议: </span><span style="color: #b388ff; font-weight: bold;">WeChat / WA (iLink)</span></div>
+                </div>
+
+                <button class="btn-wechat-unbind" id="wechat-unbind-btn" title="点击清空微信登录缓存，以解绑微信号" style="margin-top: 0; width: 100%;">
+                  💬 微信解绑
+                </button>
+              </div>
+              <div class="app-uptime-zone">
+                <span>应用已运行时间:</span>
+                <span id="stat-app-uptime">00:00:00</span>
               </div>
             </div>
           </div>
         </section>
 
-        <!-- Tab 1.5: 模型对话 -->
+        <!-- Tab 1.5: 模型会话 -->
         <section class="tab-pane" id="chat-view" style="flex-direction: column; height: 100%; box-sizing: border-box; overflow: hidden; padding: 12px; gap: 12px;">
           <!-- 顶部状态与模型选型栏 -->
           <div class="chat-header-bar" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
             <div style="display: flex; align-items: center; gap: 10px;">
               <div class="status-dot running" style="width: 8px; height: 8px;"></div>
-              <span style="font-size: 14px; font-weight: 700; color: white;">模型对话测试舱</span>
+              <span style="font-size: 14px; font-weight: 700; color: white;">模型会话测试舱</span>
             </div>
             
             <div style="display: flex; align-items: center; gap: 12px;">
@@ -156,6 +230,10 @@
               <button id="btn-refresh-chat-models" title="重新获取可用模型" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-secondary); border-radius: 8px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
               </button>
+              <button id="btn-clear-chat-history" title="清除会话缓存" onclick="clearChatHistory()" style="background: rgba(255, 82, 82, 0.08); border: 1px solid rgba(255, 82, 82, 0.25); color: #ff7070; border-radius: 8px; height: 32px; padding: 0 12px; display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s ease; white-space: nowrap;" onmouseover="this.style.background='rgba(255,82,82,0.18)';this.style.borderColor='rgba(255,82,82,0.5)'" onmouseout="this.style.background='rgba(255,82,82,0.08)';this.style.borderColor='rgba(255,82,82,0.25)'">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                清除会话
+              </button>
             </div>
           </div>
 
@@ -165,7 +243,7 @@
             <div style="display: flex; gap: 12px; max-width: 80%; align-self: flex-start;">
               <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #8c52ff, #00d2ff); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; color: white; flex-shrink: 0; box-shadow: 0 0 10px rgba(140,82,255,0.3);">AI</div>
               <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 12px 16px; color: var(--text-primary); font-size: 13px; line-height: 1.5; border-top-left-radius: 2px;">
-                您好！我是您的智能助手。我已经与您本地的 OpenClaw 网关成功对接！
+                您好！我是您的智能助手。<span id="gateway-connection-status-text" style="color: #ff9800;">当前本地的 OpenClaw 网关未启动，请前往【控制台】启动网关。</span>
                 <br><br>
                 在这里您可以：
                 <br>💬 与当前选中的大模型进行实时对话及可用性测试；
@@ -219,72 +297,144 @@
 
         <!-- Tab 2: 参数配置 -->
         <section class="tab-pane" id="config-view">
-          <div class="view-header">
-            <h2>网关参数配置</h2>
-            <p>可视化配置多提供商 API Key 与核心模型选型</p>
+          <div class="view-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div>
+              <h2 style="margin: 0;">网关模型配置</h2>
+              <p style="margin: 4px 0 0 0;">可视化配置多提供商 API Key 与核心模型选型</p>
+            </div>
+            <div>
+              <button type="button" class="btn-primary" id="config-save-btn-top" style="padding: 10px 28px; font-size: 14px; font-weight: 600; border-radius: 8px; box-shadow: var(--accent-glow); cursor: pointer;">保存配置</button>
+            </div>
           </div>
           
           <div class="config-scrollable" id="tour-config-form">
             <form id="openclaw-config-form">
-              
-              <!-- 动态提供商与模型管理看板 -->
-              <div class="form-group-section">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                  <h3 style="margin-bottom: 0; border-left: 3px solid var(--accent-color); padding-left: 10px;">🔌 大模型厂家（提供商）管理</h3>
+                
+                <!-- 动态提供商与模型管理看板 -->
+                <div class="form-group-section">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h3 style="margin-bottom: 0; border-left: 3px solid var(--accent-color); padding-left: 10px;">🔌 大模型厂家（提供商）管理</h3>
+                  </div>
+                  
+                  <!-- 动态厂家卡片列表容器 -->
+                  <div id="providers-list-zone"></div>
+                  
+                  <!-- 添加厂家虚线按钮 -->
+                  <div class="btn-add-provider-box" id="btn-add-provider">
+                    ➕ 添加自定义大模型提供商（厂家）
+                  </div>
+                </div>
+
+                <!-- 模型选择与权重 -->
+                <div class="form-group-section">
+                  <h3>🤖 默认模型选型</h3>
+                  <div class="form-row">
+                    <div class="form-field">
+                      <label for="model-primary">主用模型 (Primary Model)</label>
+                      <input type="text" id="model-primary" list="models-datalist" autocomplete="off" placeholder="请选择或输入, 例如: agnes-ai/agnes-2.0-flash">
+                    </div>
+                    <div class="form-field">
+                      <label for="model-fallback">备用模型 (Fallback Model)</label>
+                      <input type="text" id="model-fallback" list="models-datalist" autocomplete="off" placeholder="请选择或输入, 例如: agnes-ai/agnes-1.5-flash">
+                    </div>
+                  </div>
+                  <!-- 供模糊匹配选型的动态列表 -->
+                  <datalist id="models-datalist"></datalist>
+                  
+                  <div class="form-row">
+                    <div class="form-field half">
+                      <label for="max-concurrent">最大并发请求数 (Max Concurrent)</label>
+                      <input type="number" id="max-concurrent" min="1" max="10" value="4">
+                    </div>
+                  </div>
                 </div>
                 
-                <!-- 动态厂家卡片列表容器 -->
-                <div id="providers-list-zone"></div>
-                
-                <!-- 添加厂家虚线按钮 -->
-                <div class="btn-add-provider-box" id="btn-add-provider">
-                  ➕ 添加自定义大模型提供商（厂家）
+                <!-- 图片生成设置 -->
+                <div class="form-group-section">
+                  <h3>🎨 图片生成服务配置 (Image Generator)</h3>
+                  <div class="form-row">
+                    <div class="form-field">
+                      <label for="image-api-base">图片生成 API 地址 (Base URL)</label>
+                      <input type="text" id="image-api-base" autocomplete="off" placeholder="例如: https://apihub.agnes-ai.com/v1/images">
+                    </div>
+                    <div class="form-field">
+                      <label for="image-api-key">图片生成 API 密钥 (API Key)</label>
+                      <div class="password-input-wrapper" style="position: relative; display: flex; align-items: center;">
+                        <input type="password" id="image-api-key" autocomplete="off" placeholder="不填则使用默认内置密钥" style="padding-right: 36px; width: 100%;">
+                        <span id="btn-toggle-image-key" style="position: absolute; right: 10px; cursor: pointer; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; font-size: 16px; user-select: none;">👁️</span>
+                      </div>
+                    </div>
+                    <div class="form-field">
+                      <label for="model-image">生图模型 (Image Model ID)</label>
+                      <input type="text" id="model-image" list="models-datalist" autocomplete="off" placeholder="例如: dall-e-3">
+                    </div>
+                  </div>
+                  <div style="display: flex !important; flex-direction: row !important; align-items: center !important; gap: 8px; margin-top: 12px;">
+                    <button type="button" class="btn-primary" id="btn-test-image-generator" style="margin-top: 0; padding: 0 14px; font-size: 12px; height: 32px; border-radius: 6px; white-space: nowrap;">⚡ 测试图片服务连通性</button>
+                    <button type="button" class="btn-secondary" id="btn-test-image-key" style="margin-top: 0; padding: 0 14px; font-size: 12px; height: 32px; border-radius: 6px; white-space: nowrap; background: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%); border: none; color: white;">🔑 测试密钥</button>
+                    <span id="test-result-image-generator" style="font-size: 12px; font-weight: bold; display: none; white-space: nowrap;"></span>
+                  </div>
                 </div>
-              </div>
 
-              <!-- 模型选择与权重 -->
-              <div class="form-group-section">
-                <h3>🤖 默认模型选型</h3>
-                <div class="form-row">
-                  <div class="form-field">
-                    <label for="model-primary">主用模型 (Primary Model)</label>
-                    <input type="text" id="model-primary" list="models-datalist" placeholder="请选择或输入, 例如: agnes-ai/agnes-2.0-flash">
+                <!-- 视频生成设置 -->
+                <div class="form-group-section">
+                  <h3>🎥 视频生成服务配置 (Video Generator)</h3>
+                  <div class="form-row">
+                    <div class="form-field">
+                      <label for="video-api-base">视频生成 API 地址 (Base URL)</label>
+                      <input type="text" id="video-api-base" autocomplete="off" placeholder="例如: https://apihub.agnes-ai.com/v1/videos">
+                    </div>
+                    <div class="form-field">
+                      <label for="video-api-key">视频生成 API 密钥 (API Key)</label>
+                      <div class="password-input-wrapper" style="position: relative; display: flex; align-items: center;">
+                        <input type="password" id="video-api-key" autocomplete="off" placeholder="不填则使用默认内置密钥" style="padding-right: 36px; width: 100%;">
+                        <span id="btn-toggle-video-key" style="position: absolute; right: 10px; cursor: pointer; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; font-size: 16px; user-select: none;">👁️</span>
+                      </div>
+                    </div>
+                    <div class="form-field">
+                      <label for="model-video">生视频模型 (Video Model ID)</label>
+                      <input type="text" id="model-video" list="models-datalist" autocomplete="off" placeholder="例如: agnes-video-v2.0">
+                    </div>
                   </div>
-                  <div class="form-field">
-                    <label for="model-fallback">备用模型 (Fallback Model)</label>
-                    <input type="text" id="model-fallback" list="models-datalist" placeholder="请选择或输入, 例如: agnes-ai/agnes-1.5-flash">
+                  <div style="display: flex !important; flex-direction: row !important; align-items: center !important; gap: 8px; margin-top: 12px;">
+                    <button type="button" class="btn-primary" id="btn-test-video-generator" style="margin-top: 0; padding: 0 14px; font-size: 12px; height: 32px; border-radius: 6px; white-space: nowrap;">⚡ 测试视频服务连通性</button>
+                    <button type="button" class="btn-secondary" id="btn-test-video-key" style="margin-top: 0; padding: 0 14px; font-size: 12px; height: 32px; border-radius: 6px; white-space: nowrap; background: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%); border: none; color: white;">🔑 测试密钥</button>
+                    <span id="test-result-video-generator" style="font-size: 12px; font-weight: bold; display: none; white-space: nowrap;"></span>
                   </div>
                 </div>
-                <!-- 供模糊匹配选型的动态列表 -->
-                <datalist id="models-datalist"></datalist>
-                
-                <div class="form-row">
-                  <div class="form-field half">
-                    <label for="max-concurrent">最大并发请求数 (Max Concurrent)</label>
-                    <input type="number" id="max-concurrent" min="1" max="10" value="4">
-                  </div>
-                </div>
-              </div>
 
-              <!-- 服务器网关设置 -->
-              <div class="form-group-section">
-                <h3>🌐 网络网关设置</h3>
-                <div class="form-row">
-                  <div class="form-field">
-                    <label for="gateway-port">网关运行端口</label>
-                    <input type="number" id="gateway-port" min="1024" max="65535" value="18789">
-                  </div>
-                  <div class="form-field">
-                    <label for="gateway-token">客户端连接 Token (凭证)</label>
-                    <input type="text" id="gateway-token" readonly>
+                <!-- 服务器网关设置 -->
+                <div class="form-group-section">
+                  <h3>🌐 网络网关设置</h3>
+                  <div class="form-row">
+                    <div class="form-field">
+                      <label for="gateway-port">网关运行端口</label>
+                      <input type="number" id="gateway-port" min="1024" max="65535" value="18789">
+                    </div>
+                    <div class="form-field">
+                      <label for="gateway-token">客户端连接 Token (凭证)</label>
+                      <input type="text" id="gateway-token" readonly>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div class="action-bar-footer">
-                <button type="button" class="btn-primary" id="config-save-btn">保存配置</button>
+                <!-- 按钮已被移动至页头右上角 -->
+              </form>
+
+              <!-- 右侧配置文件实时预览与手写直接修改区 -->
+              <div class="config-preview-panel">
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                  <h3>📄 openclaw.json 实时预览</h3>
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <button type="button" class="btn-secondary" id="config-reset-btn" style="padding: 0 14px; font-size: 12px; font-weight: 500; border-radius: 6px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); color: var(--text-primary); transition: all 0.3s ease; cursor: pointer; height: 28px; line-height: 28px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; margin-top: 0;">放弃修改</button>
+                    <button type="button" class="btn-primary" id="config-save-btn" style="padding: 0 16px; font-size: 12px; font-weight: 600; border-radius: 6px; box-shadow: var(--accent-glow); cursor: pointer; height: 28px; line-height: 28px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; margin-top: 0;">保存配置</button>
+                    <span style="font-size: 11px; color: var(--text-secondary); background: rgba(255,255,255,0.06); padding: 0 8px; border-radius: 4px; font-weight: 500; height: 28px; display: inline-flex; align-items: center; box-sizing: border-box;">支持手动直接修改</span>
+                  </div>
+                </div>
+                <p style="font-size: 12px; color: var(--text-secondary); margin: 0; line-height: 1.5;">左侧表单项的改动会实时自动反映在此处；您也可以直接在下方框内手写 JSON 配置，点击保存后一并生效。</p>
+                <textarea id="config-json-preview" class="config-json-textarea" spellcheck="false" placeholder="正在读取网关配置文件..."></textarea>
+                <div id="json-format-error" class="json-error-msg">⚠️ JSON 语法格式有误，请检查大括号、逗号或双引号闭合状态。</div>
               </div>
-            </form>
           </div>
         </section>
 
@@ -310,11 +460,7 @@
             </div>
             
             <!-- 顶栏过滤工具组 -->
-            <div class="stats-toolbar" style="display: flex; align-items: center; gap: 8px;">
-              <!-- 快捷大模型厂家筛选小图标 -->
-              <div class="provider-filter-icons" id="stats-provider-filters" style="display: flex; gap: 4px; background: rgba(0,0,0,0.25); padding: 4px; border-radius: 8px; border: 1px solid var(--border-color);">
-                <span class="icon-filter-btn active" data-provider="all" title="全部" style="cursor: pointer; font-size: 11px; padding: 4px 8px; border-radius: 6px; background: var(--accent-color); color: white; font-weight: bold; transition: all 0.2s ease;">ALL</span>
-              </div>
+            <div class="stats-toolbar" style="display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; flex-shrink: 0;">
               <select class="toolbar-select" id="stats-source-select" style="height: 30px; font-size: 12px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); padding: 0 8px; outline: none; cursor: pointer;">
                 <option value="all">全部来源</option>
                 <option value="gateway">网关入口</option>
@@ -330,9 +476,13 @@
                 <option value="manual">手动刷新</option>
               </select>
               <select class="toolbar-select" id="stats-time-select" style="height: 30px; font-size: 12px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); padding: 0 8px; outline: none; cursor: pointer;">
+                <option value="all">📊 全部</option>
                 <option value="today">📅 当天</option>
                 <option value="7days">最近7天</option>
               </select>
+              <button class="btn-primary" id="btn-stats-query" style="height: 30px; font-size: 12px; margin-top: 0; width: 92px; justify-content: center; flex-shrink: 0; white-space: nowrap; border-radius: 6px; background: linear-gradient(135deg, #8c52ff 0%, #00d2ff 100%); border: none; color: white; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px; box-shadow: 0 2px 8px rgba(140,82,255,0.2); transition: opacity 0.2s ease;">
+                🔍 查询
+              </button>
             </div>
           </div>
           
@@ -430,6 +580,124 @@
           </div>
         </section>
 
+        <!-- Tab: 系统日志 -->
+        <section class="tab-pane" id="system-logs-view" style="height: 100%; box-sizing: border-box; padding: 20px;">
+          <div class="view-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-shrink: 0;">
+            <div>
+              <h2 style="margin: 0;">系统运行日志</h2>
+              <p style="margin: 4px 0 0 0;">展示网关子进程拉起时的完整 stdout/stderr 原生输出（可用于问题排查与诊断）</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button type="button" class="btn-secondary" id="btn-copy-system-logs" style="padding: 0 14px; font-size: 12px; font-weight: 500; border-radius: 6px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer; height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">📋 复制日志</button>
+              <button type="button" class="btn-secondary" id="btn-clear-system-logs" style="padding: 0 14px; font-size: 12px; font-weight: 500; border-radius: 6px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); color: #ff5252; cursor: pointer; height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">🗑️ 清空日志</button>
+            </div>
+          </div>
+          
+          <div class="system-logs-container" style="background: #0d0e15; border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; flex: 1; min-height: 0; display: flex; flex-direction: column; box-sizing: border-box;">
+            <textarea id="system-raw-logs-area" readonly spellcheck="false" style="flex: 1; background: transparent; border: none; outline: none; color: #a5d6a7; font-family: var(--font-mono); font-size: 12px; line-height: 1.6; resize: none; overflow-y: auto; white-space: pre; margin: 0; padding: 0; box-sizing: border-box; font-weight: 500;" placeholder="等待网关子进程启动并喷吐系统日志..."></textarea>
+          </div>
+        </section>
+
+        <!-- Tab 5.5: 系统设置 -->
+        <section class="tab-pane" id="settings-view" style="overflow-y: auto; height: 100%; box-sizing: border-box; padding: 20px;">
+          <div class="view-header" style="margin-bottom: 20px;">
+            <h2>系统偏好设置</h2>
+            <p>管理客户端的开机自启、系统通知、网关自动运行与语言首选项</p>
+          </div>
+
+          <div class="form-group-section" style="max-width: 600px; margin-bottom: 24px;">
+            <h3>⚙️ 客户端运行设置</h3>
+            
+            <!-- 界面主题设置行 -->
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 12px;">
+              <div>
+                <div style="font-size: 13px; font-weight: bold; color: white;">🎨 界面视觉主题</div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">自由切换客户端的整体主色调风格（暗黑流光、极光霓虹或白昼明亮）。</div>
+              </div>
+              <div class="theme-dots" style="display: flex; gap: 8px;">
+                <div class="theme-dot dark" id="theme-btn-dark" title="暗黑流光"></div>
+                <div class="theme-dot aurora" id="theme-btn-aurora" title="极光霓虹"></div>
+                <div class="theme-dot light" id="theme-btn-light" title="白昼明亮"></div>
+              </div>
+            </div>
+
+            <!-- 开机自启 -->
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 12px;">
+              <div>
+                <div style="font-size: 13px; font-weight: bold; color: white;">🖥️ 开机自动启动</div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">开启后，AI助手客户端将在您的电脑开机时自动随系统启动并运行。</div>
+              </div>
+              <label class="switch-slider-btn" for="setting-autostart-toggle">
+                <input type="checkbox" id="setting-autostart-toggle">
+                <span class="slider-knob"></span>
+              </label>
+            </div>
+
+            <!-- 自动启用网关 -->
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 12px;">
+              <div>
+                <div style="font-size: 13px; font-weight: bold; color: white;">⚡ 自动启用网关</div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">软件启动时，自动开启 OpenClaw 本地智能网关服务，无需每次手动点击。</div>
+              </div>
+              <label class="switch-slider-btn" for="setting-auto-gateway">
+                <input type="checkbox" id="setting-auto-gateway">
+                <span class="slider-knob"></span>
+              </label>
+            </div>
+
+            <!-- 消息通知 -->
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 12px;">
+              <div>
+                <div style="font-size: 13px; font-weight: bold; color: white;">🔔 系统通知提醒</div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">在网关状态变更、微信掉线自动重连成功时触发系统桌面横幅通知。</div>
+              </div>
+              <label class="switch-slider-btn" for="setting-notify-toggle">
+                <input type="checkbox" id="setting-notify-toggle">
+                <span class="slider-knob"></span>
+              </label>
+            </div>
+
+            <!-- 内置模型启用 -->
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 12px;">
+              <div>
+                <div style="font-size: 13px; font-weight: bold; color: white;">🤖 内置模型启用</div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">开启后，测试连通性与模型对话将默认走内置的 Agnes 官方高速通道服务；关闭后走您的自定义配置。</div>
+              </div>
+              <label class="switch-slider-btn" for="setting-built-in-models-toggle">
+                <input type="checkbox" id="setting-built-in-models-toggle">
+                <span class="slider-knob"></span>
+              </label>
+            </div>
+
+            <!-- 语言首选项 -->
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 12px;">
+              <div>
+                <div style="font-size: 13px; font-weight: bold; color: white;">🌐 界面语言首选项 (Language)</div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">切换客户端和面板展示的系统语言语系。</div>
+              </div>
+              <div>
+                <select id="setting-language-select" style="background: var(--bg-input) !important; color: white; border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 8px; font-size: 12px; outline: none; height: 30px;">
+                  <option value="zh-CN">简体中文</option>
+                  <option value="en-US">English</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- 软件版本与检测更新 -->
+          <div class="form-group-section" style="max-width: 600px; margin-bottom: 24px;">
+            <h3>ℹ️ 关于</h3>
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 20px; background: linear-gradient(135deg, rgba(147, 51, 234, 0.1) 0%, rgba(79, 70, 229, 0.1) 100%); border: 1px solid rgba(147, 51, 234, 0.2); border-radius: 12px;">
+              <div>
+                <div style="font-size: 18px; font-weight: bold; color: white; display: flex; align-items: center; gap: 8px;">
+                  AI助手
+                </div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 6px;">本地智能大模型网关与微信微信通道管理桌面控制中心。</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- Tab 6: 关于 -->
         <section class="tab-pane" id="about-view" style="overflow-y: auto; height: 100%; box-sizing: border-box; padding: 20px;">
           <div class="view-header" style="margin-bottom: 20px;">
@@ -461,7 +729,7 @@
 
             <!-- 2. 核心服务能力 -->
             <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px; padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
-              <h3 style="margin-top: 0; color: #00e676; font-size: 16px; display: flex; align-items: center; gap: 8px;">🔥 核心服务能力</h3>
+              <h3 style="margin-top: 0; color: var(--accent-color); font-size: 16px; display: flex; align-items: center; gap: 8px;">🔥 核心服务能力</h3>
               <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 15px;">通过集成本地网关，您可以赋予您的个人或团队以下高附加值人工智能服务能力：</p>
               
               <div style="display: flex; flex-direction: column; gap: 12px;">
@@ -483,7 +751,7 @@
 
           <!-- 3. 极速上手使用指南 -->
           <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px; padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); margin-bottom: 12px;">
-            <h3 style="margin-top: 0; color: #ffd54f; font-size: 16px; display: flex; align-items: center; gap: 8px;">📘 极速上手使用指南</h3>
+            <h3 style="margin-top: 0; color: var(--accent-color); font-size: 16px; display: flex; align-items: center; gap: 8px;">📘 极速上手使用指南</h3>
             
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 15px;">
               <div style="border-right: 1px solid rgba(255,255,255,0.05); padding-right: 15px;">
@@ -502,6 +770,11 @@
               </div>
             </div>
           </div>
+        </section>
+
+        <!-- Tab 7: 内置 OpenClaw 面板 -->
+        <section class="tab-pane" id="openclaw-panel-view" style="width: 100%; height: 100%; padding: 0; margin: 0; overflow: hidden; background: #0b0b14;">
+          <webview id="openclaw-iframe" style="width: 100%; height: 100%; border: none; background: #0b0b14;" src=""></webview>
         </section>
 
       </main>

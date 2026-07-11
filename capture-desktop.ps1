@@ -7,24 +7,23 @@ Add-Type -AssemblyName System.Drawing
 Add-Type @"
     using System;
     using System.Runtime.InteropServices;
-    public class DPI {
+    public class WinApi {
         [DllImport("user32.dll")]
         public static extern IntPtr SetProcessDpiAwarenessContext(IntPtr context);
-        static DPI() {
-            _PerMonitorV2 = new IntPtr(-4);
-        }
-        public static IntPtr _PerMonitorV2;
-        public static void Enable() {
-            SetProcessDpiAwarenessContext(_PerMonitorV2);
-        }
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetForegroundWindow();
     }
 "@
 # Suppress errors if DPI awareness was already set by a previous call
-[DPI]::Enable() 2>$null | Out-Null
+[WinApi]::SetProcessDpiAwarenessContext([IntPtr]-4) 2>$null | Out-Null
 
-# Use Screen.Bounds (physical pixels) directly - no dynamic calculation
-# This gets the TRUE physical resolution of the primary monitor
-$screen = [System.Windows.Forms.Screen]::PrimaryScreen
+# Multi-monitor enhancement:
+# 1. Get the handle of the current active foreground window.
+$fgHwnd = [WinApi]::GetForegroundWindow()
+
+# 2. Automatically locate the screen containing the active foreground window.
+# If no active window exists or it is outside boundaries, Screen.FromHandle falls back to PrimaryScreen safely.
+$screen = [System.Windows.Forms.Screen]::FromHandle($fgHwnd)
 $bounds = $screen.Bounds
 
 $width = $bounds.Width
@@ -36,6 +35,8 @@ $g.Clear([System.Drawing.Color]::Black)
 
 $sz = New-Object System.Drawing.Size($width, $height)
 $loc = $bounds.Location
+
+# Copy screen graphics using physical coordinates of the target monitor (loc.X, loc.Y)
 $g.CopyFromScreen($loc.X, $loc.Y, 0, 0, $sz)
 
 $outPath = "$env:TEMP/openclaw-screenshot.png"

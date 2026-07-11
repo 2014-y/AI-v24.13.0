@@ -1,5 +1,5 @@
 // main.js - Electron 主进程入口
-const { app, BrowserWindow, ipcMain, Tray, Menu, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, Notification, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { fork } = require('child_process');
@@ -10,6 +10,7 @@ let gatewayProcess = null;
 let isQuitting = false;
 let isMaximizedState = false;
 let normalBounds = null;
+const appStartTime = Date.now();
 global.latestAcpDashboardUrl = '';
 
 const CONFIG_DIR = path.join(process.env.USERPROFILE || process.env.HOME, '.openclaw');
@@ -35,18 +36,73 @@ function createWindow() {
         frame: false, // 无边框窗口
         resizable: true, // 允许用户自定义拖拽放大缩小窗口
         maximizable: true, // 允许最大化
-        transparent: true, // 半透明支持
+        backgroundColor: '#0d0b18', // 曜石黑暗色底底色，平滑窗口拉起首屏加载
         icon: path.join(__dirname, 'config', 'icon.jpg'), // 窗口图标
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
-            nodeIntegration: false
+            nodeIntegration: false,
+            webSecurity: false,
+            allowRunningInsecureContent: true,
+            webviewTag: true
         }
     });
 
+    // 每次启动清除渲染进程缓存，确保 HTML/CSS/JS 修改立即生效
+    session.defaultSession.clearCache().catch(() => {});
+
+    const resolvedPath = path.resolve(__dirname, 'index.html');
+    require('fs').writeFileSync(
+        path.join(__dirname, 'load_path_debug.log'),
+        `Loaded index.html path: ${resolvedPath}\nApp path: ${app.getAppPath()}\n__dirname: ${__dirname}\n`,
+        'utf8'
+    );
+
     mainWindow.loadFile('index.html');
 
+    mainWindow.webContents.on('did-finish-load', async () => {
+        try {
+            const html = await mainWindow.webContents.executeJavaScript("document.body.innerHTML");
+            require('fs').writeFileSync(
+                path.join(__dirname, 'actual_rendered_html.log'),
+                html,
+                'utf8'
+            );
+        } catch (e) {
+            require('fs').writeFileSync(
+                path.join(__dirname, 'actual_rendered_html.log'),
+                `Error executing script: ${e.message}`,
+                'utf8'
+            );
+        }
+    });
 
+    // 拦截本地网关面板的 HTTP 响应头，移除 X-Frame-Options 限制，防止内置 iframe 跨域白屏/黑屏拒绝渲染
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+        const responseHeaders = { ...details.responseHeaders };
+        const headersToDelete = [
+            'x-frame-options', 
+            'X-Frame-Options', 
+            'content-security-policy', 
+            'Content-Security-Policy'
+        ];
+        headersToDelete.forEach(h => {
+            delete responseHeaders[h];
+        });
+        callback({ cancel: false, responseHeaders });
+    });
+
+
+
+    mainWindow.on('maximize', () => {
+        isMaximizedState = true;
+        mainWindow.webContents.send('window-maximized-status', true);
+    });
+
+    mainWindow.on('unmaximize', () => {
+        isMaximizedState = false;
+        mainWindow.webContents.send('window-maximized-status', false);
+    });
 
     mainWindow.on('close', (event) => {
         if (!isQuitting) {
@@ -120,6 +176,21 @@ function stopGatewayProcess() {
             } catch (err) {
                 try { gatewayProcess.kill('SIGKILL'); } catch (e) {}
             }
+            // 保底物理清除霸占端口 18789 的残留
+            try {
+                const { execSync } = require('child_process');
+                const netstatOut = execSync('netstat -ano').toString();
+                const lines = netstatOut.split('\n');
+                lines.forEach(line => {
+                    if (line.includes(':18789') && line.includes('LISTENING')) {
+                        const parts = line.trim().split(/\s+/);
+                        const pid = parts[parts.length - 1];
+                        if (pid && parseInt(pid) > 0) {
+                            try { execSync(`taskkill /pid ${pid} /F /T`); } catch(e) {}
+                        }
+                    }
+                });
+            } catch(err) {}
         } else {
             gatewayProcess.kill('SIGTERM');
         }
@@ -137,7 +208,7 @@ ipcMain.on('window-action', (event, action) => {
     if (action === 'minimize') {
         mainWindow.minimize();
     } else if (action === 'maximize') {
-        if (isMaximizedState) {
+        if (mainWindow.isMaximized()) {
             mainWindow.unmaximize();
             if (normalBounds) {
                 mainWindow.setBounds(normalBounds, true);
@@ -145,13 +216,9 @@ ipcMain.on('window-action', (event, action) => {
                 mainWindow.setSize(1120, 760, true);
                 mainWindow.center();
             }
-            isMaximizedState = false;
-            mainWindow.webContents.send('window-maximized-status', false);
         } else {
             normalBounds = mainWindow.getBounds();
             mainWindow.maximize();
-            isMaximizedState = true;
-            mainWindow.webContents.send('window-maximized-status', true);
         }
     } else if (action === 'close') {
         mainWindow.close();
@@ -162,6 +229,33 @@ ipcMain.on('window-action', (event, action) => {
 ipcMain.on('gateway-action', (event, action) => {
     if (action === 'start') {
         if (gatewayProcess) return;
+
+        // 每次拉起网关前，先物理强制杀掉任何霸占 18789 端口的残留进程，确保新实例完美就绪
+        if (process.platform === 'win32') {
+            try {
+                const { execSync } = require('child_process');
+                const netstatOut = execSync('netstat -ano').toString();
+                const lines = netstatOut.split('\n');
+                const pidsToKill = new Set();
+                lines.forEach(line => {
+                    if (line.includes(':18789') && line.includes('LISTENING')) {
+                        const parts = line.trim().split(/\s+/);
+                        const pid = parts[parts.length - 1];
+                        if (pid && parseInt(pid) > 0) {
+                            pidsToKill.add(pid);
+                        }
+                    }
+                });
+                pidsToKill.forEach(pid => {
+                    try {
+                        execSync(`taskkill /pid ${pid} /F /T`);
+                        console.log(`Successfully killed leftover gateway process occupying port 18789, PID: ${pid}`);
+                    } catch(e) {}
+                });
+            } catch(err) {
+                console.error('Failed to cleanup leftover port 18789 processes:', err);
+            }
+        }
 
         if (mainWindow) {
             mainWindow.webContents.send('gateway-status', 'starting');
@@ -177,9 +271,11 @@ ipcMain.on('gateway-action', (event, action) => {
             
             // 强制使用打包内置的原生独立 Node 运行时（实现 100% 闭环，免装全局 Node 依赖）
             const nodeExePath = path.join(__dirname, '.node-sandbox', 'node.exe');
+            const patchPath = path.join(__dirname, 'patch_gateway.js');
             const forkOptions = {
                 cwd: CONFIG_DIR,
-                stdio: ['pipe', 'pipe', 'pipe', 'ipc']
+                stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+                execArgv: ['--require', patchPath]
             };
             if (fs.existsSync(nodeExePath)) {
                 forkOptions.execPath = nodeExePath;
@@ -271,10 +367,14 @@ ipcMain.handle('config-read', async () => {
 
 ipcMain.handle('config-save', async (event, newConfig) => {
     try {
+        const cleanConfig = JSON.parse(JSON.stringify(newConfig));
+        delete cleanConfig.videoGenerator;
+        delete cleanConfig.imageGenerator;
+        
         // 读取原本的文件尺寸
         const originalBytes = fs.existsSync(CONFIG_PATH) ? fs.statSync(CONFIG_PATH).size : 39500;
         
-        let newJson = JSON.stringify(newConfig, null, 2);
+        let newJson = JSON.stringify(cleanConfig, null, 2);
         
         // 空白填充算法防回滚自愈
         const newBytes = Buffer.byteLength(newJson, 'utf8');
@@ -305,6 +405,72 @@ ipcMain.handle('wechat-clear', async () => {
         return { success: true };
     } catch (e) {
         console.error('Failed to clear WeChat session:', e);
+        return { success: false, error: e.message };
+    }
+});
+
+// 检测微信当前是否已绑定 (检测 openclaw-weixin 缓存文件夹是否存在)
+ipcMain.handle('wechat-check-status', async () => {
+    try {
+        const weixinCachePath = path.join(CONFIG_DIR, 'openclaw-weixin');
+        const exists = fs.existsSync(weixinCachePath) && fs.readdirSync(weixinCachePath).length > 0;
+        
+        let details = null;
+        if (exists) {
+            const accountsJsonPath = path.join(weixinCachePath, 'accounts.json');
+            if (fs.existsSync(accountsJsonPath)) {
+                try {
+                    const accounts = JSON.parse(fs.readFileSync(accountsJsonPath, 'utf8'));
+                    if (accounts && accounts.length > 0) {
+                        const accountId = accounts[0];
+                        const accountDetailPath = path.join(weixinCachePath, 'accounts', `${accountId}.json`);
+                        if (fs.existsSync(accountDetailPath)) {
+                            const accountDetail = JSON.parse(fs.readFileSync(accountDetailPath, 'utf8'));
+                            details = {
+                                accountId: accountId.split('-')[0], // 简化标识名
+                                savedAt: accountDetail.savedAt,
+                                userId: accountDetail.userId ? accountDetail.userId.split('@')[0] : 'WeChat Bot'
+                            };
+                        }
+                    }
+                } catch (err) {}
+            }
+        }
+        
+        return { success: true, bound: exists, details };
+    } catch (e) {
+        return { success: false, bound: false, details: null, error: e.message };
+    }
+});
+
+// 读取本地持久化系统日志 gateway_stdout.log (支持提取最近 256KB 内容，防撑爆渲染进程)
+ipcMain.handle('read-system-logs', async () => {
+    try {
+        const logPath = path.join(__dirname, 'gateway_stdout.log');
+        if (fs.existsSync(logPath)) {
+            const stats = fs.statSync(logPath);
+            const fd = fs.openSync(logPath, 'r');
+            const bufferSize = Math.min(stats.size, 256 * 1024);
+            const buffer = Buffer.alloc(bufferSize);
+            fs.readSync(fd, buffer, 0, bufferSize, stats.size - bufferSize);
+            fs.closeSync(fd);
+            return { success: true, content: buffer.toString('utf8') };
+        }
+        return { success: true, content: '📋 系统尚未生成任何运行日志\n' };
+    } catch (e) {
+        return { success: false, content: '', error: e.message };
+    }
+});
+
+// 清空本地持久化系统日志 gateway_stdout.log
+ipcMain.handle('clear-system-logs', async () => {
+    try {
+        const logPath = path.join(__dirname, 'gateway_stdout.log');
+        if (fs.existsSync(logPath)) {
+            fs.writeFileSync(logPath, '', 'utf8');
+        }
+        return { success: true };
+    } catch (e) {
         return { success: false, error: e.message };
     }
 });
@@ -422,6 +588,43 @@ ipcMain.handle('stats-get', async () => {
     });
 });
 
+// 获取本地最新的带 token 的网关面板 URL
+ipcMain.handle('get-dashboard-url', async () => {
+    if (global.latestAcpDashboardUrl && global.latestAcpDashboardUrl.includes('?token=')) {
+        return global.latestAcpDashboardUrl;
+    }
+    try {
+        const logPath = path.join(__dirname, 'gateway_stdout.log');
+        if (fs.existsSync(logPath)) {
+            const logContent = fs.readFileSync(logPath, 'utf8');
+            const matches = logContent.match(/https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):\d+\/acp\/[^\s"'\n]+/g);
+            if (matches && matches.length > 0) {
+                const latestUrl = matches[matches.length - 1].trim();
+                global.latestAcpDashboardUrl = latestUrl;
+                return latestUrl;
+            }
+        }
+    } catch (e) {
+        console.error('Failed to parse gateway log for dashboard url:', e);
+    }
+    
+    // 降级读取 openclaw.json 的 token 拼接成免密 URL
+    let fallbackToken = '';
+    try {
+        const configPath = path.join(CONFIG_DIR, 'openclaw.json');
+        if (fs.existsSync(configPath)) {
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            if (config.gateway && config.gateway.auth && config.gateway.auth.token) {
+                fallbackToken = config.gateway.auth.token;
+            }
+        }
+    } catch (err) {}
+    
+    return fallbackToken 
+        ? `http://127.0.0.1:18789/acp/?token=${fallbackToken}`
+        : 'http://127.0.0.1:18789/acp/';
+});
+
 // 一键拉起外部浏览器链接 (用于免密 ACP 控制台跳转)
 ipcMain.handle('open-external', async (event, url) => {
     try {
@@ -513,6 +716,11 @@ ipcMain.handle('open-external', async (event, url) => {
         console.error('Failed to open external url:', e);
         return false;
     }
+});
+
+// 获取应用启动时间
+ipcMain.handle('get-app-start-time', () => {
+    return appStartTime;
 });
 
 // 初始化应用

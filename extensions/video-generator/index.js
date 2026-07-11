@@ -35,6 +35,10 @@ export default function createSkill(runtime) {
     fs.mkdirSync(SAVE_DIR, { recursive: true });
   }
 
+  const defaultVideoModel = runtime?.config?.agents?.defaults?.videoGenerationModel?.primary || "agnes-video-v2.0";
+  const userApiBase = runtime?.config?.videoGenerator?.apiBase || "https://apihub.agnes-ai.com/v1/videos";
+  const userApiKey = runtime?.config?.videoGenerator?.apiKey;
+
   return {
     name: "video-generator",
     description: "Generate videos via agnes-ai with full parameter control",
@@ -60,7 +64,7 @@ API key 自动轮询 7 个密钥，失败自动切换下一个。
     async video_generate({
       prompt,
       image_url,
-      model = "agnes-video-v2.0",
+      model = defaultVideoModel,
       duration = 5,
       resolution = "720p",
       fps = 24,
@@ -90,7 +94,7 @@ API key 自动轮询 7 个密钥，失败自动切换下一个。
       console.log(`[video-generator] Generating: ${prompt} | duration=${duration}s | ${resolution} | ${fps}fps | ${aspect_ratio}`);
 
       // 带 key 轮询的 API 调用
-      const videoUrl = await callVideoAPIWithRetry(body);
+      const videoUrl = await callVideoAPIWithRetry(body, userApiBase, userApiKey);
 
       await downloadFile(videoUrl, filepath);
 
@@ -114,29 +118,38 @@ API key 自动轮询 7 个密钥，失败自动切换下一个。
 /**
  * 带 key 轮询重试的 API 调用
  */
-async function callVideoAPIWithRetry(body) {
+async function callVideoAPIWithRetry(body, apiBase, userApiKey) {
   let lastError = null;
+
+  if (userApiKey) {
+    try {
+      return await callVideoAPI(body, userApiKey, apiBase);
+    } catch (err) {
+      lastError = err;
+      console.warn(`[video-generator] User API Key failed, falling back to built-in keys...`);
+    }
+  }
 
   for (let attempt = 0; attempt < API_KEYS.length; attempt++) {
     const apiKey = API_KEYS[attempt % API_KEYS.length];
     try {
-      return await callVideoAPI(body, apiKey);
+      return await callVideoAPI(body, apiKey, apiBase);
     } catch (err) {
       lastError = err;
       // [suppressed] key rotation failure
     }
   }
 
-  throw new Error(`All ${API_KEYS.length} API keys failed. Last error: ${lastError?.message}`);
+  throw new Error(`All API keys failed. Last error: ${lastError?.message}`);
 }
 
 /**
  * 调用 agnes-ai 视频生成 API
  */
-function callVideoAPI(body, apiKey) {
+function callVideoAPI(body, apiKey, apiBase) {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(body);
-    const urlObj = new URL(API_BASE);
+    const urlObj = new URL(apiBase || API_BASE);
 
     const transport = urlObj.protocol === "https:" ? https : http;
 

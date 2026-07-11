@@ -55,8 +55,9 @@ async function checkCodexRunning() {
 }
 
 async function launchCodex() {
-  await execFileAsync(CODEX_EXE, [], {
+  await execFileAsync(CODEX_EXE, ["app"], {
     detached: true,
     stdio: "ignore"
   });
 }
+
