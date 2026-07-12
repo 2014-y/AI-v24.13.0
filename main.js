@@ -598,6 +598,7 @@ ipcMain.handle('wechat-login', async () => {
         const forkOptions = {
             cwd: CONFIG_DIR,
             stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+            execArgv: ['--dns-result-order=ipv4first'],
             env: { ...process.env, NODE_TLS_REJECT_UNAUTHORIZED: '0' }
         };
         if (fs.existsSync(nodeExePath)) {
@@ -916,40 +917,28 @@ ipcMain.handle('get-app-start-time', () => {
 });
 
 // 辅助函数：发起 HTTPS GET 请求获取 JSON 数据
-function httpsGetJson(url) {
-    const https = require('https');
+function httpsGetJson(urlStr) {
+    const { net } = require('electron');
     return new Promise((resolve, reject) => {
-        const options = {
+        net.fetch(urlStr, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'application/vnd.github.v3+json'
-            },
-            timeout: 10000 // 10秒超时
-        };
-        https.get(url, options, (res) => {
-            if (res.statusCode === 301 || res.statusCode === 302) {
-                // 处理重定向
-                httpsGetJson(res.headers.location).then(resolve).catch(reject);
-                return;
             }
-            if (res.statusCode !== 200) {
-                res.resume();
-                reject(new Error(`请求失败，状态码: ${res.statusCode}`));
-                return;
+        }).then(async (res) => {
+            if (res.status === 301 || res.status === 302) {
+                return httpsGetJson(res.headers.get('location')).then(resolve).catch(reject);
             }
-            let rawData = '';
-            res.on('data', (chunk) => { rawData += chunk; });
-            res.on('end', () => {
-                try {
-                    const parsedData = JSON.parse(rawData);
-                    resolve(parsedData);
-                } catch (e) {
-                    reject(e);
-                }
-            });
-        }).on('error', (err) => {
-            reject(err);
-        });
+            if (!res.ok) {
+                return reject(new Error(`请求失败，状态码: ${res.status}`));
+            }
+            try {
+                const parsedData = await res.json();
+                resolve(parsedData);
+            } catch (e) {
+                reject(e);
+            }
+        }).catch(reject);
     });
 }
 
@@ -967,40 +956,29 @@ function isNewerVersion(latest, current) {
 }
 
 // 辅助函数：通过 HEAD 请求 latest 页面获取重定向的真实 tag_name
-function getLatestVersionFromRedirect(url) {
-    const https = require('https');
-    const urlModule = require('url');
+function getLatestVersionFromRedirect(urlStr) {
+    const { net } = require('electron');
     return new Promise((resolve, reject) => {
-        const parsedUrl = urlModule.parse(url);
-        const options = {
-            hostname: parsedUrl.hostname,
-            path: parsedUrl.path,
+        net.fetch(urlStr, {
             method: 'HEAD',
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             },
-            timeout: 8000
-        };
-        const req = https.request(options, (res) => {
-            if (res.statusCode === 301 || res.statusCode === 302) {
-                const location = res.headers.location;
-                // 从重定向的 URL (如 /releases/tag/v1) 里匹配 tag_name
-                const match = location.match(/\/releases\/tag\/(v?[0-9a-zA-Z.-]+)/);
-                if (match) {
-                    resolve(match[1]);
-                } else {
-                    reject(new Error('未在重定向目标中找到版本号'));
+            redirect: 'manual'
+        }).then(res => {
+            if (res.status >= 300 && res.status < 400) {
+                const location = res.headers.get('location');
+                if (location) {
+                    const match = location.match(/\/releases\/tag\/(v?[0-9a-zA-Z.-]+)/);
+                    if (match) {
+                        return resolve(match[1]);
+                    }
                 }
+                reject(new Error('未在重定向目标中找到版本号'));
             } else {
-                reject(new Error(`请求未发生重定向，状态码: ${res.statusCode}`));
+                reject(new Error(`请求未发生重定向，状态码: ${res.status}`));
             }
-        });
-        req.on('error', (err) => reject(err));
-        req.on('timeout', () => {
-            req.destroy();
-            reject(new Error('请求超时'));
-        });
-        req.end();
+        }).catch(reject);
     });
 }
 
