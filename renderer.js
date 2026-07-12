@@ -717,17 +717,20 @@ function setupIpcListeners() {
         }
 
         // 🌟 过滤冗余的未安装插件警告、框架表格线与垃圾说明，使终端日志框只保留核心关键步骤
-        if (
-            text.includes('|') || 
-            text.includes('plugin not installed') || 
-            text.includes('plugins.allow is empty') || 
-            text.includes('discovered non-bundled plugins') || 
-            text.includes('To trust them') ||
-            text.includes('Run \'openclaw plugins') ||
-            text.includes('you trust to plugins')
-        ) {
+        const filteredLines = text.split('\n').filter(line => !(
+            line.includes('|') || 
+            line.includes('plugin not installed') || 
+            line.includes('plugins.allow is empty') || 
+            line.includes('discovered non-bundled plugins') || 
+            line.includes('To trust them') ||
+            line.includes('Run \'openclaw plugins') ||
+            line.includes('you trust to plugins')
+        ));
+        
+        if (filteredLines.length === 0) {
             return;
         }
+        text = filteredLines.join('\n');
 
         if (text.includes('[gateway] ready') || text.includes('[heartbeat] started') || text.includes('advertised gateway')) {
             gatewayFullyReady = true;
@@ -814,7 +817,7 @@ function setupIpcListeners() {
             cleanedText = cleanedText.replace(/Webhook server listening on http:\/\/([^\s]+)/, '微信/语音 Webhook 本地服务在 http://$1 上监听就绪！');
         } else if (text.includes('heartbeat] started')) {
             cleanedText = cleanedText.replace('[heartbeat] started', '在线心跳监控守护已开启，网关连接保持正常 💓');
-        } else if (text.includes('ready')) {
+        } else if (text.includes('ready') && text.includes('[gateway]')) {
             cleanedText = cleanedText.replace('ready', '网关全部引擎启动就绪，正在静候业务请求传入...');
         }
 

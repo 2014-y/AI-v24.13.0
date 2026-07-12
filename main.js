@@ -396,6 +396,45 @@ ipcMain.handle('config-read', async () => {
             config.plugins.entries['openclaw-weixin'].enabled = true;
             needsSave = true;
         }
+
+        if (!config.plugins.allow) { config.plugins.allow = []; needsSave = true; }
+        
+        Object.keys(config.plugins.entries).forEach(pluginName => {
+            if (config.plugins.entries[pluginName].enabled === true) {
+                if (!config.plugins.allow.includes(pluginName)) {
+                    config.plugins.allow.push(pluginName);
+                    needsSave = true;
+                }
+            }
+        });
+
+        // 自动注入微信插件加载路径，解决新电脑或免安装运行时找不到插件导致提示“Install Weixin plugin?”的问题
+        if (!config.plugins.load) { config.plugins.load = {}; needsSave = true; }
+        if (!config.plugins.load.paths) { config.plugins.load.paths = []; needsSave = true; }
+        
+        const weixinPluginPath = path.join(__dirname, 'node_modules', '@tencent-weixin', 'openclaw-weixin');
+        const originalPaths = config.plugins.load.paths || [];
+        const filteredPaths = originalPaths.filter(p => {
+            if (typeof p !== 'string') return false;
+            // 过滤掉所有不一致的微信插件旧路径
+            if (p.endsWith('openclaw-weixin') && path.resolve(p) !== path.resolve(weixinPluginPath)) {
+                return false;
+            }
+            return true;
+        });
+        
+        if (fs.existsSync(weixinPluginPath)) {
+            const resolvedPath = path.resolve(weixinPluginPath);
+            const hasPath = filteredPaths.some(p => typeof p === 'string' && path.resolve(p) === resolvedPath);
+            if (!hasPath) {
+                filteredPaths.push(weixinPluginPath);
+            }
+        }
+        
+        if (JSON.stringify(config.plugins.load.paths) !== JSON.stringify(filteredPaths)) {
+            config.plugins.load.paths = filteredPaths;
+            needsSave = true;
+        }
         if (needsSave) {
             try { fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8'); } catch(e) {}
         }
@@ -574,8 +613,9 @@ ipcMain.handle('wechat-login', async () => {
                 mainWindow.webContents.send('gateway-log', text);
                 
                 // 自动匹配微信扫码登录 URL (支持 weixin.qq.com 各种子路径二级域(如 liteapp/login) 或者是 wechaty.js.org 专属二维码链接)
-                const qrMatch = text.match(/https?:\/\/[^\s"'\n]*weixin\.qq\.com\/[^\s"'\n]+/) || 
-                                text.match(/https?:\/\/wechaty\.js\.org\/qrcode\/[^\s"'\n]+/);
+                const cleanText = text.replace(/\x1B\[[0-9;]*m/g, '');
+                const qrMatch = cleanText.match(/https?:\/\/[^\s"'\n]*weixin\.qq\.com\/[^\s"'\n]+/) || 
+                                cleanText.match(/https?:\/\/wechaty\.js\.org\/qrcode\/[^\s"'\n]+/);
                 if (qrMatch) {
                     mainWindow.webContents.send('gateway-qrcode', qrMatch[0]);
                 }
