@@ -5,11 +5,10 @@
 </p>
 
 <p align="center">
-  <strong>基于 Electron + OpenClaw 的本地零依赖 AI 智能网关控制台，支持一键运行、免置 Key 大模型和多渠道聊天接入。</strong>
+  <strong>基于 Electron + OpenClaw 深度定制的本地零依赖 AI 智能网关控制台</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/2014-y/ClawAI/releases"><img src="https://img.shields.io/github/v/release/2014-y/ClawAI?color=purple&label=Release" alt="Latest Release" /></a>
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/Node.js-%3E%3D24.x-green?logo=node.js" alt="Node Version" /></a>
   <a href="https://github.com/electron/electron"><img src="https://img.shields.io/badge/Electron-Latest-blue?logo=electron" alt="Electron Version" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-orange" alt="License" /></a>
@@ -17,86 +16,136 @@
 
 ---
 
-## 🌟 核心特性与独创优化
+## 📖 项目简介
 
-本项目为原本复杂的 AI 网关服务提供了极简的可视化桌面控制端。为了彻底消除小白用户的部署门槛并保护内置资产，我们实现了一系列核心特性的深度重构与定制：
+ClawAI 是一款专为降低 AI 智能网关（Agent Gateway）部署门槛而设计的桌面控制台客户端。项目基于 **Electron** 桌面框架与 **OpenClaw** 开源 AI 网关底层进行深度重构，通过内置高度优化的绿色运行沙箱及关键插件，实现无需任何全局环境配置、开箱即用的 AI 网关与多渠道聊天（微信、Slack、Matrix 等）接入能力。
 
-### 1. 🔌 零依赖一键运行（小白神器）
-* **免除全局环境**：用户电脑上无需预先安装任何 Node.js、Git 或 Python 运行环境。
-* **内置绿色沙箱**：集成高度优化且自愈的 `.node-sandbox`。脚本会在首次启动时自动建立独立的绿色 Node/npm 执行空间，避免破坏用户的系统级环境变量。
-* **预装微信渠道**：预先内置了微信通道插件 `@tencent-weixin/openclaw-weixin`。新用户安装后点击“绑定微信”可**秒级渲染出登录二维码，扫码即用，100% 避免因连网下载插件导致的卡死崩溃**。
+---
 
-### 2. 🔑 内置大模型（开箱即用 + 安全锁）
-* **免置 Key 调用**：配置模板默认集成并内置了官方有效的 Agnes AI 服务密钥，普通用户无需进行繁琐的大模型平台注册、绑定和 Key 的配置，一键启动直接可聊。
-* **内置密钥防护**：
-  * **禁止查看**：前端界面已彻底移除内置大模型厂商的明文查看眼睛按钮。
-  * **禁止复制与导出**：密钥输入框被设为 `readonly` 并强制重写底层事件，**全面拦截选择、复制、剪切以及鼠标右键动作，实现密钥资产的物理隔离保护**。
+## 🛠️ 技术架构与系统组成
 
-### 3. 📉 可视化用量监控与 Token 卫士
-* **底层流量拦截**：基于原生 Node.js 实现的 API 请求代理劫持。每次发起 AI 调用时，后台的 `patch_gateway.js` 会自动截获 prompt（输入）和 completion（输出）的 Tokens 消耗，并记录估计成本。
-* **本地化数据库**：所有用量数据记录于本地 `real_tokens.json` 数据库，完全离线与安全。
-* **精美看板绘制**：前端以可视化折线图和统计指标直接反映 Token 消耗、总体请求和缓存命中率。
+ClawAI 整体架构采用**主从双进程架构**与**绿色沙箱隔离设计**，核心技术栈及作用如下：
 
-### 4. 🎨 UI 界面与交互重构
-* **厂商卡片顶置**：内置大模型通道 `agnes-ai` 强制在模型配置卡片列表中最顶层渲染。
-* **默认折叠**：所有通道卡片默认保持折叠，并支持通过点击卡片标题栏或折叠按钮自由展收，极大节省页面空间。
-* **物理锁定**：内置的 `agnes-ai` 和默认的 `ollama` 通道卡片在界面上被强制物理上锁，移除了删除按钮，禁止用户误删除。
+```mermaid
+graph TD
+    A[Electron 渲染进程 UI] <-->|IPC 通信| B[Electron 主进程 main.js]
+    B -->|启动子进程| C[.node-sandbox 绿色沙箱]
+    C -->|加载执行| D[OpenClaw 网关引擎]
+    D <-->|插件注册与加载| E[内置微信/Slack通道等]
+    D -->|HTTP/HTTPS API 调用| F[网络代理拦截层 patch_gateway.js]
+    F -->|流量拦截审计| G[大模型服务商 API]
+    F -->|持久化写入| H[本地 real_tokens.json 数据库]
+    A -->|读取分析| H
+```
+
+### 1. 桌面客户端外壳 (Electron Shell)
+* **主进程 (main.js)**：负责管理窗口生命周期、处理 IPC 通信、监控后台网关子进程运行状态，并提供健壮的安全防护（如防退出冲突、环境自愈）。
+* **渲染进程 (renderer.js)**：使用 Vanilla JS 构建，渲染流畅无延迟。内置丰富的交互动效，负责大模型配置管理、卡片动态折叠展开、流量消耗的可视化图表渲染。
+
+### 2. 隔离运行沙箱 (.node-sandbox)
+* 预先打包精简版 Node.js 与 npm 绿色环境，用户首次运行或开发初始化时，会自动建立专用的依赖与执行路径。这使得 ClawAI 彻底脱离了对用户系统环境变量（如全局 PATH）的依赖，避免了环境污染，支持多电脑快速无感迁移。
+
+### 3. 网关引擎核心 (OpenClaw Daemon)
+* 作为本地后台服务运行。负责维护模型分发服务、会话上下文管理、系统钩子（Hooks）处理以及各种生态插件（Plugins）的动态热加载。
+
+### 4. 流量审计劫持器 (patch_gateway.js)
+* 采用无侵入式的方法拦截 Node.js 的 `http` 和 `https` 模块底层的 `request` 方法。当网关引擎向大模型厂商接口发送请求时，拦截器会自动解析输入（Prompt）与输出（Completion）的数据流，精确统计 Token 消耗并估算使用成本，写入本地数据库。
+
+---
+
+## 🌟 核心功能与技术实现细节
+
+### 1. 🔌 零依赖一键运行与环境自愈
+* **免装运行环境**：程序启动时会检测 `.node-sandbox` 并自动配置临时环境变量。无需用户预先安装 Node.js、Git、Python 或各种编译工具链。
+* **微信插件预装与自适应激活**：在 Electron 主进程读取配置时，会自动对微信插件（`@tencent-weixin/openclaw-weixin`）的本地路径进行动态绝对路径转换，并注入到 OpenClaw 信任列表（`plugins.allow`）。这**彻底解决了在免安装或新电脑运行下，因缺少路径信任导致后台卡死在终端询问（* Install Weixin plugin?）的重大故障，实现秒级生成登录二维码。**
+
+### 🔑 2. 安全级密钥物理隔离与防泄漏锁
+为了防范内置密钥泄露，ClawAI 在前端和配置层面实现了多层防盗拷保护：
+* **明文禁止查看**：前端界面物理移除了明文查看按钮。
+* **输入框只读与防护锁**：内置大模型通道的密钥配置框被强制设为 `readonly`。
+* **输入事件强力拦截**：底层重写并拦截了该输入框的键盘复制剪切事件 (`copy`, `cut`)、鼠标拖拽事件 (`dragstart`, `drop`)、以及鼠标右键菜单事件，物理切断了通过界面导出、复制内置密钥的任何可能性。
+
+### 📉 3. 实时 Token Telemetry（流量卫士）
+* **底层数据流拦截**：在 `patch_gateway.js` 中，通过改写 Node.js 内置的网络请求，捕获 `openai` 兼容协议包的返回体，分析其 `usage.prompt_tokens` 与 `usage.completion_tokens`。
+* **离线本地数据库**：数据以 JSON 结构持久化保存在用户本地目录下的 `real_tokens.json`，确保用量数据的隐私安全。
+* **可视化数据折线看板**：在前端“用量监控”中，利用图表库动态绘制折线图，直观展现每日 Token 消耗曲线、API 响应耗时、请求次数以及网关缓存命中率。
+
+### 🎨 4. 页面空间优化与物理防呆锁
+* **智能排序与展收**：将主推或内置的大模型卡片置顶渲染，所有卡片默认折叠，通过平滑的折叠动画提供清爽的界面交互。
+* **防误删锁**：对关键的核心配置（如默认模型、Ollama 本地模型）卡片进行物理锁定，移除了配置界面上的删除按钮，避免用户误操作导致核心通路断开。
+
+---
+
+## 🔄 运行与运作流程
+
+ClawAI 运行时的数据与控制流向如下：
+
+### 1. 启动与初始化阶段
+1. 用户启动 ClawAI 应用。
+2. Electron 主进程在后台检测并设置 `.node-sandbox` 绿色运行环境。
+3. 主进程读取本地网关配置文件 `.openclaw/openclaw.json`，自动检测微信等关键插件的本地绝对路径并写入路径信任名单。
+4. 主进程通过 Node.js 子进程拉起 OpenClaw 网关引擎，并将其 `stdout`/`stderr` 标准输入输出流与主进程绑定。
+
+### 2. 微信/聊天通道绑定阶段
+1. 用户在控制台点击「绑定微信」或启用相关插件。
+2. 网关引擎启动微信登录子进程（Wechaty 服务）。
+3. 微信子进程接收到微信扫码登录 URL，通过标准输出打印。
+4. 主进程拦截输出流，过滤 ANSI 颜色逃逸字符，精确提取 URL 并发送给渲染进程。
+5. 渲染进程渲染为二维码，用户扫码后微信子进程成功登录。
+
+### 3. 对话与流式转发阶段
+1. 用户在微信中向 AI 助手发送消息。
+2. 微信通道插件接收消息并封装成 OpenClaw 统一标准格式。
+3. 网关引擎处理消息，匹配相应大模型模板，并向大模型服务商发起 API 请求。
+4. 网络拦截层 `patch_gateway.js` 拦截该请求，监控其数据交互。
+5. 大模型返回回复，网关引擎通过微信通道回复给微信用户。
+6. 拦截层记录此次对话所产生的 Token 消耗，写入本地 `real_tokens.json`，前端用量监控同步更新。
+
+---
 
 > [!TIP]
 > **💡 魔法网络加速**：如在下载依赖、拉取模型或访问大模型 API 时遇到网络困难，可使用推荐的 [网络加速通道](https://pin.dianping.men/auth/register?code=2k788U5v)（注册即可获取极速网络环境支持）。
 
 ---
 
-## 📥 极速下载与安装（普通用户）
+## 🛠️ 开发者指南（源码构建）
 
-1. **下载安装包**：前往本项目的 **[GitHub Releases 页面](https://github.com/2014-y/ClawAI/releases)** 下载最新版本的单文件安装程序 `ClawAI Setup <Version>.exe`。
-2. **简易安装**：双击运行安装包。安装程序会展开解压细节日志，允许你自由选择安装到指定的盘符或目录（例如 D 盘等）。
-3. **极速使用**：
-   * 打开软件，在右侧面板点击 **「启动网关」**，等待状态灯变绿。
-   * 点击右下角的 **「绑定微信」** 按钮，在弹出的窗口中直接用手机微信扫码。
-   * 绑定成功后，在微信中直接向助手发送消息，或者邀请助手入群，即可开聊！
-
----
-
-## 🛠️ 开发者快速上手（二次开发）
-
-### 1. 克隆并进入目录
+### 1. 准备工作
+克隆代码库并进入项目根目录：
 ```bash
 git clone https://github.com/2014-y/ClawAI.git
 cd ClawAI
 ```
 
-### 2. 初始化开发环境沙箱
-在项目根目录双击运行 `init.bat`（或使用终端运行 `.\init.ps1`）。它会自动拉起独立 Node 绿色沙箱，并复制所需模块和配置模板。
+### 2. 初始化沙箱开发环境
+在项目根目录下双击运行 `init.bat` 脚本（或在 PowerShell 中执行 `.\init.ps1`）。它会自动拉起独立 Node 绿色沙箱，复制必要模块并生成基本配置文件。
 
-### 3. 运行调试
+### 3. 运行与调试
+* **启动桌面控制台调试**：
+  ```bash
+  npm run app:start
+  ```
+* **手动单独启动网关服务**：
+  运行根目录下的 `start-gateway.bat`。
+
+### 4. 编译与打包分发
+打包为单文件 Windows 安装包（打包结果输出在 `dist` 目录中）：
 ```bash
-# 启动 Electron 桌面客户端进行调试
-npm run app:start
-
-# 或者手动通过脚本起网关（已修复自动关联本地 node_modules 依赖）
-start-gateway.bat
-```
-
-### 4. 打包分发发布
-如果你修改了界面样式或主进程代码，可通过以下命令一键编译生成 Windows 独立安装包：
-```bash
-# 编译生成 NSIS 单文件安装包 (输出在 dist 目录下)
 npm run app:dist
 ```
 
 ---
 
-## 📑 工程关键文件导览
+## 📑 项目核心文件说明
 
-* `main.js`：Electron 主进程逻辑（控制网关子进程拉起、微信登录 IPC 通信、静默升级）。
-* `renderer.js`：前端交互逻辑（厂商列表顶置、折叠与展收、大模型密钥屏蔽与防复制、用量曲线图绘制）。
-* `patch_gateway.js`：网关 HTTP/HTTPS 请求底层拦截层（Token 卫士，自动捕获流量计算 Token 写入本地）。
-* `init.ps1` / `init.bat`：绿色沙箱自愈与环境初始化脚本。
-* `start-gateway.bat` / `start-gateway.ps1`：已修护的支持脱离全局 Node 独立拉起网关的本地脚本。
+* `main.js`：Electron 主进程。负责网关与微信子进程生命周期管理、系统 IPC 数据中转。
+* `renderer.js`：Electron 渲染进程。实现大模型通道折叠/展收逻辑、内置通道密钥防复制安全防护、用量看板等前端 UI。
+* `patch_gateway.js`：网关 API 拦截插件。通过重写基础网络请求库统计 Token 使用，实现本地离线记账。
+* `init.ps1` / `init.bat`：绿色沙箱自动初始化与本地模块热同步。
+* `start-gateway.bat` / `start-gateway.ps1`：沙箱环境下独立拉起本地网关守护进程的工具脚本。
 
 ---
 
 ## 📜 开源协议
 
-本项目遵循 [MIT License](LICENSE) 开源许可协议。
+本项目遵循 [MIT License](LICENSE) 许可协议。
