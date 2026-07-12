@@ -1,4 +1,4 @@
-// AI助手 多语言包字典定义
+// ClawAI 多语言包字典定义
 window.LOCALES = {
   'zh-CN': {
     // 导航
@@ -9,12 +9,12 @@ window.LOCALES = {
     'nav.stats': '用量监控',
     'nav.system_logs': '系统日志',
     'nav.settings': '系统设置',
-    'nav.about': '关于AI助手',
+    'nav.about': '关于 ClawAI',
     'nav.openclaw_panel': 'OpenClaw 面板',
 
     // 控制台 (Console)
     'console.title': '网关控制台',
-    'console.desc': '实时监控本地 AI 助手的消息处理流与日志输出',
+    'console.desc': '实时监控本地 ClawAI 的消息处理流与日志输出',
     'console.status.stopped': '核心进程检测完成，当前处于【已停止】闲置状态。',
     'console.status.guide': '请点击右侧“启动网关”按钮，拉起本地 AI 服务总线...',
     'console.btn.start': '启动网关',
@@ -44,7 +44,7 @@ window.LOCALES = {
     'chat.btn.clear': '🗑️ 清屏',
     'chat.system_prompt_label': '系统提示词 (System Prompt):',
     'chat.system_prompt_placeholder': '在此设定 AI 的系统预设角色，留空则使用模型默认设置...',
-    'chat.welcome': '🤖 欢迎使用 AI 助手多轮对话测试终端。请在顶部选择您想测试的模型，并输入提示词开始体验！',
+    'chat.welcome': '🤖 欢迎使用 ClawAI 多轮对话测试终端。请在顶部选择您想测试的模型，并输入提示词开始体验！',
 
     // 模型配置 (Model Config)
     'config.title': '网关模型提供商与参数配置',
@@ -66,7 +66,7 @@ window.LOCALES = {
 
     // 插件管理 (Plugins)
     'plugins.title': '网关插件与工具集管理',
-    'plugins.desc': '启用、禁用及调试 OpenClaw 动态网关插件，扩展 AI 助手的工具调用（Tool Calling）能力',
+    'plugins.desc': '启用、禁用及调试 OpenClaw 动态网关插件，扩展 ClawAI 的工具调用（Tool Calling）能力',
     'plugins.search_placeholder': '搜索插件名称、描述或关键词...',
     'plugins.btn.reload': '🔄 刷新插件列表',
     'plugins.badge.official': '官方内置',
@@ -114,7 +114,7 @@ window.LOCALES = {
     'settings.theme.aurora': '极光霓虹',
     'settings.theme.light': '白昼明亮',
     'settings.autostart.title': '🖥️ 开机自动启动',
-    'settings.autostart.desc': '开启后，AI助手客户端将在您的电脑开机时自动随系统启动并运行。',
+    'settings.autostart.desc': '开启后，ClawAI 客户端将在您的电脑开机时自动随系统启动并运行。',
     'settings.autogateway.title': '⚡ 自动启用网关',
     'settings.autogateway.desc': '软件启动时，自动开启 OpenClaw 本地智能网关服务，无需每次手动点击。',
     'settings.notify.title': '🔔 系统通知提醒',
@@ -127,14 +127,14 @@ window.LOCALES = {
     'settings.lang.zh_TW': '繁體中文',
     'settings.lang.en_US': 'English',
     'settings.section.about': 'ℹ️ 关于',
-    'settings.about.title': 'AI助手',
+    'settings.about.title': 'ClawAI',
     'settings.about.desc': '本地智能大模型网关与微信通道管理桌面控制中心。',
 
     // 关于 (About)
-    'about.title': '关于 AI助手',
+    'about.title': '关于 ClawAI',
     'about.desc': '了解系统的技术架构、核心能力与极速使用指南',
     'about.section.arch': '⚙️ 系统技术架构',
-    'about.arch.desc': 'AI助手客户端是基于 Electron 框架构建的本地智能网关。核心基于 OpenClaw daemon 驱动，为用户在微信、Web 端及其他本地客户端之间提供统一的消息路由、大模型调用代理与 MCP（Model Context Protocol）插件管道生态服务。',
+    'about.arch.desc': 'ClawAI 客户端是基于 Electron 框架构建的本地智能网关。核心基于 OpenClaw daemon 驱动，为用户在微信、Web 端及其他本地客户端之间提供统一的消息路由、大模型调用代理与 MCP（Model Context Protocol）插件管道生态服务。',
     'about.section.guide': '🚀 极速使用指南',
     'about.guide.step1': '1. 启动网关',
     'about.guide.step1_desc': '在“控制台”标签中，点击“启动网关”拉起服务总线。',
@@ -155,10 +155,10 @@ window.LOCALES = {
 
     // 新增关于、统计、插件部分
     'settings.about.title': 'ℹ️ 关于',
-    'settings.about.app_name': 'AI助手',
+    'settings.about.app_name': 'ClawAI',
     'settings.about.app_desc': '本地智能大模型网关与微信微信通道管理桌面控制中心。',
     'about.arch.title': '⚙️ 系统技术架构',
-    'about.arch.desc': 'AI助手是一个经过高度沙箱化封装、开箱即用的本地智能网关服务。其核心技术由以下几部分驱动：',
+    'about.arch.desc': 'ClawAI 是一个经过高度沙箱化封装、开箱即用的本地智能网关服务。其核心技术由以下几部分驱动：',
     'about.arch.electron.title': '💎 Electron 骨架层',
     'about.arch.electron.desc': '采用无边框流光设计与高度硬件加速，完美结合了桌面端程序的极速响应与现代化 Web UI 的极致动效。',
     'about.arch.node.title': '📦 内置 Node.js 沙箱',
@@ -319,7 +319,7 @@ window.LOCALES = {
 
     // Console
     'console.title': 'Gateway Console',
-    'console.desc': 'Monitor the message processing stream and log outputs of your local AI assistant in real-time',
+    'console.desc': 'Monitor the message processing stream and log outputs of your local ClawAI in real-time',
     'console.status.stopped': 'Core process detection completed. Currently in [Stopped] idle state.',
     'console.status.guide': 'Please click "Start Gateway" on the right to launch the local AI service bus...',
     'console.btn.start': 'Start Gateway',
@@ -349,7 +349,7 @@ window.LOCALES = {
     'chat.btn.clear': '🗑️ Clear Screen',
     'chat.system_prompt_label': 'System Prompt:',
     'chat.system_prompt_placeholder': 'Set a system preset role for the AI, leave empty to use model defaults...',
-    'chat.welcome': '🤖 Welcome to the AI Assistant conversation test terminal. Select a model at the top and type a message to start!',
+    'chat.welcome': '🤖 Welcome to the ClawAI conversation test terminal. Select a model at the top and type a message to start!',
 
     // Model Config
     'config.title': 'Gateway Providers & Parameter Configurations',
@@ -419,7 +419,7 @@ window.LOCALES = {
     'settings.theme.aurora': 'Aurora Neon',
     'settings.theme.light': 'Day Light',
     'settings.autostart.title': '🖥️ Start on Boot',
-    'settings.autostart.desc': 'Run the AI assistant client automatically when your computer starts.',
+    'settings.autostart.desc': 'Run the ClawAI client automatically when your computer starts.',
     'settings.autogateway.title': '⚡ Auto Start Gateway',
     'settings.autogateway.desc': 'Automatically launch the OpenClaw daemon gateway on application startup.',
     'settings.notify.title': '🔔 Desktop Notifications',
@@ -432,14 +432,14 @@ window.LOCALES = {
     'settings.lang.zh_TW': '繁體中文',
     'settings.lang.en_US': 'English',
     'settings.section.about': 'ℹ️ About',
-    'settings.about.title': 'AI Assistant',
+    'settings.about.title': 'ClawAI',
     'settings.about.desc': 'Local intelligent model gateway and WeChat channel management center.',
 
     // About
-    'about.title': 'About AI Assistant',
+    'about.title': 'About ClawAI',
     'about.desc': 'Learn about the technology stack, core features and quick-start instructions',
     'about.section.arch': '⚙️ System Architecture',
-    'about.arch.desc': 'AI Assistant is a local intelligent gateway application built on Electron. Driven by the OpenClaw daemon, it provides unified message routing, LLM API proxying, and Model Context Protocol (MCP) plug-in ecosystem support across WeChat, Web interfaces, and other local client terminals.',
+    'about.arch.desc': 'ClawAI is a local intelligent gateway application built on Electron. Driven by the OpenClaw daemon, it provides unified message routing, LLM API proxying, and Model Context Protocol (MCP) plug-in ecosystem support across WeChat, Web interfaces, and other local client terminals.',
     'about.section.guide': '🚀 Quick Start Guide',
     'about.guide.step1': '1. Start Gateway',
     'about.guide.step1_desc': 'Click "Start Gateway" in the Console tab to boot up the backend services.',
@@ -460,10 +460,10 @@ window.LOCALES = {
 
     // 新增关于、统计、插件部分
     'settings.about.title': 'ℹ️ About',
-    'settings.about.app_name': 'AI Assistant',
+    'settings.about.app_name': 'ClawAI',
     'settings.about.app_desc': 'Local intelligent LLM gateway & WeChat channel management desktop control center.',
     'about.arch.title': '⚙️ System Architecture',
-    'about.arch.desc': 'AI Assistant is a highly sandboxed, out-of-the-box local intelligent gateway service driven by the following core tech stack:',
+    'about.arch.desc': 'ClawAI is a highly sandboxed, out-of-the-box local intelligent gateway service driven by the following core tech stack:',
     'about.arch.electron.title': '💎 Electron Skeleton',
     'about.arch.electron.desc': 'Features seamless frameless glowing styling with hardware acceleration, combining desktop responsiveness and modern Web UI aesthetics.',
     'about.arch.node.title': '📦 Built-in Node.js Sandbox',
@@ -619,12 +619,12 @@ window.LOCALES = {
     'nav.stats': '用量監控',
     'nav.system_logs': '系統日誌',
     'nav.settings': '系統設定',
-    'nav.about': '關於AI助手',
+    'nav.about': '關於 ClawAI',
     'nav.openclaw_panel': 'OpenClaw 面板',
 
     // 控制台 (Console)
     'console.title': '網關控制台',
-    'console.desc': '實時監控本地 AI 助手的消息處理流與日誌輸出',
+    'console.desc': '實時監控本地 ClawAI 的消息處理流與日誌輸出',
     'console.status.stopped': '核心進程檢測完成，當前處於【已停止】閒置狀態。',
     'console.status.guide': '請點擊右側“啟動網關”按鈕，拉起本地 AI 服務總線...',
     'console.btn.start': '啟動網關',
@@ -654,7 +654,7 @@ window.LOCALES = {
     'chat.btn.clear': '🗑️ 清屏',
     'chat.system_prompt_label': '系統提示詞 (System Prompt):',
     'chat.system_prompt_placeholder': '在此設定 AI 的系統預設角色，留空則使用模型默認設置...',
-    'chat.welcome': '🤖 歡迎使用 AI 助手多輪對話測試終端。請在頂部選擇您想測試的模型，並輸入提示詞開始體驗！',
+    'chat.welcome': '🤖 歡迎使用 ClawAI 多輪對話測試終端。請在頂部選擇您想測試的模型，並輸入提示詞開始體驗！',
 
     // 模型配置 (Model Config)
     'config.title': '網關模型提供商與參數配置',
@@ -676,7 +676,7 @@ window.LOCALES = {
 
     // 插件管理 (Plugins)
     'plugins.title': '網關插件與工具集管理',
-    'plugins.desc': '啟用、禁用及調試 OpenClaw 動態網關插件，擴展 AI 助手的工具調用（Tool Calling）能力',
+    'plugins.desc': '啟用、禁用及調試 OpenClaw 動態網關插件，擴展 ClawAI 的工具調用（Tool Calling）能力',
     'plugins.search_placeholder': '搜索插件名稱、描述或關鍵詞...',
     'plugins.btn.reload': '🔄 刷新插件列表',
     'plugins.badge.official': '官方內置',
@@ -724,7 +724,7 @@ window.LOCALES = {
     'settings.theme.aurora': '極光霓虹',
     'settings.theme.light': '白晝明亮',
     'settings.autostart.title': '🖥️ 開機自動啟動',
-    'settings.autostart.desc': '開啟後，AI助手用戶端將在您的電腦開機時自動隨系統啟動並運行。',
+    'settings.autostart.desc': '開啟後，ClawAI 用戶端將在您的電腦開機時自動隨系統啟動並運行。',
     'settings.autogateway.title': '⚡ 自動啟用網關',
     'settings.autogateway.desc': '軟體啟動時，自動開啟 OpenClaw 本地智能網關服務，無需每次手動點擊。',
     'settings.notify.title': '🔔 系統通知提醒',
@@ -737,19 +737,19 @@ window.LOCALES = {
     'settings.lang.zh_TW': '繁體中文',
     'settings.lang.en_US': 'English',
     'settings.section.about': 'ℹ️ 關於',
-    'settings.about.title': 'AI助手',
+    'settings.about.title': 'ClawAI',
     'settings.about.desc': '本地智能大模型網關與微信通道管理桌面控制中心。',
 
     // 關於 (About)
-    'about.title': '關於 AI助手',
+    'about.title': '關於 ClawAI',
     'about.desc': '了解系統的技術架構、核心能力與極速使用指南',
     'about.section.arch': '⚙️ 系統技術架構',
-    'about.arch.desc': 'AI助手用戶端是基於 Electron 架構構建的本地智能網關。核心基於 OpenClaw daemon 驅動，為用戶在微信、Web 端及其他本地用戶端之間提供統一的消息路由、大模型調用代理與 MCP（Model Context Protocol）插件管道生態服務。',
+    'about.arch.desc': 'ClawAI 用戶端是基於 Electron 架構構建的本地智能網關。核心基於 OpenClaw daemon 驅動，為用戶在微信、Web 端及其他本地用戶端之間提供統一的消息路由、大模型調用代理與 MCP（Model Context Protocol）插件管道生態服務。',
     'about.section.guide': '🚀 極速使用指南',
     'about.guide.step1': '1. 啟動網關',
     'about.guide.step1_desc': '在“控制台”標籤中，點擊“啟動網關”拉起服務總線。',
     'about.guide.step2': '2. 關聯微信',
-    'about.guide.step2_desc': '如果需要讓 AI 接管微信消息，點擊控制台的“綁定微信”掃碼登錄。',
+    'about.guide.step2_desc': '如果需要讓 ClawAI 接管微信消息，點擊控制台的“綁定微信”掃碼登錄。',
     'about.guide.step3': '3. 模型配置',
     'about.guide.step3_desc': '在“模型配置”中添加您的 OpenAI/Claude 等大模型 API Key 並設為主用模型。',
     'about.guide.step4': '4. 插件與用量',
@@ -765,10 +765,10 @@ window.LOCALES = {
 
     // 新增關於、統計、外掛程式部分
     'settings.about.title': 'ℹ️ 關於',
-    'settings.about.app_name': 'AI助手',
+    'settings.about.app_name': 'ClawAI',
     'settings.about.app_desc': '本地智能大模型網關與微信微信通道管理桌面控制中心。',
     'about.arch.title': '⚙️ 系統技術架構',
-    'about.arch.desc': 'AI助手是一個經過高度沙箱化封裝、開箱即用的本地智能網關服務。其核心技術由以下幾部分驅動：',
+    'about.arch.desc': 'ClawAI 是一個經過高度沙箱化封裝、開箱即用的本地智能網關服務。其核心技術由以下幾部分驅動：',
     'about.arch.electron.title': '💎 Electron 骨架層',
     'about.arch.electron.desc': '採用無邊框流光設計與高度硬體加速，完美結合了桌面端程式的極速響應與現代化 Web UI 的極致動效。',
     'about.arch.node.title': '📦 內置 Node.js 沙箱',

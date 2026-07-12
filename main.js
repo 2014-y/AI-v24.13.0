@@ -160,7 +160,7 @@ function createTray() {
             } 
         }
     ]);
-    tray.setToolTip('AI助手 本地助手');
+    tray.setToolTip('ClawAI');
     tray.setContextMenu(contextMenu);
     tray.on('double-click', () => {
         mainWindow.show();
@@ -379,7 +379,7 @@ ipcMain.handle('config-read', async () => {
         if (!config.ui.assistant) { config.ui.assistant = {}; needsSave = true; }
         if (!config.ui.assistant.avatar) {
             config.ui.assistant.avatar = '🤖';
-            config.ui.assistant.name = config.ui.assistant.name || 'AI助手';
+            config.ui.assistant.name = config.ui.assistant.name || 'ClawAI';
             needsSave = true;
         }
         if (!config.gateway) { config.gateway = {}; needsSave = true; }

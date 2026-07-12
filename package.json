@@ -13,7 +13,7 @@
     "whatsapp",
     "agnes-ai"
   ],
-  "author": "AI助手",
+  "author": "ClawAI",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -33,7 +33,7 @@
     "logs": "type logs\\openclaw-%date%.log",
     "app:start": "electron .",
     "app:dist": "electron-builder --windows",
-    "app:pack": "electron-packager . \"AI助手\" --platform=win32 --arch=x64 --out=dist --overwrite"
+    "app:pack": "electron-packager . \"ClawAI\" --platform=win32 --arch=x64 --out=dist --overwrite"
   },
   "dependencies": {
     "open-computer-use": "^0.1.54",
@@ -46,7 +46,7 @@
   },
   "build": {
     "appId": "com.2014y.aigateway",
-    "productName": "AI助手",
+    "productName": "ClawAI",
     "asar": false,
     "icon": "config/icon.ico",
     "directories": {
@@ -54,7 +54,7 @@
     },
     "win": {
       "icon": "config/icon.ico",
-      "publisherName": "AI助手",
+      "publisherName": "ClawAI",
       "target": [
         "nsis"
       ]
@@ -64,7 +64,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "AI助手",
+      "shortcutName": "ClawAI",
       "include": "config/installer.nsh",
       "installerIcon": "config/icon.ico",
       "uninstallerIcon": "config/icon.ico"
