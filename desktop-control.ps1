@@ -21,6 +21,63 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
+[Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioEndpointVolume {
+    int f(); int g(); int h(); int i();
+    int SetMasterVolumeLevelScalar(float fLevel, System.Guid pguidEventContext);
+    int j();
+    int GetMasterVolumeLevelScalar(out float pfLevel);
+    int k(); int l(); int m(); int n();
+    int SetMute([MarshalAs(UnmanagedType.Bool)] bool bMute, System.Guid pguidEventContext);
+    int GetMute(out bool pbMute);
+}
+
+[Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IMMDevice {
+    int Activate(ref System.Guid id, int clsCtx, int activationParams, out IAudioEndpointVolume aev);
+}
+
+[Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IMMDeviceEnumerator {
+    int f();
+    int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice endpoint);
+}
+
+[ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
+class MMDeviceEnumeratorComObject {}
+
+public class Audio {
+    static IAudioEndpointVolume Vol() {
+        var enumerator = new MMDeviceEnumeratorComObject() as IMMDeviceEnumerator;
+        IMMDevice dev = null;
+        Marshal.ThrowExceptionForHR(enumerator.GetDefaultAudioEndpoint(0, 1, out dev));
+        IAudioEndpointVolume epv = null;
+        var epvid = typeof(IAudioEndpointVolume).GUID;
+        Marshal.ThrowExceptionForHR(dev.Activate(ref epvid, 23, 0, out epv));
+        return epv;
+    }
+
+    public static void SetVolume(float level) {
+        Marshal.ThrowExceptionForHR(Vol().SetMasterVolumeLevelScalar(level, System.Guid.Empty));
+    }
+
+    public static float GetVolume() {
+        float level = 0f;
+        Marshal.ThrowExceptionForHR(Vol().GetMasterVolumeLevelScalar(out level));
+        return level;
+    }
+
+    public static void SetMute(bool mute) {
+        Marshal.ThrowExceptionForHR(Vol().SetMute(mute, System.Guid.Empty));
+    }
+
+    public static bool GetMute() {
+        bool mute = false;
+        Marshal.ThrowExceptionForHR(Vol().GetMute(out mute));
+        return mute;
+    }
+}
+
 public class WinApi {
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
@@ -492,7 +549,7 @@ function Cmd-PlayMusic {
     
     $proc = Get-MainWindowProcess -name "NeteaseMusic"
     if (-not $proc) {
-        $path = "C:\Program Files\Netease\CloudMusic\cloudmusic.exe"
+        $path = $NETEASE_PATH
         if (Test-Path $path) {
             $workDir = Split-Path $path -Parent
             $proc = Start-Process $path -WorkingDirectory $workDir -PassThru
@@ -506,7 +563,7 @@ function Cmd-PlayMusic {
             }
             Start-Sleep -Seconds 2
         } else {
-            Write-Error "NeteaseMusic client not found at default path C:\Program Files\Netease\CloudMusic\cloudmusic.exe"
+            Write-Error "NeteaseMusic client not found at resolved path: $NETEASE_PATH"
             exit 1
         }
     }
@@ -701,6 +758,48 @@ function Cmd-UiaControl {
     }
 }
 
+function Cmd-VolumeSet {
+    param([int]$level)
+    try {
+        if ($level -lt 0) { $level = 0 }
+        if ($level -gt 100) { $level = 100 }
+        $scalar = $level / 100.0
+        [Audio]::SetVolume($scalar)
+        Write-Output "Volume set to $level%"
+    } catch {
+        Write-Error ("Failed to set volume: " + $_.Exception.Message)
+        exit 1
+    }
+}
+
+function Cmd-VolumeGet {
+    try {
+        $scalar = [Audio]::GetVolume()
+        $level = [int][Math]::Round($scalar * 100)
+        $isMuted = [Audio]::GetMute()
+        $mutedStr = ""
+        if ($isMuted) { $mutedStr = " (Muted)" }
+        Write-Output "Volume: $level%$mutedStr"
+    } catch {
+        Write-Error ("Failed to get volume: " + $_.Exception.Message)
+        exit 1
+    }
+}
+
+function Cmd-VolumeToggle {
+    try {
+        $isMuted = [Audio]::GetMute()
+        $newMute = -not $isMuted
+        [Audio]::SetMute($newMute)
+        $status = "unmuted"
+        if ($newMute) { $status = "muted" }
+        Write-Output "Volume toggled to $status"
+    } catch {
+        Write-Error ("Failed to toggle mute: " + $_.Exception.Message)
+        exit 1
+    }
+}
+
 # === MAIN DISPATCHER ===
 if ($args.Count -eq 0) {
     Write-Output "Usage: desktop-control.ps1 <command> [args]"
@@ -716,6 +815,9 @@ if ($args.Count -eq 0) {
     Write-Output "  move-mouse <x> <y>            Move mouse to (x, y)"
     Write-Output "  uia-control <name> <ctrlName> <action> [value]  Control using UI Automation"
     Write-Output "  app-maximize <name>           Maximize application window"
+    Write-Output "  volume-set <0-100>            Set system volume"
+    Write-Output "  volume-get                    Get current volume level"
+    Write-Output "  volume-toggle                 Toggle mute/unmute"
     exit 0
 }
 
@@ -744,5 +846,8 @@ switch ($command) {
     "double-click-mouse" { Cmd-DoubleClickMouse -x ([int]$rest[0]) -y ([int]$rest[1]) }
     "move-mouse"         { Cmd-MoveMouse -x ([int]$rest[0]) -y ([int]$rest[1]) }
     "uia-control"        { Cmd-UiaControl -name ($rest[0]) -controlName ($rest[1]) -action ($rest[2]) -value ($rest[3]) }
+    "volume-set"        { Cmd-VolumeSet -level ([int]$rest[0]) }
+    "volume-get"        { Cmd-VolumeGet }
+    "volume-toggle"     { Cmd-VolumeToggle }
     default             { Write-Error ("Unknown command: " + $command); exit 1 }
 }

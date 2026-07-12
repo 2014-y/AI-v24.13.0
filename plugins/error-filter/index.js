@@ -28,7 +28,8 @@ const ERROR_PATTERNS = [
   'plugin already exists',
   'State dir migration',
   'Config observe',
-  'Doctor warnings',
+  'doctor warnings',
+  'config warnings',
   'bonjour.*conflict',
   'plugins\\.allow is empty',
   
@@ -61,11 +62,23 @@ const ERROR_PATTERNS = [
   'cleanup',
   'health check',
   'diagnostic',
+
+  // Heartbeat notifications
+  'HEARTBEAT_OK',
+  'HEARTBEAT',
 ];
 
 function isErrorMessage(text) {
   if (!text || typeof text !== 'string') return false;
-  return ERROR_PATTERNS.some(p => text.includes(p));
+  const lowerText = text.toLowerCase();
+  return ERROR_PATTERNS.some(p => {
+    try {
+      const regex = new RegExp(p, 'i');
+      return regex.test(text);
+    } catch (e) {
+      return lowerText.includes(p.toLowerCase());
+    }
+  });
 }
 
 export default function createPlugin(runtime) {

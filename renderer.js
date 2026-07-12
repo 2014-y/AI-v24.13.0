@@ -729,8 +729,10 @@ function setupIpcListeners() {
                 cleanLine.includes('To trust them') ||
                 cleanLine.includes('Run \'openclaw plugins') ||
                 cleanLine.includes('you trust to plugins') ||
-                ((cleanLine.includes('Warning') || cleanLine.includes('Warnings')) && cleanLine.includes('--')) || // 过滤警告边框头部 (包含 Warning/Warnings 且有虚线)
-                /^[+\s-]+$/.test(cleanLine) // 过滤警告边框底部或线 (由 + 和 - 组成)
+                ((cleanLine.toLowerCase().includes('warning') || cleanLine.toLowerCase().includes('warnings')) && cleanLine.includes('--')) || // 过滤警告边框头部 (包含 Warning/Warnings 且有虚线)
+                /o\s+(doctor|config)\s+warnings/i.test(cleanLine) || // 过滤 Doctor/Config 警告行
+                /^[+\s-]+$/.test(cleanLine) || // 过滤警告边框底部或线 (由 + 和 - 组成)
+                /^[\u2580-\u259F\s]+$/.test(cleanLine) // 过滤字符画二维码方块行（已有 Canvas 弹窗展示）
             );
         });
         

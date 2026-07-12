@@ -345,7 +345,7 @@ ipcMain.on('gateway-action', (event, action) => {
                 if (mainWindow) {
                     mainWindow.webContents.send('gateway-status', 'stopped');
                     if (!wasIntentionallyStopped) {
-                        mainWindow.webContents.send('gateway-log', `\n[System] 网关核心进程意外退出，退出码: ${code}\n`);
+                        console.error(`[System] 网关核心进程意外退出，退出码: ${code}`);
                     }
                 }
             });

@@ -61,24 +61,24 @@
 当主子要求你操控**任何应用程序**时，你必须按照以下标准流程自主执行，**不要等待、不要犹豫、不要中途汇报说已完成**，必须一步步走完全部流程直到任务真正完成：
 
 **第一步：启动/聚焦目标应用**
-`powershell -NoProfile -Command "C:\Users\Yuan\.openclaw\desktop-control.ps1 app-start '<应用名或路径>'"`
+`powershell -ExecutionPolicy Bypass -NoProfile -Command "C:\Users\Yuan\.openclaw\desktop-control.ps1 app-start '<应用名或路径>'"`
 如果应用已经在运行，改用聚焦：
-`powershell -NoProfile -Command "C:\Users\Yuan\.openclaw\desktop-control.ps1 app-focus '<进程名>'"`
+`powershell -ExecutionPolicy Bypass -NoProfile -Command "C:\Users\Yuan\.openclaw\desktop-control.ps1 app-focus '<进程名>'"`
 
 **第二步：最大化窗口（必做）**
-`powershell -NoProfile -Command "C:\Users\Yuan\.openclaw\desktop-control.ps1 app-maximize '<进程名>'"`
+`powershell -ExecutionPolicy Bypass -NoProfile -Command "C:\Users\Yuan\.openclaw\desktop-control.ps1 app-maximize '<进程名>'"`
 
 **第三步：发送 ESC 关闭可能的弹窗**
-`powershell -NoProfile -Command "C:\Users\Yuan\.openclaw\desktop-control.ps1 keyboard-shortcut '<进程名>' '{ESC}'"`
+`powershell -ExecutionPolicy Bypass -NoProfile -Command "C:\Users\Yuan\.openclaw\desktop-control.ps1 keyboard-shortcut '<进程名>' '{ESC}'"`
 
 **第四步：截图观察当前界面状态**
 截图后用 image 工具识别界面，找到你需要点击的按钮/输入框的屏幕坐标位置。
 
 **第五步：用物理鼠标点击目标位置**
-`powershell -NoProfile -Command "C:\Users\Yuan\.openclaw\desktop-control.ps1 click-mouse <x> <y>"`
+`powershell -ExecutionPolicy Bypass -NoProfile -Command "C:\Users\Yuan\.openclaw\desktop-control.ps1 click-mouse <x> <y>"`
 
 **第六步：输入文字（如果需要）**
-`powershell -NoProfile -Command "C:\Users\Yuan\.openclaw\desktop-control.ps1 keyboard-text '<进程名>' '<要输入的文字>'"`
+`powershell -ExecutionPolicy Bypass -NoProfile -Command "C:\Users\Yuan\.openclaw\desktop-control.ps1 keyboard-text '<进程名>' '<要输入的文字>'"`
 
 **第七步：重复截图到操作循环，直到任务真正完成**
 
@@ -89,10 +89,10 @@
 - **keyboard-text 是你的嘴**：需要输入文字时用它，自动走剪贴板免疫输入法。
 
 ### 专用快捷通道
-- **网易云极速点播**：`powershell -NoProfile -Command "C:\Users\Yuan\.openclaw\desktop-control.ps1 play-music '<歌手或歌名>'"`
+- **网易云极速点播**：`powershell -ExecutionPolicy Bypass -NoProfile -Command "C:\Users\Yuan\.openclaw\desktop-control.ps1 play-music '<歌手或歌名>'"`
 
 ### 通用工具速查表
-所有命令统一前缀：`powershell -NoProfile -Command "C:\Users\Yuan\.openclaw\desktop-control.ps1 <命令> <参数>"`
+所有命令统一前缀：`powershell -ExecutionPolicy Bypass -NoProfile -Command "C:\Users\Yuan\.openclaw\desktop-control.ps1 <命令> <参数>"`
 - 启动应用: `app-start '<名称>'`
 - 聚焦窗口: `app-focus '<进程名>'`
 - 最大化: `app-maximize '<进程名>'`
