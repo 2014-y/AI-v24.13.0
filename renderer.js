@@ -2555,14 +2555,14 @@ async function renderUsageCharts() {
             <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
               <thead>
                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary);">
-                  <th style="padding: 8px;">${t('stats.th.time', '请求时间')}</th>
-                  <th style="padding: 8px;">${t('stats.th.provider', '提供商')}</th>
-                  <th style="padding: 8px;">${t('stats.th.model', '模型名称')}</th>
-                  <th style="padding: 8px;">${t('stats.th.input', '输入 Tokens')}</th>
-                  <th style="padding: 8px;">${t('stats.th.output', '输出 Tokens')}</th>
-                  <th style="padding: 8px;">${t('stats.th.hit', '缓存命中')}</th>
-                  <th style="padding: 8px;">${t('stats.th.duration', '耗时')}</th>
-                  <th style="padding: 8px;">${t('stats.th.status', '状态')}</th>
+                  <th style="padding: 8px;">${t('stats.th.time')}</th>
+                  <th style="padding: 8px;">${t('stats.th.provider')}</th>
+                  <th style="padding: 8px;">${t('stats.th.model')}</th>
+                  <th style="padding: 8px;">${t('stats.th.input')}</th>
+                  <th style="padding: 8px;">${t('stats.th.output')}</th>
+                  <th style="padding: 8px;">${t('stats.th.hit')}</th>
+                  <th style="padding: 8px;">${t('stats.th.duration')}</th>
+                  <th style="padding: 8px;">${t('stats.th.status')}</th>
                 </tr>
               </thead>
               <tbody style="color: var(--text-primary);">
@@ -3996,7 +3996,7 @@ function updateFilterOptions() {
             if (log.model) models.add(log.model.trim());
         });
 
-        let optHtml = `<option value="all" data-i18n="stats.model.all">${t('stats.model.all', '全部模型')}</option>`;
+        let optHtml = `<option value="all" data-i18n="stats.model.all">${t('stats.model.all')}</option>`;
         models.forEach(m => {
             optHtml += `<option value="${m}">${m}</option>`;
         });
