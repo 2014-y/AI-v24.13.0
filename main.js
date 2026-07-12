@@ -178,6 +178,7 @@ function showNotification(title, body) {
 // 停止后台网关子进程
 function stopGatewayProcess() {
     if (gatewayProcess) {
+        gatewayProcess.isIntentionallyStopped = true; // 标记为主动停止，避免触发意外退出警报
         if (process.platform === 'win32') {
             try {
                 const { execSync } = require('child_process');
@@ -339,10 +340,13 @@ ipcMain.on('gateway-action', (event, action) => {
             // 监听退出
             gatewayProcess.on('exit', (code) => {
                 console.log(`Gateway exited with code ${code}`);
+                const wasIntentionallyStopped = gatewayProcess && gatewayProcess.isIntentionallyStopped;
                 gatewayProcess = null;
                 if (mainWindow) {
                     mainWindow.webContents.send('gateway-status', 'stopped');
-                    mainWindow.webContents.send('gateway-log', `\n[System] 网关核心进程意外退出，退出码: ${code}\n`);
+                    if (!wasIntentionallyStopped) {
+                        mainWindow.webContents.send('gateway-log', `\n[System] 网关核心进程意外退出，退出码: ${code}\n`);
+                    }
                 }
             });
 
