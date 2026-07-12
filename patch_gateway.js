@@ -12,10 +12,16 @@ fs.mkdirSync = function(path, options) {
     try {
         return originalMkdirSync(path, options);
     } catch (e) {
-        if ((e.code === 'EPERM' || e.code === 'EEXIST') && options && options.recursive) {
+        if (e.code === 'EPERM' || e.code === 'EEXIST') {
             try {
-                if (fs.statSync(path).isDirectory()) return undefined;
-            } catch (statErr) {}
+                const stat = fs.statSync(path);
+                if (stat.isDirectory()) return undefined;
+                // If it's a file blocking the directory, delete it and retry
+                fs.unlinkSync(path);
+                return originalMkdirSync(path, options);
+            } catch (statErr) {
+                // If ENOENT, maybe parent is a file or locked. Fall through.
+            }
         }
         throw e;
     }
@@ -26,10 +32,12 @@ fs.promises.mkdir = async function(path, options) {
     try {
         return await originalPromisesMkdir(path, options);
     } catch (e) {
-        if ((e.code === 'EPERM' || e.code === 'EEXIST') && options && options.recursive) {
+        if (e.code === 'EPERM' || e.code === 'EEXIST') {
             try {
                 const stat = await fs.promises.stat(path);
                 if (stat.isDirectory()) return undefined;
+                await fs.promises.unlink(path);
+                return await originalPromisesMkdir(path, options);
             } catch (statErr) {}
         }
         throw e;
@@ -43,10 +51,14 @@ fs.mkdir = function(path, options, callback) {
         options = undefined;
     }
     originalMkdir(path, options, function(err, result) {
-        if (err && (err.code === 'EPERM' || err.code === 'EEXIST') && options && options.recursive) {
+        if (err && (err.code === 'EPERM' || err.code === 'EEXIST')) {
             fs.stat(path, function(statErr, stat) {
                 if (!statErr && stat.isDirectory()) {
                     if (callback) callback(null, undefined);
+                } else if (!statErr && !stat.isDirectory()) {
+                    fs.unlink(path, function() {
+                        originalMkdir(path, options, callback);
+                    });
                 } else {
                     if (callback) callback(err);
                 }
@@ -61,6 +73,17 @@ fs.mkdir = function(path, options, callback) {
 const homeDir = os.homedir();
 const logDir = path.join(homeDir, '.openclaw', 'persistent_logs');
 const tokenDbPath = path.join(logDir, 'real_tokens.json');
+
+// 强制清理可能损坏的技能缓存文件或目录 (解决 EPERM 文件夹被文件占用的骨灰级顽疾)
+try {
+    const promptsCachePath = path.join(homeDir, '.openclaw', 'agents', 'main', 'sessions', 'skills-prompts');
+    if (fs.existsSync(promptsCachePath)) {
+        fs.rmSync(promptsCachePath, { recursive: true, force: true });
+        console.log('[TokenGuard] Cleared potentially corrupted skills-prompts cache.');
+    }
+} catch (cleanupErr) {
+    console.error('[TokenGuard] Failed to clear skills-prompts cache:', cleanupErr);
+}
 
 // 辅助写入本地 real_tokens.json 数据库
 function saveRealToken(logEntry) {
