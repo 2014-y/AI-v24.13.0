@@ -609,10 +609,10 @@ async function init() {
     const btnClearLogs = document.getElementById('btn-clear-terminal-logs');
     if (btnClearLogs) {
         btnClearLogs.addEventListener('click', () => {
-            if (gatewayStatus !== 'running') return;
+            if (gatewayStatus !== 'stopped') return;
             const terminalOutput = document.getElementById('log-terminal-output');
             if (terminalOutput) {
-                terminalOutput.innerHTML = '';
+                terminalOutput.innerHTML = '<div data-i18n="console.log.init">&gt;&gt;&gt; AI-Assistant Local Daemon Initialized.</div><div data-i18n="console.log.stopped">&gt;&gt;&gt; [系统状态] 核心进程检测完成，当前处于【已停止】闲置状态。</div><div data-i18n="console.log.guide">&gt;&gt;&gt; [操作指引] 请点击右侧“启动网关”按钮，拉起本地 AI 服务总线...</div>';
             }
         });
     }
@@ -2195,7 +2195,7 @@ function updateGatewayStatusUI(status) {
         terminalLeft.classList.add(status);
     }
     if (btnClearLogs) {
-        if (status === 'running') {
+        if (status === 'stopped') {
             btnClearLogs.removeAttribute('disabled');
         } else {
             btnClearLogs.setAttribute('disabled', 'true');
