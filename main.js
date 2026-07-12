@@ -649,6 +649,11 @@ ipcMain.handle('autostart-get', async () => {
     return settings.openAtLogin;
 });
 
+// 获取应用当前版本号
+ipcMain.handle('get-app-version', async () => {
+    return app.getVersion();
+});
+
 ipcMain.handle('autostart-set', async (event, enabled) => {
     app.setLoginItemSettings({
         openAtLogin: enabled,

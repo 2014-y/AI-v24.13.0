@@ -37,5 +37,6 @@ contextBridge.exposeInMainWorld('api', {
     onQrCodeReceived: (callback) => ipcRenderer.on('gateway-qrcode', (event, url) => callback(url)),
     onControlTriggered: (callback) => ipcRenderer.on('gateway-control-trigger', (event, action) => callback(action)),
     onMaximizedStatus: (callback) => ipcRenderer.on('window-maximized-status', (event, isMaximized) => callback(isMaximized)),
-    getAppStartTime: () => ipcRenderer.invoke('get-app-start-time')
+    getAppStartTime: () => ipcRenderer.invoke('get-app-start-time'),
+    getAppVersion: () => ipcRenderer.invoke('get-app-version')
 });

@@ -346,6 +346,17 @@ const qrcodeCloseBtn = document.getElementById('qrcode-close-btn');
 
 // 3. 初始化加载
 async function init() {
+    // 获取并设置当前版本号
+    try {
+        const version = await window.api.getAppVersion();
+        const badge = document.getElementById('app-version-badge');
+        if (badge) {
+            badge.textContent = 'v' + version;
+        }
+    } catch (e) {
+        console.error('Failed to get app version:', e);
+    }
+
     // 监听主进程的消息推送
     setupIpcListeners();
 
