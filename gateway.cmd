@@ -39,4 +39,10 @@ if not defined OC_INDEX (
     exit /b 1
 )
 
-"%NVM_EXE%" "%OC_INDEX%" gateway --port 18789
+rem === Propagate patch to ALL child node processes via NODE_OPTIONS ===
+rem NODE_OPTIONS 需用正斜杠路径, 否则其解析器会把反斜杠当转义符吞掉 (C:\Users -> C:Users)
+set "SCRIPT_FWD=%~dp0"
+set "SCRIPT_FWD=%SCRIPT_FWD:\=/%"
+set "NODE_OPTIONS=--require "%SCRIPT_FWD%patch_gateway.js" --dns-result-order=ipv4first --no-warnings"
+
+"%NVM_EXE%" --require "%~dp0patch_gateway.js" "%OC_INDEX%" gateway --port 18789

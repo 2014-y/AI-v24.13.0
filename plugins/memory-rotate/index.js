@@ -6,10 +6,12 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 
 const PLUGIN_NAME = 'memory-rotate';
-const MEMORY_FILE = '$env:USERPROFILE\\.openclaw\\workspace\\MEMORY.md';
-const MEMORY_DIR = '$env:USERPROFILE\\.openclaw\\workspace\\memory';
+// 自适应用户主目录, 避免硬编码路径导致在其他电脑上失效
+const MEMORY_FILE = path.join(os.homedir(), '.openclaw', 'workspace', 'MEMORY.md');
+const MEMORY_DIR = path.join(os.homedir(), '.openclaw', 'workspace', 'memory');
 const MAX_CHARS = 2000;
 
 export default function createPlugin(runtime) {

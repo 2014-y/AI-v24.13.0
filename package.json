@@ -84,11 +84,14 @@
       "config/icon.jpg",
       "config/icon.png",
       "config/icon.ico",
+      "plugins/**/*",
+      "extensions/**/*",
       "node_modules/**/*",
       "!node_modules/electron/**/*",
       "!node_modules/electron-builder/**/*",
       "!node_modules/electron-packager/**/*",
-      ".node-sandbox/**/*"
+      ".node-sandbox/**/*",
+      "extensions/**/*"
     ]
   }
 }

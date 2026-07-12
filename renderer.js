@@ -2217,7 +2217,7 @@ function updateGatewayStatusUI(status) {
         statusLabel.innerText = t('sidebar.status.running');
         btnIconStart.style.display = 'none';
         btnIconStop.style.display = 'block';
-        btnLabelText.innerText = '停止网关';
+        btnLabelText.innerText = t('console.btn.stop');
         gatewayToggleBtn.className = 'gateway-big-btn running';
 
         if (chatWelcomeText) {
@@ -2266,7 +2266,7 @@ function updateGatewayStatusUI(status) {
         statusLabel.innerText = t('sidebar.status.stopped');
         btnIconStart.style.display = 'block';
         btnIconStop.style.display = 'none';
-        btnLabelText.innerText = '启动网关';
+        btnLabelText.innerText = t('console.btn.start');
         gatewayToggleBtn.className = 'gateway-big-btn stopped';
 
         if (chatWelcomeText) {
@@ -2293,7 +2293,7 @@ function updateGatewayStatusUI(status) {
         statusLabel.innerText = t('sidebar.status.starting');
         btnIconStart.style.display = 'block';
         btnIconStop.style.display = 'none';
-        btnLabelText.innerText = '启动中';
+        btnLabelText.innerText = t('sidebar.status.starting');
         gatewayToggleBtn.className = 'gateway-big-btn starting';
 
         const systemLogsArea = document.getElementById('system-raw-logs-area');
@@ -3319,6 +3319,9 @@ function applyLanguage(lang) {
     }
     if (typeof updateWeChatStatusUI === 'function') {
         try { updateWeChatStatusUI(); } catch(e) { console.error(e); }
+    }
+    if (typeof updateGatewayStatusUI === 'function') {
+        try { updateGatewayStatusUI(gatewayStatus); } catch(e) { console.error(e); }
     }
     if (typeof updateFilterOptions === 'function') {
         try { updateFilterOptions(); } catch(e) { console.error(e); }
@@ -4469,10 +4472,23 @@ async function triggerUpdateCheck(isManual = false) {
     
     try {
         const result = await window.api.checkUpdate(isManual);
+
+        // 网络探测失败：绝不能弹「发现新版本 / v未知」
+        if (result.checkFailed) {
+            if (isManual) {
+                showToast(result.message || '无法连接更新服务器，请稍后重试或手动前往 Releases 页面');
+                if (window.api && window.api.openExternal) {
+                    window.api.openExternal(result.downloadUrl || 'https://github.com/2014-y/ClawAI/releases');
+                }
+            } else {
+                showToast(t('toast.auto_update.failed'));
+            }
+            return;
+        }
         
         if (!result.hasUpdate) {
             if (isManual) {
-                showToast('当前已是最新版本！');
+                showToast(`当前已是最新版本！(v${result.currentVersion})`);
             } else {
                 showToast(t('toast.auto_update.latest'));
             }

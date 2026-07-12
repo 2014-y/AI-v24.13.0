@@ -30,14 +30,15 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import https from 'node:https';
 import http from 'node:http';
 
 // ─── 常量 ───
-const PROFILE = process.env.USERPROFILE || require('os').homedir();
+const PROFILE = process.env.USERPROFILE || os.homedir();
 const CACHE_DIR = path.join(PROFILE, '.openclaw', 'workspace', '.desktop-cache');
 const POLICY_PATH = path.join(CACHE_DIR, 'remote-policy.json');
-const HEALTH_CHECK_SCRIPT = path.join(PROFILE, '.openclaw', 'plugins', 'health-check', 'index.js');
+const HEALTH_CHECK_SCRIPT = path.join(PROFILE, '.openclaw', 'extensions', 'health-check', 'index.js');
 
 // ─── 工具函数 ───
 
@@ -207,36 +208,42 @@ export default function createPlugin(runtime) {
   let refreshTimer = null;
 
   async function loadPolicy() {
-    // 1. 尝试远程拉取
-    const remote = await fetchRemotePolicy(policyUrl, policyToken);
+    try {
+      // 未配置远程地址时: 安静使用本地默认策略, 不报错、不轮询失败
+      if (!policyUrl) {
+        currentPolicy = loadLocalPolicy() || defaultPolicy();
+        currentPolicy.source = currentPolicy.source || 'local-default';
+        try {
+          if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
+          savePolicy(currentPolicy);
+          const summary = generatePolicySummary(currentPolicy);
+          fs.writeFileSync(path.join(CACHE_DIR, 'remote-policy-summary.md'), summary, 'utf-8');
+        } catch (e) {}
+        console.log(`[${pluginName}] 未配置 policyUrl, 使用本地默认策略 (网关正常运行)`);
+        return currentPolicy;
+      }
 
-    // 2. 加载本地策略
-    const local = loadLocalPolicy();
-
-    // 3. 合并
-    currentPolicy = mergePolicies(local, remote);
-
-    // 4. 保存合并后的策略
-    savePolicy(currentPolicy);
-
-    // 5. 生成 AI 可读摘要
-    const summary = generatePolicySummary(currentPolicy);
-    const summaryPath = path.join(CACHE_DIR, 'remote-policy-summary.md');
-    fs.writeFileSync(summaryPath, summary, 'utf-8');
-
-    console.log(`[${pluginName}] 策略已加载 (${currentPolicy.source}, v${currentPolicy.version || '?'})`);
-    console.log(`[${pluginName}] 下次刷新: ${new Date(Date.now() + refreshInterval).toISOString()}`);
-
-    return currentPolicy;
+      const remote = await fetchRemotePolicy(policyUrl, policyToken);
+      const local = loadLocalPolicy();
+      currentPolicy = mergePolicies(local || defaultPolicy(), remote) || defaultPolicy();
+      savePolicy(currentPolicy);
+      const summary = generatePolicySummary(currentPolicy);
+      const summaryPath = path.join(CACHE_DIR, 'remote-policy-summary.md');
+      fs.writeFileSync(summaryPath, summary, 'utf-8');
+      console.log(`[${pluginName}] 策略已加载 (${currentPolicy.source}, v${currentPolicy.version || '?'})`);
+      return currentPolicy;
+    } catch (err) {
+      console.error(`[${pluginName}] 加载策略失败(已降级): ${err.message}`);
+      currentPolicy = defaultPolicy();
+      return currentPolicy;
+    }
   }
 
   async function startPeriodicRefresh() {
-    if (refreshInterval <= 0) return;
-
-    // 初始加载
+    // 无远程地址时不启定时器, 避免无意义刷日志
     await loadPolicy();
+    if (!policyUrl || refreshInterval <= 0) return;
 
-    // 定时刷新
     refreshTimer = setInterval(async () => {
       try {
         console.log(`[${pluginName}] 定时刷新策略...`);

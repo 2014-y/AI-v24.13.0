@@ -1,9 +1,12 @@
-var fs = require('fs');
-var path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 
-var LEARNING_DATA_PATH = '$env:USERPROFILE\\glm4_finetune\\learning_data\\learning_log.jsonl';
-var LEARNING_SUMMARY_PATH = '$env:USERPROFILE\\glm4_finetune\\learning_data\\learning_summary.jsonl';
-var SUMMARY_CACHE_PATH = '$env:USERPROFILE\\glm4_finetune\\learning_data\\last_summary_index.txt';
+// 自适应用户主目录, 避免硬编码路径导致在其他电脑上失效
+var LEARNING_DIR = path.join(os.homedir(), 'glm4_finetune', 'learning_data');
+var LEARNING_DATA_PATH = path.join(LEARNING_DIR, 'learning_log.jsonl');
+var LEARNING_SUMMARY_PATH = path.join(LEARNING_DIR, 'learning_summary.jsonl');
+var SUMMARY_CACHE_PATH = path.join(LEARNING_DIR, 'last_summary_index.txt');
 
 function generateLearningSummary() {
   try {
@@ -39,4 +42,4 @@ function generateLearningSummary() {
   } catch(error) { return {success:false,error:error.message}; }
 }
 
-module.exports = { generateLearningSummary: generateLearningSummary };
+export { generateLearningSummary };

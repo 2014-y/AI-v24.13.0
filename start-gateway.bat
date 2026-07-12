@@ -67,6 +67,11 @@ if not defined OC_INDEX (
     exit /b 1
 )
 
+:: === Propagate patch to ALL child node processes via NODE_OPTIONS ===
+:: NODE_OPTIONS 需用正斜杠路径, 否则其解析器会把反斜杠当转义符吞掉 (C:\Users -> C:Users)
+set "PATCH_FWD=%SCRIPT_DIR:\=/%patch_gateway.js"
+set "NODE_OPTIONS=--require "%PATCH_FWD%" --dns-result-order=ipv4first --no-warnings"
+
 :: === RUN ===
 cd /d "%USERPROFILE%\.openclaw"
 echo ========================================
@@ -79,7 +84,7 @@ echo.
 echo Starting...
 echo.
 
-"%NODE_HOME%\node.exe" --preserve-symlinks-main "%OC_INDEX%" gateway run --allow-unconfigured --force
+"%NODE_HOME%\node.exe" --require "%SCRIPT_DIR%patch_gateway.js" --preserve-symlinks-main "%OC_INDEX%" gateway run --allow-unconfigured --force
 
 echo.
 echo Gateway exited.

@@ -18,7 +18,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import os from 'node:os';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -61,7 +62,7 @@ export default function createPlugin(runtime) {
       ? pluginConfig.mode : 'teach-learn',
     enableTeachLearn: Boolean(pluginConfig.enableTeachLearn !== false),
     enableFallback: Boolean(pluginConfig.enableFallback !== false),
-    trainingDataPath: String(pluginConfig.trainingDataPath || '$env:USERPROFILE\\glm4_finetune\\learning_data\\learning_log.jsonl'),
+    trainingDataPath: String(pluginConfig.trainingDataPath || path.join(os.homedir(), 'glm4_finetune', 'learning_data', 'learning_log.jsonl')),
     minAnswerLength: Number(pluginConfig.minAnswerLength) || 10,
     maxRetries: Number(pluginConfig.maxRetries) || 2,
     retryDelay: Number(pluginConfig.retryDelay) || 3000,
@@ -90,7 +91,7 @@ export default function createPlugin(runtime) {
   } catch (e) {
     console.error(`[${pluginName}] ❌ 无法创建数据目录: ${e.message}`);
     // 降级到默认目录
-    config.trainingDataPath = '$env:USERPROFILE\\glm4_finetune\\learning_data\\learning_log.jsonl';
+    config.trainingDataPath = path.join(os.homedir(), 'glm4_finetune', 'learning_data', 'learning_log.jsonl');
     dataDir = path.dirname(config.trainingDataPath);
   }
 
@@ -844,8 +845,10 @@ ${question}
    */
   async generateLearningSummary() {
     try {
-      const summaryModule = require(path.join(__dirname, "learning-summary.js"));
-      const result = summaryModule.generateLearningSummary();
+      const summaryModule = await import(pathToFileURL(path.join(__dirname, 'learning-summary.js')).href);
+      const generate = summaryModule.generateLearningSummary || summaryModule.default?.generateLearningSummary;
+      if (typeof generate !== 'function') throw new Error('generateLearningSummary export missing');
+      const result = await generate();
       console.log(`[dual-model-trainer] 📥 学习总结:`, result);
     } catch(e) {
       console.error(`[dual-model-trainer] 学习总结失败:`, e.message);

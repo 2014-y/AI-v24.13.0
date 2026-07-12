@@ -1,7 +1,9 @@
 import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 
 const PLUGIN_NAME = 'compaction-memory-guard';
-const MEMORY_FILE = '$env:USERPROFILE\\.openclaw\\workspace\\MEMORY.md';
+const MEMORY_FILE = path.join(os.homedir(), '.openclaw', 'workspace', 'MEMORY.md');
 
 export default function createPlugin(runtime) {
   console.log(`[${PLUGIN_NAME}] 记忆保护插件已加载`);
@@ -15,6 +17,9 @@ export default function createPlugin(runtime) {
 
   function appendToMemory(summary) {
     try {
+      const dir = path.dirname(MEMORY_FILE);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      if (!fs.existsSync(MEMORY_FILE)) fs.writeFileSync(MEMORY_FILE, '', 'utf-8');
       const timestamp = new Date().toISOString().split('T')[0];
       const entry = `\n## [自动备份] ${timestamp}\n${summary}\n`;
       fs.appendFileSync(MEMORY_FILE, entry, 'utf-8');

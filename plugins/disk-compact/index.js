@@ -13,12 +13,14 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 
 const PLUGIN_NAME = 'disk-compact';
-const COMPACT_DIR = '$env:USERPROFILE\\.openclaw\\workspace\\compact-history';
+// 自适应用户主目录, 避免硬编码路径导致在其他电脑上失效
+const COMPACT_DIR = path.join(os.homedir(), '.openclaw', 'workspace', 'compact-history');
 const TOKEN_THRESHOLD = 20000;       // 达到此 token 数就开始压缩
 const SAFE_THRESHOLD = 15000;        // 目标 token 数
-const IDENTITY_SNAPSHOT = '$env:USERPROFILE\\.openclaw\\workspace\\compact-history\\identity.json';
+const IDENTITY_SNAPSHOT = path.join(COMPACT_DIR, 'identity.json');
 
 // 确保目录存在
 function ensureDir() {

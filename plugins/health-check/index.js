@@ -7,19 +7,20 @@
  * 3. AI 每次操作前读取该清单，只使用确认可用的能力
  *
  * 使用方式：
- * - 放在 ~/.openclaw/plugins/health-check/index.js
+ * - 放在 ~/.openclaw/extensions/health-check/index.js
  * - 在 openclaw.json 的 plugins.allow 中添加 "health-check"
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
 // ─── 常量 ───
-const PROFILE = process.env.USERPROFILE || require('os').homedir();
+const PROFILE = process.env.USERPROFILE || os.homedir();
 const SCRIPT_PATH = path.join(PROFILE, '.openclaw', 'desktop-control.ps1');
 const CACHE_DIR = path.join(PROFILE, '.openclaw', 'workspace', '.desktop-cache');
 const CAPABILITIES_PATH = path.join(CACHE_DIR, 'capabilities.json');
@@ -138,16 +139,19 @@ async function checkBrightnessCapability() {
 
 /** 探测系统基本信息 */
 function checkSystemInfo() {
+  const total = Math.round(os.totalmem() / 1024 / 1024 / 1024 * 100) / 100;
+  const free = Math.round(os.freemem() / 1024 / 1024 / 1024 * 100) / 100;
   return {
     os: process.platform,
     arch: process.arch,
     node: process.version,
     memory: {
-      total: Math.round(require('os').totalmem() / 1024 / 1024 / 1024 * 100) / 100,
-      free: Math.round(require('os').freemem() / 1024 / 1024 / 1024 * 100) / 100,
+      total,
+      free,
+      used: Math.round((total - free) * 100) / 100
     },
-    cpus: require('os').cpus().length,
-    uptime: Math.round(require('os').uptime()),
+    cpus: os.cpus().length,
+    uptime: Math.round(os.uptime()),
     user: process.env.USERNAME || 'unknown',
     userProfile: PROFILE,
   };
@@ -156,6 +160,21 @@ function checkSystemInfo() {
 // ─── 核心：运行全部探测 ---
 async function runHealthCheck() {
   console.log('[health-check] 开始系统自检...');
+
+  // 别人电脑上若未部署 desktop-control.ps1, 不做破坏性探测, 只写系统信息后安全返回
+  if (!fs.existsSync(SCRIPT_PATH)) {
+    console.log(`[health-check] 未找到 ${SCRIPT_PATH}, 跳过桌面控制探测 (不影响网关运行)`);
+    return {
+      timestamp: new Date().toISOString(),
+      system: checkSystemInfo(),
+      tests: {},
+      summary: { total: 0, passed: 0, failed: 0 },
+      availableCommands: [],
+      unavailableCommands: ['desktop-control.ps1: missing (optional)'],
+      skipped: true,
+      skipReason: 'desktop-control.ps1 not found'
+    };
+  }
 
   const results = {
     timestamp: new Date().toISOString(),
@@ -278,20 +297,30 @@ function generateAiSummary(results) {
   const lines = [];
   lines.push(`# 系统自检报告 - ${results.timestamp}`);
   lines.push('');
+  if (results.skipped) {
+    lines.push(`## 已跳过桌面控制探测`);
+    lines.push(`原因: ${results.skipReason || 'optional component missing'}`);
+    lines.push('');
+    lines.push('网关与其他插件可正常运行。如需桌面控制能力，请部署 desktop-control.ps1。');
+    return lines.join('\n');
+  }
   lines.push(`## 总览: ${results.summary.passed}/${results.summary.total} 项可用`);
   lines.push('');
 
-  if (results.availableCommands.length > 0) {
+  const available = results.availableCommands || [];
+  const unavailable = results.unavailableCommands || [];
+
+  if (available.length > 0) {
     lines.push('### 可用的能力');
-    for (const cmd of results.availableCommands) {
+    for (const cmd of available) {
       lines.push(`- ${cmd}`);
     }
     lines.push('');
   }
 
-  if (results.unavailableCommands.length > 0) {
+  if (unavailable.length > 0) {
     lines.push('### 不可用的能力');
-    for (const cmd of results.unavailableCommands) {
+    for (const cmd of unavailable) {
       lines.push(`- ${cmd}`);
     }
     lines.push('');
@@ -356,9 +385,14 @@ export default function createPlugin(runtime) {
   return {
     name: pluginName,
 
+    // 启动即跑一次 (缺脚本时会安全跳过), 不依赖首条消息
+    async onReady() {
+      runStartupCheck().catch(() => {});
+    },
+
     async onMessage(context) {
       if (!hasRun) {
-        runStartupCheck();
+        runStartupCheck().catch(() => {});
       }
     },
 

@@ -6,12 +6,15 @@
  */
 
 import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 
 const PLUGIN_NAME = 'auto-summary';
 const SUMMARY_MODEL = 'yitong/qwen3-max';
-const MEMORY_FILE = '$env:USERPROFILE\\.openclaw\\workspace\\MEMORY.md';
-const LEARNING_DATA = '$env:USERPROFILE\\glm4_finetune\\learning_data\\learning_log.jsonl';
-const MEMORY_DIR = '$env:USERPROFILE\\.openclaw\\workspace\\memory';
+const HOME = os.homedir();
+const MEMORY_FILE = path.join(HOME, '.openclaw', 'workspace', 'MEMORY.md');
+const LEARNING_DATA = path.join(HOME, 'glm4_finetune', 'learning_data', 'learning_log.jsonl');
+const MEMORY_DIR = path.join(HOME, '.openclaw', 'workspace', 'memory');
 const SUMMARIZE_EVERY = 10; // 每10轮对话触发一次总结
 let conversationCount = 0;
 
@@ -21,7 +24,7 @@ export default function createPlugin(runtime) {
   /** 读取 memory 日志 */
   function readMemoryFile(dateStr) {
     try {
-      const fp = `${MEMORY_DIR}\\${dateStr}.md`;
+      const fp = path.join(MEMORY_DIR, `${dateStr}.md`);
       if (fs.existsSync(fp)) return fs.readFileSync(fp, 'utf-8');
     } catch {}
     return '';
@@ -89,6 +92,9 @@ ${currentMem || '(无)'}
   /** 写入总结 */
   function appendSummary(summary) {
     try {
+      const dir = path.dirname(MEMORY_FILE);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      if (!fs.existsSync(MEMORY_FILE)) fs.writeFileSync(MEMORY_FILE, '', 'utf-8');
       const dateStr = new Date().toISOString().split('T')[0];
       const header = `\n---\n## ${dateStr} 自动总结\n\n${summary}`;
       fs.appendFileSync(MEMORY_FILE, header, 'utf-8');

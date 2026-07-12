@@ -126,8 +126,35 @@
   },
   "plugins": {
     "entries": {
+      "error-filter": {
+        "enabled": true
+      },
+      "weixin-reconnect": {
+        "enabled": true
+      },
+      "auto-summary": {
+        "enabled": true
+      },
       "dual-model-trainer": {
-        "enabled": false
+        "enabled": true
+      },
+      "memory-rotate": {
+        "enabled": true
+      },
+      "disk-compact": {
+        "enabled": true
+      },
+      "compaction-memory-guard": {
+        "enabled": true
+      },
+      "context-router": {
+        "enabled": true
+      },
+      "health-check": {
+        "enabled": true
+      },
+      "remote-policy": {
+        "enabled": true
       },
       "memory-core": {
         "enabled": false
@@ -154,7 +181,7 @@
         "enabled": false
       },
       "matrix": {
-        "enabled": true
+        "enabled": false
       },
       "msteams": {
         "enabled": false
@@ -260,10 +287,33 @@
       }
     },
     "allow": [
-      "slack", "googlechat", "line", "lobster", "matrix", 
-      "msteams", "nextcloud-talk", "openclaw-weixin", "telegram", 
-      "whatsapp", "zalo", "zalouser", "imessage", "feishu", "discord",
-      "dual-model-trainer"
+      "openclaw-weixin",
+      "error-filter",
+      "weixin-reconnect",
+      "auto-summary",
+      "dual-model-trainer",
+      "memory-rotate",
+      "disk-compact",
+      "compaction-memory-guard",
+      "context-router",
+      "health-check",
+      "remote-policy",
+      "ollama",
+      "duckduckgo",
+      "slack",
+      "googlechat",
+      "line",
+      "lobster",
+      "matrix",
+      "msteams",
+      "nextcloud-talk",
+      "telegram",
+      "whatsapp",
+      "zalo",
+      "zalouser",
+      "imessage",
+      "feishu",
+      "discord"
     ]
   },
   "hooks": {

@@ -19,9 +19,10 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 
 // ─── 常量 ───
-const PROFILE = process.env.USERPROFILE || require('os').homedir();
+const PROFILE = process.env.USERPROFILE || os.homedir();
 const CACHE_DIR = path.join(PROFILE, '.openclaw', 'workspace', '.desktop-cache');
 const CONTEXT_LOG_PATH = path.join(PROFILE, '.openclaw', 'logs', 'context-router.jsonl');
 
