@@ -1066,6 +1066,10 @@ ipcMain.handle('check-update', async (event, isManual) => {
     }
     
     // 如果两种方案都彻底失败了，进入终极备选
+    if (!isManual) {
+        throw new Error('后台自动检查更新失败：网络受限');
+    }
+    
     return {
         hasUpdate: true,
         latestVersion: '未知',
