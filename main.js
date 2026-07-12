@@ -597,7 +597,7 @@ ipcMain.handle('wechat-login', async () => {
         const forkOptions = {
             cwd: CONFIG_DIR,
             stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
-            env: { ...process.env }
+            env: { ...process.env, NODE_TLS_REJECT_UNAUTHORIZED: '0' }
         };
         if (fs.existsSync(nodeExePath)) {
             forkOptions.execPath = nodeExePath;
