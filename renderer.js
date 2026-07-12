@@ -1219,8 +1219,8 @@ function renderProvidersList() {
                     </div>
                 </div>
                 <div style="display: flex !important; flex-direction: row !important; align-items: center !important; gap: 12px; margin-top: 12px; margin-bottom: 16px;">
-                    <button type="button" class="btn-primary btn-test-connection" data-provider="${key}" style="margin-top: 0; padding: 0 16px; font-size: 12px; height: 32px; border-radius: 6px; white-space: nowrap;">⚡ ${t('测试连通性', 'Test Connectivity', '測試連通性')}</button>
-                    <button type="button" class="btn-secondary btn-test-key" data-provider="${key}" style="margin-top: 0; padding: 0 16px; font-size: 12px; height: 32px; border-radius: 6px; white-space: nowrap; background: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%); border: none; color: white;">🔑 ${t('测试密钥', 'Test Key', '測試金鑰')}</button>
+                    <button type="button" class="btn-primary btn-test-connection" data-provider="${key}" style="margin-top: 0; padding: 0 16px; font-size: 12px; height: 32px; border-radius: 6px; white-space: nowrap;">⚡ ${t('检验连通性', 'Verify Connectivity', '檢驗連通性')}</button>
+                    <button type="button" class="btn-secondary btn-test-key" data-provider="${key}" style="margin-top: 0; padding: 0 16px; font-size: 12px; height: 32px; border-radius: 6px; white-space: nowrap; background: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%); border: none; color: white;">🔑 ${t('检验密钥', 'Verify Key', '檢驗金鑰')}</button>
                     <span id="test-result-${key}" style="font-size: 12px; font-weight: bold; display: none; white-space: nowrap;"></span>
                 </div>
                 
@@ -1591,12 +1591,12 @@ function bindProviderEvents() {
             }
 
             if (!baseUrl) {
-                alert(t('请输入 Base URL (API 端点) 后再进行测试！', 'Please enter Base URL (API Endpoint) first before testing!', '請輸入 Base URL (API 端點) 後再進行測試！'));
+                alert(t('请输入 Base URL (API 端点) 后再进行检验！', 'Please enter Base URL (API Endpoint) first before verifying!', '請輸入 Base URL (API 端點) 後再進行檢驗！'));
                 return;
             }
 
             if (resultSpan) {
-                resultSpan.innerText = t('⚡ 正在测试连接...', '⚡ Testing connection...', '⚡ 正在測試連接...');
+                resultSpan.innerText = t('⚡ 正在检验连接...', '⚡ Verifying connection...', '⚡ 正在檢驗連接...');
                 resultSpan.style.color = '#ffd54f';
                 resultSpan.style.display = 'inline-block';
             }
@@ -1631,7 +1631,7 @@ function bindProviderEvents() {
                 clearTimeout(timeoutId);
 
                 if (response.ok) {
-                    showToast(t(`✅ ${provider} 连通性测试连接成功！`, `✅ ${provider} connectivity test succeeded!`, `✅ ${provider} 連通性測試連接成功！`));
+                    showToast(t(`✅ ${provider} 连通性检验连接成功！`, `✅ ${provider} connectivity verification succeeded!`, `✅ ${provider} 連通性檢驗連接成功！`));
                     if (resultSpan) {
                         resultSpan.innerHTML = `
                             <span>✅ ${t('连接成功！', 'Connection succeeded!', '連接成功！')}</span>
@@ -1642,7 +1642,7 @@ function bindProviderEvents() {
                     }
                 } else {
                     const statusText = response.statusText || `Status: ${response.status}`;
-                    showToast(t(`❌ ${provider} 连通性测试连接失败 (${response.status})`, `❌ ${provider} connectivity test failed (${response.status})`, `❌ ${provider} 連通性測試連接失敗 (${response.status})`));
+                    showToast(t(`❌ ${provider} 连通性检验连接失败 (${response.status})`, `❌ ${provider} connectivity verification failed (${response.status})`, `❌ ${provider} 連通性檢驗連接失敗 (${response.status})`));
                     if (resultSpan) {
                         resultSpan.innerHTML = `
                             <span>❌ ${t('连接失败', 'Connection failed', '連接失敗')} (${statusText})</span>
@@ -1657,7 +1657,7 @@ function bindProviderEvents() {
                 if (error.name === 'AbortError') {
                     errMsg = t('请求超时 (8s)', 'Request Timeout (8s)', '請求超時 (8s)');
                 }
-                showToast(t(`❌ ${provider} 连通性测试超时或失败`, `❌ ${provider} connectivity test timed out or failed`, `❌ ${provider} 連通性測試超時或失敗`));
+                showToast(t(`❌ ${provider} 连通性检验超时或失败`, `❌ ${provider} connectivity verification timed out or failed`, `❌ ${provider} 連通性檢驗超時或失敗`));
                 if (resultSpan) {
                     resultSpan.innerHTML = `
                         <span>❌ ${t('连接超时或失败', 'Connection timed out or failed', '連接超時或失敗')} (${errMsg})</span>
@@ -1693,7 +1693,7 @@ function bindProviderEvents() {
             }
 
             if (!baseUrl) {
-                alert(t('请输入 Base URL (API 端点) 后再进行测试！', 'Please enter Base URL (API Endpoint) first before testing!', '請輸入 Base URL (API 端點) 後再進行測試！'));
+                alert(t('请输入 Base URL (API 端点) 后再进行检验！', 'Please enter Base URL (API Endpoint) first before verifying!', '請輸入 Base URL (API 端點) 後再進行檢驗！'));
                 return;
             }
 
@@ -4118,12 +4118,12 @@ async function performGeneratorTest(type) {
     let apiKey = keyInput ? keyInput.value.trim() : '';
 
     if (!baseUrl) {
-        alert(`请输入${type === 'image' ? '图片' : '视频'}生成 API 地址后再进行测试！`);
+        alert(`请输入${type === 'image' ? '图片' : '视频'}生成 API 地址后再进行检验！`);
         return;
     }
 
     if (resultSpan) {
-        resultSpan.innerText = '⚡ 正在测试连接...';
+        resultSpan.innerText = '⚡ 正在检验连接...';
         resultSpan.style.color = '#ffd54f';
         resultSpan.style.display = 'inline-block';
     }
@@ -4162,7 +4162,7 @@ async function performGeneratorTest(type) {
         clearTimeout(timeoutId);
 
         if (response.ok) {
-            showToast(`✅ ${type === 'image' ? '图片' : '视频'}服务连通性测试连接成功！`);
+            showToast(`✅ ${type === 'image' ? '图片' : '视频'}服务连通性检验连接成功！`);
             if (resultSpan) {
                 resultSpan.innerHTML = `
                     <span>✅ 连接成功！</span>
@@ -4214,7 +4214,7 @@ async function performGeneratorKeyTest(type) {
     let apiKey = keyInput ? keyInput.value.trim() : '';
 
     if (!baseUrl) {
-        alert(`请输入${type === 'image' ? '图片' : '视频'}生成 API 地址后再进行测试！`);
+        alert(`请输入${type === 'image' ? '图片' : '视频'}生成 API 地址后再进行检验！`);
         return;
     }
 
