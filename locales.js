@@ -10,6 +10,7 @@ window.LOCALES = {
     'nav.system_logs': '系统日志',
     'nav.settings': '系统设置',
     'nav.about': '关于 ClawAI',
+    'nav.update': '检查更新',
     'nav.openclaw_panel': 'OpenClaw 面板',
 
     // 控制台 (Console)
@@ -315,6 +316,7 @@ window.LOCALES = {
     'nav.system_logs': 'System Logs',
     'nav.settings': 'Settings',
     'nav.about': 'About',
+    'nav.update': 'Check Update',
     'nav.openclaw_panel': 'Dashboard',
 
     // Console
@@ -620,6 +622,7 @@ window.LOCALES = {
     'nav.system_logs': '系統日誌',
     'nav.settings': '系統設定',
     'nav.about': '關於 ClawAI',
+    'nav.update': '檢查更新',
     'nav.openclaw_panel': 'OpenClaw 面板',
 
     // 控制台 (Console)

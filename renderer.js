@@ -349,6 +349,9 @@ async function init() {
     // 监听主进程的消息推送
     setupIpcListeners();
 
+    // 初始化更新模块
+    setupUpdateModal();
+
     // 读取并渲染配置
     await loadAndRenderConfig();
 
@@ -434,16 +437,21 @@ async function init() {
     }
 
     if (btnCheckUpdate) {
-        btnCheckUpdate.addEventListener('click', () => {
+        btnCheckUpdate.addEventListener('click', async () => {
             btnCheckUpdate.innerText = '🔄 正在检查...';
             btnCheckUpdate.disabled = true;
-            setTimeout(() => {
-                btnCheckUpdate.innerText = '🔍 检查更新';
-                btnCheckUpdate.disabled = false;
-                alert('当前已是最新版本 (v24.13.0)');
-            }, 1000);
+            try {
+                await triggerUpdateCheck(true);
+            } catch (err) {}
+            btnCheckUpdate.innerText = '🔍 检查更新';
+            btnCheckUpdate.disabled = false;
         });
     }
+
+    // 延迟 3 秒自动静默检测一次更新
+    setTimeout(() => {
+        triggerUpdateCheck(false);
+    }, 3000);
 
     // 初始化 Tab 切换
     setupTabSwitching();
@@ -2218,6 +2226,13 @@ function setupTabSwitching() {
     const allNavItems = document.querySelectorAll('.nav-item');
     allNavItems.forEach((tab) => {
         tab.addEventListener('click', async (e) => {
+            if (tab.id === 'nav-check-update') {
+                e.preventDefault();
+                e.stopPropagation();
+                triggerUpdateCheck(true);
+                return;
+            }
+
             // 限制网关未完全就位时禁止点击内置面板Tab
             if (tab.getAttribute('data-tab') === 'openclaw-panel-view') {
                 if (!gatewayFullyReady) {
@@ -4314,4 +4329,127 @@ async function loadAndRenderSystemLogs() {
     } catch(err) {
         console.error('Failed to load system logs:', err);
     }
+}
+
+// ==========================================
+// 🚀 软件内自动更新/检测升级逻辑
+// ==========================================
+let updateInfo = null; // 存放当前的更新包信息
+
+async function triggerUpdateCheck(isManual = false) {
+    if (isManual) {
+        showToast('正在检查云端新版本，请稍候...');
+    }
+    
+    try {
+        const result = await window.api.checkUpdate(isManual);
+        
+        if (!result.hasUpdate) {
+            if (isManual) {
+                showToast('当前已是最新版本！');
+            }
+            return;
+        }
+        
+        // 有新版本，展示模态弹窗
+        updateInfo = result;
+        
+        document.getElementById('update-current-ver').innerText = 'v' + result.currentVersion;
+        document.getElementById('update-latest-ver').innerText = 'v' + result.latestVersion;
+        document.getElementById('update-notes').innerText = result.releaseNotes || '没有更新日志';
+        
+        // 隐藏进度条容器，显示按钮
+        document.getElementById('update-progress-container').style.display = 'none';
+        document.getElementById('update-btn-confirm').style.display = 'inline-block';
+        document.getElementById('update-btn-confirm').innerText = '立即升级';
+        document.getElementById('update-btn-confirm').disabled = false;
+        document.getElementById('update-btn-cancel').style.display = 'inline-block';
+        
+        // 显示弹窗
+        document.getElementById('update-modal').classList.add('active');
+    } catch (err) {
+        console.error('更新检查失败:', err);
+        if (isManual) {
+            showToast('更新检测失败，请检查网络是否通畅');
+        }
+    }
+}
+
+// 注册模态窗交互
+function setupUpdateModal() {
+    const modal = document.getElementById('update-modal');
+    if (!modal) return;
+    
+    const closeBtn = document.getElementById('update-modal-close');
+    const cancelBtn = document.getElementById('update-btn-cancel');
+    const confirmBtn = document.getElementById('update-btn-confirm');
+    
+    const closeModal = () => {
+        // 如果正在下载，不允许直接关闭
+        if (confirmBtn.disabled) {
+            showToast('更新包正在下载，请勿关闭应用');
+            return;
+        }
+        modal.classList.remove('active');
+    };
+    
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+    
+    if (confirmBtn) {
+        confirmBtn.addEventListener('click', async () => {
+            if (!updateInfo || !updateInfo.downloadUrl) return;
+            
+            // 禁用按钮并显示进度条
+            confirmBtn.disabled = true;
+            confirmBtn.innerText = '正在准备下载...';
+            cancelBtn.style.display = 'none'; // 隐藏取消按钮防止误操作
+            
+            const progressContainer = document.getElementById('update-progress-container');
+            const progressBar = document.getElementById('update-progress-bar');
+            const progressPercent = document.getElementById('update-progress-percent');
+            const progressStatus = document.getElementById('update-progress-status');
+            
+            if (progressContainer) progressContainer.style.display = 'block';
+            if (progressBar) progressBar.style.width = '0%';
+            if (progressPercent) progressPercent.innerText = '0%';
+            if (progressStatus) progressStatus.innerText = '正在建立下载通道...';
+            
+            // 开始下载更新
+            try {
+                const downloadResult = await window.api.startDownloadUpdate(updateInfo.downloadUrl, updateInfo.fileName);
+                if (downloadResult.success) {
+                    if (progressStatus) progressStatus.innerText = '下载完成！正在启动升级程序...';
+                    if (progressBar) progressBar.style.width = '100%';
+                    if (progressPercent) progressPercent.innerText = '100%';
+                    
+                    setTimeout(() => {
+                        window.api.installUpdate(downloadResult.savePath);
+                    }, 1000);
+                } else {
+                    throw new Error(downloadResult.message);
+                }
+            } catch (error) {
+                console.error('下载更新失败:', error);
+                showToast(`升级失败: ${error.message || '网络连接超时'}`);
+                
+                // 恢复按钮状态
+                confirmBtn.disabled = false;
+                confirmBtn.innerText = '重试立即升级';
+                cancelBtn.style.display = 'inline-block';
+                if (progressStatus) progressStatus.innerText = '下载出错！';
+            }
+        });
+    }
+    
+    // 监听主进程的下载进度推送
+    window.api.onDownloadProgress((percent) => {
+        const progressBar = document.getElementById('update-progress-bar');
+        const progressPercent = document.getElementById('update-progress-percent');
+        const progressStatus = document.getElementById('update-progress-status');
+        
+        if (progressBar) progressBar.style.width = `${percent}%`;
+        if (progressPercent) progressPercent.innerText = `${percent}%`;
+        if (progressStatus) progressStatus.innerText = `正在下载更新包...`;
+    });
 }

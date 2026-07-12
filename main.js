@@ -863,6 +863,287 @@ ipcMain.handle('get-app-start-time', () => {
     return appStartTime;
 });
 
+// 辅助函数：发起 HTTPS GET 请求获取 JSON 数据
+function httpsGetJson(url) {
+    const https = require('https');
+    return new Promise((resolve, reject) => {
+        const options = {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/vnd.github.v3+json'
+            },
+            timeout: 10000 // 10秒超时
+        };
+        https.get(url, options, (res) => {
+            if (res.statusCode === 301 || res.statusCode === 302) {
+                // 处理重定向
+                httpsGetJson(res.headers.location).then(resolve).catch(reject);
+                return;
+            }
+            if (res.statusCode !== 200) {
+                res.resume();
+                reject(new Error(`请求失败，状态码: ${res.statusCode}`));
+                return;
+            }
+            let rawData = '';
+            res.on('data', (chunk) => { rawData += chunk; });
+            res.on('end', () => {
+                try {
+                    const parsedData = JSON.parse(rawData);
+                    resolve(parsedData);
+                } catch (e) {
+                    reject(e);
+                }
+            });
+        }).on('error', (err) => {
+            reject(err);
+        });
+    });
+}
+
+// 辅助函数：版本号比对 (latest > current)
+function isNewerVersion(latest, current) {
+    const lParts = latest.split('.').map(Number);
+    const cParts = current.split('.').map(Number);
+    for (let i = 0; i < 3; i++) {
+        const lVal = isNaN(lParts[i]) ? 0 : lParts[i];
+        const cVal = isNaN(cParts[i]) ? 0 : cParts[i];
+        if (lVal > cVal) return true;
+        if (lVal < cVal) return false;
+    }
+    return false;
+}
+
+// 辅助函数：通过 HEAD 请求 latest 页面获取重定向的真实 tag_name
+function getLatestVersionFromRedirect(url) {
+    const https = require('https');
+    const urlModule = require('url');
+    return new Promise((resolve, reject) => {
+        const parsedUrl = urlModule.parse(url);
+        const options = {
+            hostname: parsedUrl.hostname,
+            path: parsedUrl.path,
+            method: 'HEAD',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            },
+            timeout: 8000
+        };
+        const req = https.request(options, (res) => {
+            if (res.statusCode === 301 || res.statusCode === 302) {
+                const location = res.headers.location;
+                // 从重定向的 URL (如 /releases/tag/v1) 里匹配 tag_name
+                const match = location.match(/\/releases\/tag\/(v?[0-9a-zA-Z.-]+)/);
+                if (match) {
+                    resolve(match[1]);
+                } else {
+                    reject(new Error('未在重定向目标中找到版本号'));
+                }
+            } else {
+                reject(new Error(`请求未发生重定向，状态码: ${res.statusCode}`));
+            }
+        });
+        req.on('error', (err) => reject(err));
+        req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('请求超时'));
+        });
+        req.end();
+    });
+}
+
+// 1. 检查更新
+ipcMain.handle('check-update', async (event, isManual) => {
+    const currentVersion = app.getVersion();
+    const repoUrl = 'https://api.github.com/repos/2014-y/AI-v24.13.0/releases/latest';
+    const redirectUrl = 'https://github.com/2014-y/AI-v24.13.0/releases/latest';
+    
+    let latestVersion = '';
+    let hasUpdate = false;
+    let data = null;
+    let errorMsg = '';
+    let redirectTag = '';
+    
+    // 优先尝试请求 API
+    try {
+        data = await httpsGetJson(repoUrl);
+        latestVersion = data.tag_name.replace(/^v/, '');
+        hasUpdate = isNewerVersion(latestVersion, currentVersion);
+    } catch (err) {
+        console.error('API 检查更新出错，尝试通过网页重定向获取版本号:', err.message);
+        errorMsg = err.message;
+        
+        // API 失败，进入备选的 HEAD 重定向方案
+        try {
+            redirectTag = await getLatestVersionFromRedirect(redirectUrl);
+            latestVersion = redirectTag.replace(/^v/, '');
+            hasUpdate = isNewerVersion(latestVersion, currentVersion);
+        } catch (redirectErr) {
+            console.error('重定向方式获取版本号也失败:', redirectErr.message);
+        }
+    }
+    
+    // 如果我们成功拿到了最新版本号
+    if (latestVersion) {
+        let downloadUrl = '';
+        let fileName = '';
+        let releaseNotes = '';
+        
+        if (data) {
+            // API 请求成功的情况
+            releaseNotes = data.body || '';
+            if (data.assets && Array.isArray(data.assets)) {
+                const exeAsset = data.assets.find(asset => asset.name.endsWith('.exe'));
+                if (exeAsset) {
+                    downloadUrl = exeAsset.browser_download_url;
+                    fileName = exeAsset.name;
+                }
+            }
+            if (!downloadUrl) {
+                downloadUrl = data.html_url;
+            }
+        } else {
+            // API 请求失败，但是重定向成功拿到版本号的情况
+            releaseNotes = `由于网络限制（GitHub API 访问受限），未能加载详细的更新日志。\n\n你可以尝试点击【立即升级】进行软件内自动升级，或在浏览器中打开主页手动下载安装包。\n\n错误信息：${errorMsg}`;
+            // 构造默认的下载文件名与地址
+            fileName = `ClawAI Setup ${latestVersion}.exe`;
+            const tag = redirectTag || `v${latestVersion}`;
+            downloadUrl = `https://github.com/2014-y/AI-v24.13.0/releases/download/${tag}/${fileName}`;
+        }
+        
+        return {
+            hasUpdate,
+            latestVersion,
+            currentVersion,
+            releaseNotes,
+            downloadUrl,
+            fileName
+        };
+    }
+    
+    // 如果两种方案都彻底失败了，进入终极备选
+    return {
+        hasUpdate: true,
+        latestVersion: '未知',
+        currentVersion,
+        releaseNotes: '由于 GitHub 接口访问受限（如 IP 请求次数超限或网络无法直连），且重定向检测也失败，无法自动下载安装包。\n\n建议点击下方按钮，直接在您的浏览器中打开项目主页进行手动下载与升级。',
+        downloadUrl: 'https://github.com/2014-y/AI-v24.13.0/releases',
+        fileName: ''
+    };
+});
+
+// 2. 开始下载更新
+ipcMain.handle('start-download-update', async (event, { downloadUrl, fileName }) => {
+    const https = require('https');
+    const fs = require('fs');
+    const path = require('path');
+    
+    if (!downloadUrl) return { success: false, message: '无效的下载链接' };
+    
+    // 使用国内镜像加速下载
+    let finalUrl = downloadUrl;
+    if (downloadUrl.startsWith('https://github.com')) {
+        finalUrl = 'https://mirror.ghproxy.com/' + downloadUrl;
+    }
+    
+    const tempDir = app.getPath('temp');
+    const savePath = path.join(tempDir, fileName || 'ClawAI-Setup-Latest.exe');
+    
+    if (fs.existsSync(savePath)) {
+        try {
+            fs.unlinkSync(savePath);
+        } catch (e) {}
+    }
+    
+    return new Promise((resolve) => {
+        const fileStream = fs.createWriteStream(savePath);
+        let receivedBytes = 0;
+        let totalBytes = 0;
+        
+        function download(url) {
+            const options = {
+                headers: {
+                    'User-Agent': 'ClawAI-Updater'
+                },
+                timeout: 30000 // 30秒超时
+            };
+            
+            const req = https.get(url, options, (res) => {
+                if (res.statusCode === 301 || res.statusCode === 302) {
+                    let redirectUrl = res.headers.location;
+                    if (redirectUrl.startsWith('https://github.com')) {
+                        redirectUrl = 'https://mirror.ghproxy.com/' + redirectUrl;
+                    }
+                    download(redirectUrl);
+                    return;
+                }
+                
+                if (res.statusCode !== 200) {
+                    fileStream.close();
+                    resolve({ success: false, message: `下载失败，状态码: ${res.statusCode}` });
+                    return;
+                }
+                
+                totalBytes = parseInt(res.headers['content-length'], 10) || 0;
+                
+                res.on('data', (chunk) => {
+                    receivedBytes += chunk.length;
+                    fileStream.write(chunk);
+                    
+                    if (totalBytes > 0) {
+                        const progress = Math.round((receivedBytes / totalBytes) * 100);
+                        if (mainWindow && !mainWindow.isDestroyed()) {
+                            mainWindow.webContents.send('download-progress', progress);
+                        }
+                    }
+                });
+                
+                res.on('end', () => {
+                    fileStream.end();
+                    resolve({ success: true, savePath });
+                });
+                
+                res.on('error', (err) => {
+                    fileStream.close();
+                    resolve({ success: false, message: `下载数据流出错: ${err.message}` });
+                });
+            });
+            
+            req.on('error', (err) => {
+                fileStream.close();
+                resolve({ success: false, message: `请求出错: ${err.message}` });
+            });
+            
+            req.on('timeout', () => {
+                req.destroy();
+                fileStream.close();
+                resolve({ success: false, message: '下载请求超时' });
+            });
+        }
+        
+        download(finalUrl);
+    });
+});
+
+// 3. 执行覆盖安装
+ipcMain.handle('install-update', async (event, savePath) => {
+    const { shell } = require('electron');
+    const fs = require('fs');
+    if (!savePath || !fs.existsSync(savePath)) {
+        return { success: false, message: '未找到安装包文件' };
+    }
+    
+    // 使用 Electron shell 安全拉起安装程序（完美支持 .exe, .msi, .dmg 等各种格式）
+    try {
+        await shell.openPath(savePath);
+        app.quit();
+        return { success: true };
+    } catch (err) {
+        console.error('无法启动安装程序:', err);
+        return { success: false, message: `启动安装程序失败: ${err.message}` };
+    }
+});
+
 // 初始化应用
 app.whenReady().then(() => {
     createWindow();

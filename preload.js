@@ -25,6 +25,12 @@ contextBridge.exposeInMainWorld('api', {
     openExternal: (url) => ipcRenderer.invoke('open-external', url),
     getDashboardUrl: () => ipcRenderer.invoke('get-dashboard-url'),
     
+    // 软件更新相关接口
+    checkUpdate: (isManual) => ipcRenderer.invoke('check-update', isManual),
+    startDownloadUpdate: (downloadUrl, fileName) => ipcRenderer.invoke('start-download-update', { downloadUrl, fileName }),
+    installUpdate: (savePath) => ipcRenderer.invoke('install-update', savePath),
+    onDownloadProgress: (callback) => ipcRenderer.on('download-progress', (event, progress) => callback(progress)),
+    
     // 主进程向渲染进程的数据推送回调
     onLogReceived: (callback) => ipcRenderer.on('gateway-log', (event, data) => callback(data)),
     onStatusChanged: (callback) => ipcRenderer.on('gateway-status', (event, status) => callback(status)),
