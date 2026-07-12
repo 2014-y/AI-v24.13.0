@@ -420,6 +420,42 @@ body.maximized .app-container {
   min-width: 0; /* 强制防止被超长日志行强行撑开宽度，从而挤压右边卡片 */
 }
 
+.btn-clear-logs {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 10;
+  backdrop-filter: blur(4px);
+}
+
+.btn-clear-logs:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.btn-clear-logs:active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(0.96);
+}
+
+.btn-clear-logs:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 /* 终端机器人科技背景底纹 */
 .terminal-bg-robot {
   position: absolute;

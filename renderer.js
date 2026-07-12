@@ -605,6 +605,18 @@ async function init() {
         }
     });
 
+    // 清空日志按钮监听
+    const btnClearLogs = document.getElementById('btn-clear-terminal-logs');
+    if (btnClearLogs) {
+        btnClearLogs.addEventListener('click', () => {
+            if (gatewayStatus !== 'running') return;
+            const terminalOutput = document.getElementById('log-terminal-output');
+            if (terminalOutput) {
+                terminalOutput.innerHTML = '';
+            }
+        });
+    }
+
     // 视频生成密钥显隐切换
     const toggleVideoKeyBtn = document.getElementById('btn-toggle-video-key');
     if (toggleVideoKeyBtn) {
@@ -2177,9 +2189,17 @@ function updateGatewayStatusUI(status) {
     }
 
     const terminalLeft = document.getElementById('tour-log-terminal');
+    const btnClearLogs = document.getElementById('btn-clear-terminal-logs');
     if (terminalLeft) {
         terminalLeft.classList.remove('stopped', 'starting', 'running');
         terminalLeft.classList.add(status);
+    }
+    if (btnClearLogs) {
+        if (status === 'running') {
+            btnClearLogs.removeAttribute('disabled');
+        } else {
+            btnClearLogs.setAttribute('disabled', 'true');
+        }
     }
 
     // 每次状态改变，均彻底清除上一次 the 保底延时器，杜绝闭包和交叉执行干扰
