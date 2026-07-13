@@ -310,15 +310,29 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 function createWindow() {
+    // ------------------- Splash Screen -------------------
+    const splash = new BrowserWindow({
+        width: 400,
+        height: 300,
+        transparent: true,
+        frame: false,
+        alwaysOnTop: true,
+        resizable: false,
+        center: true,
+        show: true,
+        backgroundColor: '#00000000' // 透明背景，交由 splash.html 样式控制
+    });
+    splash.loadFile('splash.html');
+    // 主窗口保持隐藏，待渲染完成后一次性弹出
     mainWindow = new BrowserWindow({
         width: 1120,
         height: 760,
-        frame: false, // 无边框窗口
-        resizable: true, // 允许用户自定义拖拽放大缩小窗口
-        maximizable: true, // 允许最大化
-        show: false, // 默认隐藏，在 ready-to-show 时一次性优雅展出，防止启动黑屏闪烁
-        backgroundColor: '#0d0b18', // 曜石黑暗色底底色，平滑窗口拉起首屏加载
-        icon: path.join(__dirname, 'config', 'icon.png'), // 窗口图标
+        frame: false,
+        resizable: true,
+        maximizable: true,
+        show: false,
+        backgroundColor: '#0d0b18',
+        icon: path.join(__dirname, 'config', 'icon.png'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -328,18 +342,19 @@ function createWindow() {
             webviewTag: true
         }
     });
-
     // 每次启动清除渲染进程缓存，确保 HTML/CSS/JS 修改立即生效
     session.defaultSession.clearCache().catch(() => {});
 
-    const resolvedPath = path.resolve(__dirname, 'index.html');
-
     mainWindow.loadFile('index.html');
-
-    // 🌟 在 Chromium 首屏完全解析并绘制就绪后才弹出，实现 100% 无黑屏白屏瞬间秒开！
+    // 当渲染进程首次绘制完成后，关闭 splash 并展示主窗口
     mainWindow.once('ready-to-show', () => {
+        splash.destroy();
         mainWindow.show();
     });
+    // Duplicate mainWindow creation removed
+
+
+    // Duplicate window init block removed
 
     mainWindow.webContents.on('did-finish-load', async () => {
         try {
