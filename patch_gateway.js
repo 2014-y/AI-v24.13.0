@@ -406,24 +406,59 @@ function fixWindowsHeredoc(cmdStr) {
     return cmdStr;
 }
 
+function resolveCaptureDesktopScriptPath() {
+    const pathMod = require('path');
+    const fsMod = require('fs');
+    const candidates = [
+        'C:\\Users\\Public\\capture-desktop.ps1',
+        pathMod.join('C:\\Users\\Public', 'capture-desktop.ps1'),
+        pathMod.join(process.env.OPENCLAW_HOME || '', 'capture-desktop.ps1'),
+        pathMod.join(process.env.OPENCLAW_STATE_DIR || '', 'capture-desktop.ps1'),
+        pathMod.join(process.env.REAL_USER_HOME || '', '.openclaw', 'capture-desktop.ps1'),
+        pathMod.join(__dirname, 'capture-desktop.ps1')
+    ];
+    // When patch is loaded from Public via --require, also try beside the resolved patch file.
+    try {
+        if (typeof __filename === 'string' && __filename) {
+            candidates.unshift(pathMod.join(pathMod.dirname(__filename), 'capture-desktop.ps1'));
+        }
+    } catch (e) {}
+    for (const p of candidates) {
+        if (!p) continue;
+        try {
+            const resolved = pathMod.resolve(p);
+            if (fsMod.existsSync(resolved)) return resolved.replace(/\\/g, '/');
+        } catch (e) {}
+    }
+    return 'C:/Users/Public/capture-desktop.ps1';
+}
+
 function fixWindowsScreenshotCommand(cmdStr) {
     if (typeof cmdStr !== 'string') return cmdStr;
-    if (cmdStr.includes('System.Windows.Forms') && cmdStr.includes('System.Drawing') && cmdStr.includes('Save(')) {
-        const saveRegex = /Save\(['"]([^'"]+)['"]\)/i;
-        const match = cmdStr.match(saveRegex);
-        if (match && match[1]) {
-            let destPath = match[1].trim();
-            if (destPath.startsWith('~')) {
-                const homedir = process.env.REAL_USER_HOME || require('os').homedir();
-                destPath = destPath.replace('~', homedir);
-            }
-            destPath = require('path').resolve(destPath);
-            const scriptPath = 'c:/Users/Yuan/Desktop/AI-v24.13.0-开源版/capture-desktop.ps1';
-            const corrected = `powershell -ExecutionPolicy Bypass -NoProfile -Command "try { $p = powershell -ExecutionPolicy Bypass -NoProfile -File '${scriptPath}'; if (Test-Path $p) { Copy-Item -Path $p -Destination '${destPath}' -Force; Write-Output $p } } catch {}"`;
-            return corrected;
-        }
+    const looksLikeCapture =
+        (cmdStr.includes('System.Windows.Forms') && cmdStr.includes('System.Drawing') && /Save\s*\(/i.test(cmdStr)) ||
+        /CopyFromScreen\s*\(/i.test(cmdStr) ||
+        /openclaw-screenshot\.png/i.test(cmdStr) ||
+        /capture-desktop\.ps1/i.test(cmdStr);
+    if (!looksLikeCapture) return cmdStr;
+
+    let destPath = '';
+    const saveMatch = cmdStr.match(/Save\s*\(\s*['"]([^'"]+)['"]/i);
+    if (saveMatch && saveMatch[1]) destPath = saveMatch[1].trim();
+    if (!destPath) {
+        const outMatch = cmdStr.match(/(?:OutPath|outPath|output|dest)\s*[=:]\s*['"]([^'"]+)['"]/i);
+        if (outMatch && outMatch[1]) destPath = outMatch[1].trim();
     }
-    return cmdStr;
+    if (!destPath) destPath = require('path').join(process.env.TEMP || process.env.TMP || 'C:\\Users\\Public', 'openclaw-screenshot.png');
+
+    if (destPath.startsWith('~')) {
+        const homedir = process.env.REAL_USER_HOME || process.env.OPENCLAW_HOME || require('os').homedir();
+        destPath = destPath.replace(/^~/, homedir);
+    }
+    destPath = require('path').resolve(destPath).replace(/'/g, "''");
+    const scriptPath = resolveCaptureDesktopScriptPath().replace(/'/g, "''");
+    // Always force our DPI-safe full-desktop capturer (works on other PCs / cloud desktops).
+    return `powershell -ExecutionPolicy Bypass -NoProfile -Command "try { $p = & powershell -ExecutionPolicy Bypass -NoProfile -File '${scriptPath}' -OutPath '${destPath}'; if (-not $p) { $p = '${destPath}' }; if (Test-Path -LiteralPath $p) { Write-Output $p } else { throw 'screenshot file missing' } } catch { throw $_.Exception.Message }"`;
 }
 
 function defensiveCommandFilter(cmdStr) {

@@ -705,12 +705,30 @@ ipcMain.on('gateway-action', (event, action) => {
             // 部署内置自定义插件到用户状态目录, 确保打包后在别人电脑上插件也能被 openclaw 发现并加载
             seedBundledPlugins();
 
-            // 在杀掉所有可能锁定补丁的僵尸进程后，安全地拷贝最新的 patch_gateway.js 补丁
+            // 在杀掉所有可能锁定补丁的僵尸进程后，安全地拷贝最新的 patch_gateway.js 与截图脚本
             try {
                 const localPatch = path.join(__dirname, 'patch_gateway.js');
                 if (fs.existsSync(localPatch)) {
                     fs.copyFileSync(localPatch, PUBLIC_PATCH_PATH);
                     console.log(`[TokenGuard] Copied public patch to ${PUBLIC_PATCH_PATH} successfully after cleanup.`);
+                }
+                const localCapture = path.join(__dirname, 'capture-desktop.ps1');
+                const publicCapture = 'C:\\Users\\Public\\capture-desktop.ps1';
+                if (fs.existsSync(localCapture)) {
+                    fs.copyFileSync(localCapture, publicCapture);
+                    // 同步一份到 OPENCLAW_STATE_DIR / 家目录，方便手工与无影环境定位
+                    const altDirs = [
+                        process.env.OPENCLAW_STATE_DIR,
+                        process.env.OPENCLAW_HOME && path.join(process.env.OPENCLAW_HOME, '.openclaw'),
+                        CONFIG_DIR
+                    ].filter(Boolean);
+                    for (const dir of altDirs) {
+                        try {
+                            fs.mkdirSync(dir, { recursive: true });
+                            fs.copyFileSync(localCapture, path.join(dir, 'capture-desktop.ps1'));
+                        } catch (e) {}
+                    }
+                    console.log(`[TokenGuard] Copied capture-desktop.ps1 to ${publicCapture}`);
                 }
             } catch (e) {
                 console.error('[TokenGuard] Failed to copy public patch after cleanup:', e.message);
