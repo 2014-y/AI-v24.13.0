@@ -512,6 +512,8 @@ ipcMain.on('gateway-action', (event, action) => {
         if (process.platform === 'win32') {
             try {
                 const { execSync } = require('child_process');
+                const currentPid = process.pid;
+                const parentPid = process.ppid;
                 const netstatOut = execSync('netstat -ano').toString();
                 const lines = netstatOut.split('\n');
                 const pidsToKill = new Set();
@@ -525,8 +527,9 @@ ipcMain.on('gateway-action', (event, action) => {
                     }
                 });
                 pidsToKill.forEach(pid => {
+                    if (pid === currentPid.toString() || pid === parentPid.toString()) return;
                     try {
-                        execSync(`taskkill /pid ${pid} /F /T`);
+                        execSync(`taskkill /pid ${pid} /F`);
                         console.log(`Successfully killed leftover gateway process occupying port 18789, PID: ${pid}`);
                     } catch(e) {}
                 });
@@ -546,11 +549,18 @@ ipcMain.on('gateway-action', (event, action) => {
                 try {
                     const { execSync } = require('child_process');
                     const currentPid = process.pid;
-                    const nodePidsOut = execSync('powershell -ExecutionPolicy Bypass -NoProfile -Command "try { Get-Process -Name node -ErrorAction SilentlyContinue | ForEach-Object { $_.Id } } catch {}"').toString();
-                    const pids = nodePidsOut.split(/[\r\n]+/).map(p => p.trim()).filter(p => p && p !== currentPid.toString());
-                    pids.forEach(pid => {
-                        try { execSync(`taskkill /pid ${pid} /F /T`); } catch(e) {}
-                    });
+                    const parentPid = process.ppid;
+                    const netstatOut = execSync('netstat -ano').toString();
+                    const lines = netstatOut.split('\n');
+                    const gatewayLine = lines.find(line => line.includes('18789') && line.includes('LISTENING'));
+                    if (gatewayLine) {
+                        const match = gatewayLine.trim().split(/\s+/);
+                        const pid = match[match.length - 1];
+                        if (pid && pid !== '0' && pid !== currentPid.toString() && pid !== parentPid.toString()) {
+                            // 安全强杀：绝不加 /T 参数，避免误杀 npm/electron 祖先进程引发大面积应用闪退
+                            try { execSync(`taskkill /pid ${pid} /F`); } catch(e) {}
+                        }
+                    }
                 } catch(err) {
                     console.error('Failed to cleanup node zombie processes:', err);
                 }

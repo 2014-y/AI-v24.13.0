@@ -96,7 +96,7 @@ window.alert = function (message, title = '系统提示') {
         overlay.style.cssText = `
             position: fixed;
             top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(10, 8, 20, 0.65);
+            background: rgba(10, 8, 20, 0.4);
             backdrop-filter: blur(8px);
             display: flex; align-items: center; justify-content: center;
             z-index: 99999;
@@ -107,26 +107,27 @@ window.alert = function (message, title = '系统提示') {
 
         const modal = document.createElement('div');
         modal.style.cssText = `
-            background: linear-gradient(135deg, rgba(30, 25, 50, 0.95) 0%, rgba(15, 12, 28, 0.98) 100%);
-            border: 1px solid rgba(140, 82, 255, 0.2);
+            background: var(--bg-panel);
+            backdrop-filter: blur(15px);
+            border: 1px solid var(--border-color);
             border-radius: 16px;
             width: 380px;
             padding: 24px;
-            box-shadow: 0 15px 50px rgba(140, 82, 255, 0.15), 0 0 20px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 15px 50px rgba(0, 0, 0, 0.3), var(--accent-glow);
             transform: scale(0.9);
             transition: transform 0.2s ease;
-            color: white;
+            color: var(--text-primary);
             font-family: system-ui, -apple-system, sans-serif;
         `;
 
         modal.innerHTML = `
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
                 <span style="font-size: 20px; line-height: 1;">🔔</span>
-                <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: #b388ff;">${title}</h3>
+                <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: var(--accent-color);">${title}</h3>
             </div>
-            <div style="font-size: 13px; color: rgba(255,255,255,0.8); line-height: 1.6; margin-bottom: 24px; white-space: pre-wrap; word-break: break-all;">${message}</div>
+            <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 24px; white-space: pre-wrap; word-break: break-all;">${message}</div>
             <div style="display: flex; justify-content: flex-end;">
-                <button id="custom-alert-ok" style="background: linear-gradient(135deg, #8c52ff 0%, #00d2ff 100%); border: none; color: white; padding: 8px 24px; font-size: 13px; font-weight: 600; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 10px rgba(140,82,255,0.25); outline: none; transition: opacity 0.1s;">确定</button>
+                <button id="custom-alert-ok" style="background: linear-gradient(135deg, var(--accent-color) 0%, rgba(var(--accent-rgb), 0.7) 100%); border: none; color: white; padding: 8px 24px; font-size: 13px; font-weight: 600; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 10px rgba(var(--accent-rgb), 0.25); outline: none; transition: opacity 0.1s;">确定</button>
             </div>
         `;
 
@@ -161,7 +162,7 @@ window.confirm = function (message, title = '操作确认') {
         overlay.style.cssText = `
             position: fixed;
             top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(10, 8, 20, 0.65);
+            background: rgba(10, 8, 20, 0.4);
             backdrop-filter: blur(8px);
             display: flex; align-items: center; justify-content: center;
             z-index: 99999;
@@ -172,27 +173,28 @@ window.confirm = function (message, title = '操作确认') {
 
         const modal = document.createElement('div');
         modal.style.cssText = `
-            background: linear-gradient(135deg, rgba(30, 25, 50, 0.95) 0%, rgba(15, 12, 28, 0.98) 100%);
-            border: 1px solid rgba(140, 82, 255, 0.2);
+            background: var(--bg-panel);
+            backdrop-filter: blur(15px);
+            border: 1px solid var(--border-color);
             border-radius: 16px;
             width: 400px;
             padding: 24px;
-            box-shadow: 0 15px 50px rgba(140, 82, 255, 0.15), 0 0 20px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 15px 50px rgba(0, 0, 0, 0.3), var(--accent-glow);
             transform: scale(0.9);
             transition: transform 0.2s ease;
-            color: white;
+            color: var(--text-primary);
             font-family: system-ui, -apple-system, sans-serif;
         `;
 
         modal.innerHTML = `
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
                 <span style="font-size: 20px; line-height: 1;">❓</span>
-                <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: #b388ff;">${title}</h3>
+                <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: var(--accent-color);">${title}</h3>
             </div>
-            <div style="font-size: 13px; color: rgba(255,255,255,0.8); line-height: 1.6; margin-bottom: 24px; white-space: pre-wrap; word-break: break-all;">${message}</div>
+            <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 24px; white-space: pre-wrap; word-break: break-all;">${message}</div>
             <div style="display: flex; justify-content: flex-end; gap: 12px;">
-                <button id="custom-confirm-cancel" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: rgba(255,255,255,0.7); padding: 8px 20px; font-size: 13px; border-radius: 8px; cursor: pointer; outline: none; transition: background 0.1s;">取消</button>
-                <button id="custom-confirm-ok" style="background: linear-gradient(135deg, #8c52ff 0%, #00d2ff 100%); border: none; color: white; padding: 8px 24px; font-size: 13px; font-weight: 600; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 10px rgba(140,82,255,0.25); outline: none; transition: opacity 0.1s;">确定</button>
+                <button id="custom-confirm-cancel" style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-secondary); padding: 8px 20px; font-size: 13px; border-radius: 8px; cursor: pointer; outline: none; transition: background 0.1s;">取消</button>
+                <button id="custom-confirm-ok" style="background: linear-gradient(135deg, var(--accent-color) 0%, rgba(var(--accent-rgb), 0.7) 100%); border: none; color: white; padding: 8px 24px; font-size: 13px; font-weight: 600; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 10px rgba(var(--accent-rgb), 0.25); outline: none; transition: opacity 0.1s;">确定</button>
             </div>
         `;
 
@@ -404,6 +406,7 @@ async function init() {
         settingBuiltInModelsToggle.addEventListener('change', (e) => {
             localStorage.setItem('setting_use_built_in_models', e.target.checked ? 'true' : 'false');
             toggleProviderInputsEditable();
+            loadChatModels(); // 开关状态改变时，立刻重新载入并选中默认内置模型
         });
     }
 
@@ -422,7 +425,7 @@ async function init() {
         });
     }
 
-    // 绑定图片与视频生成测试连通性
+    // 绑定图片与视频生成检验连通性
     const btnTestImage = document.getElementById('btn-test-image-generator');
     if (btnTestImage) {
         btnTestImage.addEventListener('click', () => performGeneratorTest('image'));
@@ -815,7 +818,7 @@ function setupIpcListeners() {
                 targetProgress = 80;
                 targetText = '正在拉起 HTTP 路由服务器端口服务...';
                 updated = true;
-            } else if (text.includes('HTTP server is listening') || text.includes('Server is running on') || text.includes('Setup complete!') || text.includes('running on port')) {
+            } else if (text.includes('HTTP server is listening') || text.includes('Server is running on') || text.includes('Setup complete!') || text.includes('running on port') || text.includes('started (interval:')) {
                 targetProgress = 100;
                 targetText = '本地 AI 网关服务就绪！';
                 updated = true;
@@ -948,6 +951,8 @@ function setupIpcListeners() {
 
 // 5. 动态大模型提供商与配置数据管理
 let localProviders = {};
+const AGNES_BUILT_IN_KEY = 'sk-95sX8HnNOhh8FFfAm3ccOgGFg6MA8yf7zU5PEEQdGxSuKhQY';
+const KEY_MASK = '••••••••••••••••••••••••••••••••••••••••••••••••';
 const expandedProviders = new Set();
 
 async function loadAndRenderConfig() {
@@ -976,12 +981,19 @@ async function loadAndRenderConfig() {
             document.getElementById('model-primary').value = defaults.model.primary || '';
             document.getElementById('model-fallback').value = (defaults.model.fallbacks && defaults.model.fallbacks[0]) || '';
         }
-        if (defaults.imageGenerationModel) {
+        const storedImgModel = localStorage.getItem('client_pref_image_model');
+        if (storedImgModel) {
+            document.getElementById('model-image').value = storedImgModel;
+        } else if (defaults.imageGenerationModel) {
             document.getElementById('model-image').value = defaults.imageGenerationModel.primary || '';
         } else {
             document.getElementById('model-image').value = '';
         }
-        if (defaults.videoGenerationModel) {
+
+        const storedVidModel = localStorage.getItem('client_pref_video_model');
+        if (storedVidModel) {
+            document.getElementById('model-video').value = storedVidModel;
+        } else if (defaults.videoGenerationModel) {
             document.getElementById('model-video').value = defaults.videoGenerationModel.primary || '';
         } else {
             document.getElementById('model-video').value = '';
@@ -1027,6 +1039,9 @@ async function loadAndRenderConfig() {
 
     // 渲染功能插件列表卡片
     renderPluginsGrid();
+
+    // 控制内置模型配置项的启用与置灰
+    toggleProviderInputsEditable();
 
     // 初始化 JSON 预览展示
     updateConfigJsonPreview();
@@ -1091,7 +1106,14 @@ function updateConfigJsonPreview() {
     const previewEl = document.getElementById('config-json-preview');
     // 只有当用户当前没有聚焦在 JSON 编辑框输入时，才自动用表单最新状态覆盖内容，防止打字时光标位移
     if (previewEl && document.activeElement !== previewEl) {
-        previewEl.value = JSON.stringify(configData, null, 2);
+        const previewConfig = JSON.parse(JSON.stringify(configData));
+        delete previewConfig.videoGenerator;
+        delete previewConfig.imageGenerator;
+        if (previewConfig.agents && previewConfig.agents.defaults) {
+            delete previewConfig.agents.defaults.imageGenerationModel;
+            delete previewConfig.agents.defaults.videoGenerationModel;
+        }
+        previewEl.value = JSON.stringify(previewConfig, null, 2);
     }
 }
 
@@ -1181,6 +1203,8 @@ function renderProvidersList() {
         return zhCn;
     };
 
+    const useBuiltIn = localStorage.getItem('setting_use_built_in_models') !== 'false';
+
     // 强制将 agnes-ai 放置于列表最顶层渲染
     const keys = Object.keys(localProviders);
     const agnesIndex = keys.indexOf('agnes-ai');
@@ -1224,10 +1248,10 @@ function renderProvidersList() {
                         <label>${t('API Key (授权密钥)', 'API Key', 'API Key (授權金鑰)')}</label>
                         <div class="password-input-wrapper" style="position: relative; display: flex; align-items: center;">
                             ${key === 'agnes-ai'
-                                ? `<input type="password" class="provider-key-input" data-provider="${key}" value="${provider.apiKey || ''}" placeholder="${t('API 密钥', 'API Key', 'API 金鑰')}" style="padding-right: 36px; width: 100%; user-select: none;" readonly oncopy="return false;" oncut="return false;" oncontextmenu="return false;">`
+                                ? `<input type="password" class="provider-key-input" data-provider="${key}" value="${useBuiltIn ? KEY_MASK : (provider.apiKey === AGNES_BUILT_IN_KEY ? '' : (provider.apiKey || ''))}" placeholder="${t('API 密钥', 'API Key', 'API 金鑰')}" style="padding-right: 36px; width: 100%; user-select: none;" ${useBuiltIn ? 'readonly oncopy="return false;" oncut="return false;" oncontextmenu="return false;"' : ''}>`
                                 : `<input type="password" class="provider-key-input" data-provider="${key}" value="${provider.apiKey || ''}" placeholder="${t('API 密钥', 'API Key', 'API 金鑰')}" style="padding-right: 36px; width: 100%;">`
                             }
-                            ${key === 'agnes-ai'
+                            ${key === 'agnes-ai' && useBuiltIn
                                 ? ''
                                 : `<span class="btn-toggle-visibility" data-provider="${key}" style="position: absolute; right: 10px; cursor: pointer; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; font-size: 16px; user-select: none;">👁️</span>`
                             }
@@ -1308,21 +1332,162 @@ function toggleProviderInputsEditable() {
     const urlInput = document.querySelector('input.provider-url-input[data-provider="agnes-ai"]');
     const keyInput = document.querySelector('input.provider-key-input[data-provider="agnes-ai"]');
     const tipSpan = document.getElementById('agnes-built-in-tip');
+    const visibilityBtn = document.querySelector('.btn-toggle-visibility[data-provider="agnes-ai"]');
 
+    // 曜石/极光/流光大模型配置只读控制
     if (urlInput && keyInput) {
         if (useBuiltIn) {
             urlInput.disabled = true;
             keyInput.disabled = true;
+            keyInput.value = KEY_MASK;
+            keyInput.setAttribute('readonly', 'true');
             urlInput.style.opacity = '0.5';
             keyInput.style.opacity = '0.5';
             if (tipSpan) tipSpan.style.display = 'inline';
+            if (visibilityBtn) visibilityBtn.style.display = 'none';
         } else {
             urlInput.disabled = false;
             keyInput.disabled = false;
+            keyInput.removeAttribute('readonly');
+            
+            const savedKey = (localProviders['agnes-ai'] && localProviders['agnes-ai'].apiKey) || '';
+            if (savedKey === AGNES_BUILT_IN_KEY) {
+                keyInput.value = '';
+                if (localProviders['agnes-ai']) {
+                    localProviders['agnes-ai'].apiKey = '';
+                }
+            } else {
+                keyInput.value = savedKey;
+            }
+            
             urlInput.style.opacity = '1';
             keyInput.style.opacity = '1';
             if (tipSpan) tipSpan.style.display = 'none';
+            if (visibilityBtn) visibilityBtn.style.display = 'flex';
         }
+    }
+
+    // 图片与视频生成服务配置只读控制
+    const imageBaseInput = document.getElementById('image-api-base');
+    const imageKeyInput = document.getElementById('image-api-key');
+    const imageModelInput = document.getElementById('model-image');
+    const imageToggleBtn = document.getElementById('btn-toggle-image-key');
+
+    const videoBaseInput = document.getElementById('video-api-base');
+    const videoKeyInput = document.getElementById('video-api-key');
+    const videoModelInput = document.getElementById('model-video');
+    const videoToggleBtn = document.getElementById('btn-toggle-video-key');
+
+    if (useBuiltIn) {
+        // 图片只读与默认内置设定
+        if (imageBaseInput) {
+            imageBaseInput.value = 'https://apihub.agnes-ai.com/v1/image';
+            imageBaseInput.disabled = true;
+            imageBaseInput.style.opacity = '0.5';
+        }
+        if (imageKeyInput) {
+            imageKeyInput.value = KEY_MASK;
+            imageKeyInput.disabled = true;
+            imageKeyInput.setAttribute('readonly', 'true');
+            imageKeyInput.style.opacity = '0.5';
+        }
+        if (imageModelInput) {
+            imageModelInput.value = 'agnes-ai/agnes-image-2.0-flash';
+            imageModelInput.disabled = true;
+            imageModelInput.style.opacity = '0.5';
+        }
+        if (imageToggleBtn) imageToggleBtn.style.display = 'none';
+
+        // 视频只读与默认内置设定
+        if (videoBaseInput) {
+            videoBaseInput.value = 'https://apihub.agnes-ai.com/v1/videos';
+            videoBaseInput.disabled = true;
+            videoBaseInput.style.opacity = '0.5';
+        }
+        if (videoKeyInput) {
+            videoKeyInput.value = KEY_MASK;
+            videoKeyInput.disabled = true;
+            videoKeyInput.setAttribute('readonly', 'true');
+            videoKeyInput.style.opacity = '0.5';
+        }
+        if (videoModelInput) {
+            videoModelInput.value = 'agnes-ai/agnes-video-v2.0';
+            videoModelInput.disabled = true;
+            videoModelInput.style.opacity = '0.5';
+        }
+        if (videoToggleBtn) videoToggleBtn.style.display = 'none';
+    } else {
+        // 图片解除置灰
+        if (imageBaseInput) {
+            imageBaseInput.disabled = false;
+            imageBaseInput.style.opacity = '1';
+        }
+        if (imageKeyInput) {
+            imageKeyInput.disabled = false;
+            imageKeyInput.removeAttribute('readonly');
+            imageKeyInput.style.opacity = '1';
+            // 如果原本是内置密钥，则自动清空避嫌
+            const storedImgConfigStr = localStorage.getItem('client_pref_image_generator');
+            let storedImgKey = '';
+            if (storedImgConfigStr) {
+                try {
+                    storedImgKey = JSON.parse(storedImgConfigStr).apiKey || '';
+                } catch(e){}
+            }
+            if (storedImgKey === AGNES_BUILT_IN_KEY || imageKeyInput.value === KEY_MASK) {
+                imageKeyInput.value = '';
+            } else {
+                imageKeyInput.value = storedImgKey;
+            }
+        }
+        if (imageModelInput) {
+            imageModelInput.disabled = false;
+            imageModelInput.style.opacity = '1';
+            // 从配置重填原值
+            const storedImgModel = localStorage.getItem('client_pref_image_model');
+            if (storedImgModel) {
+                imageModelInput.value = storedImgModel;
+            } else if (configData && configData.agents && configData.agents.defaults && configData.agents.defaults.imageGenerationModel) {
+                imageModelInput.value = configData.agents.defaults.imageGenerationModel.primary || '';
+            }
+        }
+        if (imageToggleBtn) imageToggleBtn.style.display = 'flex';
+
+        // 视频解除置灰
+        if (videoBaseInput) {
+            videoBaseInput.disabled = false;
+            videoBaseInput.style.opacity = '1';
+        }
+        if (videoKeyInput) {
+            videoKeyInput.disabled = false;
+            videoKeyInput.removeAttribute('readonly');
+            videoKeyInput.style.opacity = '1';
+            // 如果原本是内置密钥，则自动清空避嫌
+            const storedVidConfigStr = localStorage.getItem('client_pref_video_generator');
+            let storedVidKey = '';
+            if (storedVidConfigStr) {
+                try {
+                    storedVidKey = JSON.parse(storedVidConfigStr).apiKey || '';
+                } catch(e){}
+            }
+            if (storedVidKey === AGNES_BUILT_IN_KEY || videoKeyInput.value === KEY_MASK) {
+                videoKeyInput.value = '';
+            } else {
+                videoKeyInput.value = storedVidKey;
+            }
+        }
+        if (videoModelInput) {
+            videoModelInput.disabled = false;
+            videoModelInput.style.opacity = '1';
+            // 从配置重填原值
+            const storedVidModel = localStorage.getItem('client_pref_video_model');
+            if (storedVidModel) {
+                videoModelInput.value = storedVidModel;
+            } else if (configData && configData.agents && configData.agents.defaults && configData.agents.defaults.videoGenerationModel) {
+                videoModelInput.value = configData.agents.defaults.videoGenerationModel.primary || '';
+            }
+        }
+        if (videoToggleBtn) videoToggleBtn.style.display = 'flex';
     }
 }
 
@@ -1470,6 +1635,7 @@ function bindProviderEvents() {
             const useBuiltIn = localStorage.getItem('setting_use_built_in_models') !== 'false';
             if (provider === 'agnes-ai' && useBuiltIn) {
                 baseUrl = 'https://apihub.agnes-ai.com/v1';
+                apiKey = AGNES_BUILT_IN_KEY;
             }
 
             if (!baseUrl) {
@@ -1596,7 +1762,7 @@ function bindProviderEvents() {
         });
     });
 
-    // 绑定测试连通性按钮点击事件
+    // 绑定检验连通性按钮点击事件
     document.querySelectorAll('.btn-test-connection').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             const provider = e.target.getAttribute('data-provider');
@@ -1608,12 +1774,16 @@ function bindProviderEvents() {
             
             let baseUrl = urlInput ? urlInput.value.trim() : '';
             let apiKey = keyInput ? keyInput.value.trim() : '';
+            if (apiKey.includes(',')) {
+                apiKey = apiKey.split(',')[0].trim();
+            }
             const apiType = apiSelect ? apiSelect.value : '';
 
             // 如果是 agnes-ai 并且启用了内置模型
             const useBuiltIn = localStorage.getItem('setting_use_built_in_models') !== 'false';
             if (provider === 'agnes-ai' && useBuiltIn) {
                 baseUrl = 'https://apihub.agnes-ai.com/v1';
+                apiKey = AGNES_BUILT_IN_KEY;
             }
 
             if (!baseUrl) {
@@ -1710,12 +1880,16 @@ function bindProviderEvents() {
             
             let baseUrl = urlInput ? urlInput.value.trim() : '';
             let apiKey = keyInput ? keyInput.value.trim() : '';
+            if (apiKey.includes(',')) {
+                apiKey = apiKey.split(',')[0].trim();
+            }
             const apiType = apiSelect ? apiSelect.value : '';
 
             // 如果是 agnes-ai 并且启用了内置模型
             const useBuiltIn = localStorage.getItem('setting_use_built_in_models') !== 'false';
             if (provider === 'agnes-ai' && useBuiltIn) {
                 baseUrl = 'https://apihub.agnes-ai.com/v1';
+                apiKey = AGNES_BUILT_IN_KEY;
             }
 
             if (!baseUrl) {
@@ -1960,6 +2134,7 @@ const handleSaveConfigAction = async () => {
     
     if (useBuiltIn && finalProviders['agnes-ai']) {
         finalProviders['agnes-ai'].baseUrl = 'https://apihub.agnes-ai.com/v1';
+        finalProviders['agnes-ai'].apiKey = AGNES_BUILT_IN_KEY;
     }
     
     configData.models.providers = finalProviders;
@@ -1968,8 +2143,12 @@ const handleSaveConfigAction = async () => {
     if (!configData.env) configData.env = {};
     for (const key of Object.keys(localProviders)) {
         const envKeyName = key.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase() + '_API_KEY';
-        if (localProviders[key].apiKey) {
-            configData.env[envKeyName] = localProviders[key].apiKey;
+        let val = localProviders[key].apiKey;
+        if (key === 'agnes-ai' && useBuiltIn) {
+            val = AGNES_BUILT_IN_KEY;
+        }
+        if (val) {
+            configData.env[envKeyName] = val;
         }
     }
 
@@ -1982,23 +2161,43 @@ const handleSaveConfigAction = async () => {
     configData.agents.defaults.model.primary = document.getElementById('model-primary').value.trim();
     configData.agents.defaults.model.fallbacks = [document.getElementById('model-fallback').value.trim()];
 
-    if (!configData.agents.defaults.imageGenerationModel) configData.agents.defaults.imageGenerationModel = {};
-    configData.agents.defaults.imageGenerationModel.primary = document.getElementById('model-image').value.trim();
-
-    if (!configData.agents.defaults.videoGenerationModel) configData.agents.defaults.videoGenerationModel = {};
-    configData.agents.defaults.videoGenerationModel.primary = document.getElementById('model-video').value.trim();
-
     if (!configData.videoGenerator) configData.videoGenerator = {};
-    configData.videoGenerator.apiBase = document.getElementById('video-api-base').value.trim();
-    configData.videoGenerator.apiKey = document.getElementById('video-api-key').value.trim();
-
     if (!configData.imageGenerator) configData.imageGenerator = {};
-    configData.imageGenerator.apiBase = document.getElementById('image-api-base').value.trim();
-    configData.imageGenerator.apiKey = document.getElementById('image-api-key').value.trim();
+
+    if (useBuiltIn) {
+        localStorage.setItem('client_pref_image_model', 'agnes-ai/agnes-image-2.0-flash');
+        localStorage.setItem('client_pref_video_model', 'agnes-ai/agnes-video-v2.0');
+
+        configData.imageGenerator.apiBase = 'https://apihub.agnes-ai.com/v1/image';
+        configData.imageGenerator.apiKey = AGNES_BUILT_IN_KEY;
+
+        configData.videoGenerator.apiBase = 'https://apihub.agnes-ai.com/v1/videos';
+        configData.videoGenerator.apiKey = AGNES_BUILT_IN_KEY;
+    } else {
+        const imageVal = document.getElementById('model-image').value.trim();
+        localStorage.setItem('client_pref_image_model', imageVal);
+
+        const videoVal = document.getElementById('model-video').value.trim();
+        localStorage.setItem('client_pref_video_model', videoVal);
+
+        configData.imageGenerator.apiBase = document.getElementById('image-api-base').value.trim();
+        const imgKey = document.getElementById('image-api-key').value.trim();
+        configData.imageGenerator.apiKey = (imgKey === KEY_MASK || imgKey === AGNES_BUILT_IN_KEY) ? '' : imgKey;
+
+        configData.videoGenerator.apiBase = document.getElementById('video-api-base').value.trim();
+        const vidKey = document.getElementById('video-api-key').value.trim();
+        configData.videoGenerator.apiKey = (vidKey === KEY_MASK || vidKey === AGNES_BUILT_IN_KEY) ? '' : vidKey;
+    }
 
     // 存储在本地 localStorage 供客户端回显使用
     localStorage.setItem('client_pref_video_generator', JSON.stringify(configData.videoGenerator));
     localStorage.setItem('client_pref_image_generator', JSON.stringify(configData.imageGenerator));
+
+    // 彻底从 configData 中删除非法字段以防止网关启动 Schema 校验崩溃闪退
+    if (configData.agents && configData.agents.defaults) {
+        delete configData.agents.defaults.imageGenerationModel;
+        delete configData.agents.defaults.videoGenerationModel;
+    }
 
     if (!configData.gateway) configData.gateway = {};
     configData.gateway.port = parseInt(document.getElementById('gateway-port').value, 10);
@@ -2157,18 +2356,24 @@ function updateProgressUI(val, textLabel = '') {
     }
 
     // 🌟 就绪 3 秒后优雅渐隐进度条
-    if (val === 100 && progressContainer) {
-        setTimeout(() => {
-            if (gatewayStatus === 'running' && currentProgress === 100) {
-                progressContainer.style.transition = 'opacity 0.8s ease';
-                progressContainer.style.opacity = '0';
-                setTimeout(() => {
-                    if (gatewayStatus === 'running' && currentProgress === 100) {
-                        progressContainer.style.display = 'none';
-                    }
-                }, 800);
-            }
-        }, 3000);
+    if (val === 100) {
+        if (progressInterval) {
+            clearInterval(progressInterval);
+            progressInterval = null;
+        }
+        if (progressContainer) {
+            setTimeout(() => {
+                if (gatewayStatus === 'running' && currentProgress === 100) {
+                    progressContainer.style.transition = 'opacity 0.8s ease';
+                    progressContainer.style.opacity = '0';
+                    setTimeout(() => {
+                        if (gatewayStatus === 'running' && currentProgress === 100) {
+                            progressContainer.style.display = 'none';
+                        }
+                    }, 800);
+                }
+            }, 3000);
+        }
     }
 }
 
@@ -2244,8 +2449,8 @@ function updateGatewayStatusUI(status) {
             if (uptimeEl) uptimeEl.innerText = timeStr;
         }, 1000);
 
-        // 停止假进度定时器
-        if (progressInterval) clearInterval(progressInterval);
+        // 不要在此处停止假进度定时器，等 handleReceivedLog 匹配 100% 后再清空
+        // if (progressInterval) clearInterval(progressInterval);
 
         if (currentProgress === 0) {
             // 说明是一打开程序就已经是运行状态（非手动点击启动），直接拉满到 100%
@@ -2412,28 +2617,58 @@ function setupTabSwitching() {
 
 // 8. 主题一键无缝切换
 function setupThemeSwitching() {
+    const pickerBlack = document.getElementById('theme-btn-black');
     const pickerDark = document.getElementById('theme-btn-dark');
     const pickerAurora = document.getElementById('theme-btn-aurora');
     const pickerLight = document.getElementById('theme-btn-light');
+    const dots = [pickerBlack, pickerDark, pickerAurora, pickerLight];
 
-    pickerDark.addEventListener('click', () => {
-        document.body.className = 'theme-dark';
-        localStorage.setItem('user-theme', 'theme-dark');
-    });
+    const updateActiveDot = (activeTheme) => {
+        dots.forEach(dot => {
+            if (dot) dot.classList.remove('active');
+        });
+        if (activeTheme === 'theme-black' && pickerBlack) pickerBlack.classList.add('active');
+        if (activeTheme === 'theme-dark' && pickerDark) pickerDark.classList.add('active');
+        if (activeTheme === 'theme-aurora' && pickerAurora) pickerAurora.classList.add('active');
+        if (activeTheme === 'theme-light' && pickerLight) pickerLight.classList.add('active');
+    };
 
-    pickerAurora.addEventListener('click', () => {
-        document.body.className = 'theme-aurora';
-        localStorage.setItem('user-theme', 'theme-aurora');
-    });
+    if (pickerBlack) {
+        pickerBlack.addEventListener('click', () => {
+            document.body.className = 'theme-black';
+            localStorage.setItem('user-theme', 'theme-black');
+            updateActiveDot('theme-black');
+        });
+    }
 
-    pickerLight.addEventListener('click', () => {
-        document.body.className = 'theme-light';
-        localStorage.setItem('user-theme', 'theme-light');
-    });
+    if (pickerDark) {
+        pickerDark.addEventListener('click', () => {
+            document.body.className = 'theme-dark';
+            localStorage.setItem('user-theme', 'theme-dark');
+            updateActiveDot('theme-dark');
+        });
+    }
+
+    if (pickerAurora) {
+        pickerAurora.addEventListener('click', () => {
+            document.body.className = 'theme-aurora';
+            localStorage.setItem('user-theme', 'theme-aurora');
+            updateActiveDot('theme-aurora');
+        });
+    }
+
+    if (pickerLight) {
+        pickerLight.addEventListener('click', () => {
+            document.body.className = 'theme-light';
+            localStorage.setItem('user-theme', 'theme-light');
+            updateActiveDot('theme-light');
+        });
+    }
 
     // 默认主题读取
     const savedTheme = localStorage.getItem('user-theme') || 'theme-dark';
     document.body.className = savedTheme;
+    updateActiveDot(savedTheme);
 }
 
 // 9. 用量可视化与商业级使用统计数据系统
@@ -3357,10 +3592,11 @@ function showToast(message) {
             position: fixed;
             bottom: 24px;
             right: 24px;
-            background: rgba(20, 16, 32, 0.95);
-            border: 1px solid rgba(140, 82, 255, 0.3);
-            box-shadow: 0 8px 32px rgba(140, 82, 255, 0.15), 0 0 15px rgba(140, 82, 255, 0.1);
-            color: white;
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), var(--accent-glow-reduced);
+            color: var(--text-primary);
+            backdrop-filter: blur(10px);
             padding: 12px 20px;
             border-radius: 8px;
             font-size: 13px;
@@ -3377,7 +3613,7 @@ function showToast(message) {
         document.body.appendChild(toast);
     }
     toast.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8c52ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-color)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         <span>${t(message)}</span>
     `;
     
@@ -3407,6 +3643,48 @@ function initChatView() {
     const previewBar = document.getElementById('chat-attachment-preview-bar');
     const previewImg = document.getElementById('img-attachment-preview');
     const refreshModelsBtn = document.getElementById('btn-refresh-chat-models');
+    
+    // 初始化快捷面板折叠状态
+    const quickPanel = document.getElementById('chat-quick-panel');
+    const toggleBtn = document.getElementById('btn-toggle-quick-panel');
+    const toggleIcon = document.getElementById('quick-panel-toggle-icon');
+    
+    const isCollapsed = localStorage.getItem('chat_quick_panel_collapsed') === 'true';
+    const toggleText = document.getElementById('quick-panel-toggle-text');
+    if (isCollapsed && quickPanel) {
+        quickPanel.style.maxHeight = '0px';
+        quickPanel.style.opacity = '0';
+        quickPanel.style.marginTop = '0px';
+        quickPanel.style.pointerEvents = 'none';
+        if (toggleText) toggleText.innerText = t('展开帮助', 'Show Help', '展開幫助');
+        if (toggleIcon) toggleIcon.style.transform = 'rotate(-180deg)';
+    }
+
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', () => {
+            const currentCollapsed = localStorage.getItem('chat_quick_panel_collapsed') === 'true';
+            const nextCollapsed = !currentCollapsed;
+            localStorage.setItem('chat_quick_panel_collapsed', nextCollapsed ? 'true' : 'false');
+            
+            if (nextCollapsed) {
+                // 收起帮助
+                quickPanel.style.maxHeight = '0px';
+                quickPanel.style.opacity = '0';
+                quickPanel.style.marginTop = '0px';
+                quickPanel.style.pointerEvents = 'none';
+                if (toggleText) toggleText.innerText = t('展开帮助', 'Show Help', '展開幫助');
+                if (toggleIcon) toggleIcon.style.transform = 'rotate(-180deg)';
+            } else {
+                // 展开帮助
+                quickPanel.style.maxHeight = '80px';
+                quickPanel.style.opacity = '1';
+                quickPanel.style.marginTop = '2px';
+                quickPanel.style.pointerEvents = 'auto';
+                if (toggleText) toggleText.innerText = t('收起帮助', 'Hide Help', '收起幫助');
+                if (toggleIcon) toggleIcon.style.transform = 'rotate(0deg)';
+            }
+        });
+    }
     
     // 生图与生视频按钮
     const btnDraw = document.getElementById('btn-chat-action-draw');
@@ -3450,21 +3728,52 @@ function initChatView() {
     // 绑定生图和生视频
     btnDraw.addEventListener('click', () => handleActionGenerate('image'));
     btnVideo.addEventListener('click', () => handleActionGenerate('video'));
+    
+    // 绑定系统常见帮助疑难问答一键咨询气泡事件
+    document.querySelectorAll('.help-tag-pill').forEach(pill => {
+        pill.addEventListener('click', (e) => {
+            const question = e.currentTarget.getAttribute('data-question');
+            if (question && inputArea) {
+                inputArea.value = question;
+                handleSendMessage();
+            }
+        });
+    });
 
     // 首次进入加载模型
     loadChatModels();
 }
 
-// 动态获取本地网关可用模型列表
-// 获取所有配置的厂家模型列表（直连不需要网关）
 async function loadChatModels() {
     const select = document.getElementById('chat-model-select');
+    if (!select) return;
     select.innerHTML = '';
     
     let hasModels = false;
 
-    // 遍历所有厂家
+    // 1. 如果启用了内置模型，强制将官方高速模型放于下拉菜单最顶端
+    const useBuiltIn = localStorage.getItem('setting_use_built_in_models') !== 'false';
+    if (useBuiltIn) {
+        const builtInOpts = [
+            { id: 'agnes-2.0-flash', label: 'agnes-ai / agnes-2.0-flash (内置默认)' },
+            { id: 'agnes-1.5-flash', label: 'agnes-ai / agnes-1.5-flash' },
+            { id: 'agnes-video-v2.0', label: 'agnes-ai / agnes-video-v2.0' }
+        ];
+        builtInOpts.forEach(optData => {
+            const opt = document.createElement('option');
+            opt.value = optData.id;
+            opt.setAttribute('data-provider', 'agnes-ai');
+            opt.innerText = optData.label;
+            select.appendChild(opt);
+        });
+        hasModels = true;
+    }
+
+    // 2. 遍历其它所有已配置的提供商大模型
     for (const providerKey of Object.keys(localProviders)) {
+        // 开启内置时，跳过重复渲染自定义配置中的 agnes-ai 选项
+        if (useBuiltIn && providerKey === 'agnes-ai') continue;
+        
         const provider = localProviders[providerKey];
         const models = provider.models || [];
         
@@ -3483,9 +3792,14 @@ async function loadChatModels() {
     if (!hasModels) {
         select.innerHTML = `
             <option value="agnes-2.0-flash" data-provider="agnes-ai">agnes-ai / agnes-2.0-flash (内置默认)</option>
-            <option value="agnes-1.5-flash" data-provider="agnes-ai">agnes-ai / agnes-1.5-flash (内置默认)</option>
-            <option value="agnes-video-v2.0" data-provider="agnes-ai">agnes-ai / agnes-video-v2.0 (内置默认)</option>
+            <option value="agnes-1.5-flash" data-provider="agnes-ai">agnes-ai / agnes-1.5-flash</option>
+            <option value="agnes-video-v2.0" data-provider="agnes-ai">agnes-ai / agnes-video-v2.0</option>
         `;
+    }
+
+    // 3. 强制在启用内置大模型时，默认选中 agnes-2.0-flash
+    if (useBuiltIn) {
+        select.value = 'agnes-2.0-flash';
     }
 }
 
@@ -3668,6 +3982,7 @@ async function handleSendMessage() {
     const useBuiltIn = localStorage.getItem('setting_use_built_in_models') !== 'false';
     if (providerKey === 'agnes-ai' && useBuiltIn) {
         baseUrl = 'https://apihub.agnes-ai.com/v1';
+        apiKey = AGNES_BUILT_IN_KEY;
     }
 
     if (!baseUrl) {
@@ -3685,6 +4000,46 @@ async function handleSendMessage() {
 
     try {
         const messages = [];
+        
+        // 自动注入 ClawAI / OpenClaw 智能系统帮助提示词，专门解惑系统应用内的疑难杂症
+        const systemPrompt = `你是一个专业的 ClawAI 系统应用智能客服小助手。你的工作是解答用户在使用本大模型网关客户端（ClawAI / OpenClaw）时遇到的各种操作疑问与疑难杂症。
+请根据以下真实的产品设计与常见问题排查方案，给出极其详尽、专业、条理清晰且温暖亲切的解答：
+
+1. **什么是内置模型？与本地网关的关系是什么？**
+   - 内置模型（Agnes AI）是官方提供的高速直连大模型通道。
+   - 当在【系统设置】中开启“内置模型启用”时，所有的对话和连通性测试直接走官方云端接口，**此时无需点击启动本地网关，也可以直接使用【模型会话】与 AI 对话！**
+   - 只有在使用本地机器人（如微信、Slack 等渠道）或者本地挂载 MCP 插件等本地深度网关生态时，才需要点击“启动网关”拉起本地后台网关。
+
+2. **如何配置多个 API Key 进行轮询与负载均衡？**
+   - **操作步骤**：首先前往【系统设置】**关闭“内置模型启用”**，随后前往【模型配置】，在您需要使用的模型提供商（如 SiliconFlow、DeepSeek、Agnes AI 等）的“API 密钥”输入框中，输入多个以英文逗号 \`,\` 分割的密钥，例如：\`sk-key1,sk-key2,sk-key3\`，然后点击“保存配置”。
+   - **轮询原理**：程序网络拦截层会在实际大模型通信时进行自动去重并在各个 Key 之间进行 Round-Robin 轮询（且前端在测试时会自动提取第一个 Key 进行测试防报错）。
+   - **内置模型自动轮询**：若您开启了“内置模型启用”，系统已内置了 4 个官方高速通道 Key，系统将全自动在这 4 个高速 Key 之间进行请求轮询分配，无需您任何配置！
+
+3. **点击“启动网关”按钮出现闪退、EADDRINUSE 报错怎么解决？**
+   - **主要成因**：网关通信所需的 18789 端口被残留的其他 Node 进程占用，或是上次网关退出时进程没有清理干净。
+   - **排查步骤**：
+     1. 应用自带了安全端口占用查询。在您点击“启动网关”时，会首先运行 \`netstat\` 定位并安全精准杀死占用 18789 的残留进程（且不误杀其它无关 Node 进程，不会连带导致应用闪退）。
+     2. 如果依然提示冲突，您可以手动打开电脑的“任务管理器”，在进程中找到并“结束”所有的 \`node.exe\` 进程，然后重新在客户端点击启动即可。
+     3. 确保不要以管理员身份拉起 npm 却以普通用户运行本应用，这会导致跨权限清理失败。
+
+4. **图片与视频生成接口检测时提示 404 (Not Found) 怎么解决？**
+   - **主要成因**：填写的 Base URL 接口路径名称在单复数匹配上出错。例如 stability 或者是部分提供商使用 \`/image\` 或 \`/video\`，而另外一些使用 \`/images\` 或 \`/videos\`。
+   - **自适应匹配**：系统目前已经原生升级支持了单复数（\`/image\`、\`/images\`、\`/video\`、\`/videos\`）的自动探测过滤与 CNAME 自适应。如果遇到 404，请确认您的 Base URL 是不是直接指向了厂家官方的 OpenAI 兼容端点（如 \`https://apihub.agnes-ai.com/v1/image\`），且密钥验证是有效的。
+   - **生图失败**：若测试连通且密钥有效但实际生图报错，请确认对应提供商账户下有充足余额，且没触发高频限流。
+
+5. **微信机器人掉线或无法连接怎么解决？**
+   - **版本匹配**：微信机器人使用注入挂钩（Hook）机制。必须确保您电脑上安装的微信 PC 版本与当前使用的微信机器人插件包（Weixin Provider）所支持的版本严格一致。
+   - **网络长连与 Clash 冲突（HTTPDNS）**：如果使用的是 Clash / Surge 等代理软件并开启了增强/TUN 模式，会导致域名被劫持为 198.18.x.x 的 Fake-IP。本应用内置了 HTTPDNS 智能解析技术，在连接微信服务器时会自动解析并直连微信的公网真实 IP 地址，完美绕过 Clash 代理劫持以确保长连不掉线。
+   - 如果依然经常断连，请尝试在代理软件中把微信域名（\`.weixin.qq.com\`）加入直连（Bypass）规则，或者在微信电脑版设置中关闭“自动休眠”。
+
+6. **界面菜单点不动或侧边栏收起问题**：
+   - 侧边栏支持精简收起，缩小后仅显示运行状态标记（如“正常”、“未启用”），可以节省空间。
+   - 如果遇到菜单异常冻结，直接按快捷键 Ctrl + R 刷新界面或重启软件即可。`;
+
+        messages.push({
+            role: 'system',
+            content: systemPrompt
+        });
         if (file) {
             messages.push({
                 role: 'user',
@@ -3801,14 +4156,20 @@ async function handleActionGenerate(type) {
             apiKey = vidKeyEl ? vidKeyEl.value.trim() : '';
         }
 
-        // 如果专用 key 为空，尝试从 agnes-ai 厂家的 key 获取
-        if (!apiKey) {
-            const agnesKeyInput = document.querySelector('input.provider-key-input[data-provider="agnes-ai"]');
-            if (agnesKeyInput) apiKey = agnesKeyInput.value.trim();
-        }
-        // 还为空则从 localProviders 获取
-        if (!apiKey && localProviders['agnes-ai']) {
-            apiKey = localProviders['agnes-ai'].apiKey || '';
+        const useBuiltIn = localStorage.getItem('setting_use_built_in_models') !== 'false';
+        if (useBuiltIn || !apiKey || apiKey === KEY_MASK) {
+            if (useBuiltIn) {
+                apiKey = AGNES_BUILT_IN_KEY;
+            } else {
+                const agnesKeyInput = document.querySelector('input.provider-key-input[data-provider="agnes-ai"]');
+                if (agnesKeyInput && agnesKeyInput.value.trim() !== KEY_MASK) {
+                    apiKey = agnesKeyInput.value.trim();
+                } else if (localProviders['agnes-ai'] && localProviders['agnes-ai'].apiKey && localProviders['agnes-ai'].apiKey !== KEY_MASK) {
+                    apiKey = localProviders['agnes-ai'].apiKey;
+                } else {
+                    apiKey = AGNES_BUILT_IN_KEY;
+                }
+            }
         }
 
         if (!apiKey) {
@@ -4153,6 +4514,14 @@ async function performGeneratorTest(type) {
     
     let baseUrl = urlInput ? urlInput.value.trim() : '';
     let apiKey = keyInput ? keyInput.value.trim() : '';
+    if (apiKey.includes(',')) {
+        apiKey = apiKey.split(',')[0].trim();
+    }
+
+    const useBuiltIn = localStorage.getItem('setting_use_built_in_models') !== 'false';
+    if (useBuiltIn && (!apiKey || apiKey === KEY_MASK)) {
+        apiKey = AGNES_BUILT_IN_KEY;
+    }
 
     if (!baseUrl) {
         alert(`请输入${type === 'image' ? '图片' : '视频'}生成 API 地址后再进行检验！`);
@@ -4173,8 +4542,12 @@ async function performGeneratorTest(type) {
     let testUrl = baseUrl;
     if (baseUrl.includes('/images')) {
         testUrl = baseUrl.replace('/images', '') + '/models';
+    } else if (baseUrl.includes('/image')) {
+        testUrl = baseUrl.replace('/image', '') + '/models';
     } else if (baseUrl.includes('/videos')) {
         testUrl = baseUrl.replace('/videos', '') + '/models';
+    } else if (baseUrl.includes('/video')) {
+        testUrl = baseUrl.replace('/video', '') + '/models';
     } else {
         testUrl = baseUrl.replace(/\/$/, '') + '/models';
     }
@@ -4249,6 +4622,14 @@ async function performGeneratorKeyTest(type) {
     
     let baseUrl = urlInput ? urlInput.value.trim() : '';
     let apiKey = keyInput ? keyInput.value.trim() : '';
+    if (apiKey.includes(',')) {
+        apiKey = apiKey.split(',')[0].trim();
+    }
+
+    const useBuiltIn = localStorage.getItem('setting_use_built_in_models') !== 'false';
+    if (useBuiltIn && (!apiKey || apiKey === KEY_MASK)) {
+        apiKey = AGNES_BUILT_IN_KEY;
+    }
 
     if (!baseUrl) {
         alert(`请输入${type === 'image' ? '图片' : '视频'}生成 API 地址后再进行检验！`);
@@ -4411,7 +4792,7 @@ async function updateWeChatStatusUI() {
                 if (result.details) {
                     if (detailId) {
                         detailId.innerText = result.details.accountId || '--';
-                        detailId.style.color = 'white';
+                        detailId.style.color = 'var(--text-primary)';
                     }
                     if (detailTime && result.details.savedAt) {
                         try {

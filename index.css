@@ -21,6 +21,23 @@
   --font-mono: 'JetBrains Mono', Consolas, monospace;
 }
 
+/* 曜石纯黑主题 */
+.theme-black {
+  --bg-base: radial-gradient(circle at 50% 50%, #0d0d0f 0%, #000000 100%);
+  --bg-panel: rgba(15, 15, 18, 0.7);
+  --bg-card: rgba(24, 24, 28, 0.5);
+  --bg-input: rgba(8, 8, 10, 0.8);
+  --text-primary: #e3e3e8;
+  --text-secondary: #7e7e8a;
+  --accent-color: #8c52ff;
+  --accent-rgb: 140, 82, 255;
+  --accent-glow: 0 0 25px rgba(140, 82, 255, 0.5);
+  --accent-glow-reduced: 0 0 10px rgba(140, 82, 255, 0.25);
+  --border-color: rgba(140, 82, 255, 0.15);
+  --border-focus: rgba(140, 82, 255, 0.5);
+  --scrollbar-thumb: rgba(140, 82, 255, 0.25);
+}
+
 /* 极光霓虹主题 */
 .theme-aurora {
   --bg-base: radial-gradient(circle at 50% 50%, #0b1c1e 0%, #050d0e 100%);
@@ -280,7 +297,8 @@ body.maximized .app-container {
   gap: 8px;
   overflow-y: auto;
   flex: 1;
-  padding-right: 4px;
+  margin: 0 -10px;
+  padding: 10px 14px 10px 10px;
 }
 
 .nav-item {
@@ -340,16 +358,28 @@ body.maximized .app-container {
   height: 16px;
   border-radius: 50%;
   cursor: pointer;
-  border: 2px solid transparent;
-  transition: transform 0.15s ease;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.2s ease;
+  box-sizing: border-box;
 }
 
+.theme-dot.black { background: #0c0c0e; border-color: rgba(255, 255, 255, 0.4); }
 .theme-dot.dark { background: #8c52ff; }
 .theme-dot.aurora { background: #00e676; }
-.theme-dot.light { background: #ffffff; border-color: #6200ee; }
+.theme-dot.light { background: #ffffff; border-color: rgba(0, 0, 0, 0.15) !important; }
 
 .theme-dot:hover {
   transform: scale(1.2);
+}
+
+.theme-dot.active {
+  border-color: white !important;
+  transform: scale(1.25);
+  box-shadow: 0 0 10px var(--accent-color);
+}
+
+.theme-light .theme-dot.active {
+  border-color: #2a253d !important;
 }
 
 .settings-bar {
@@ -549,6 +579,10 @@ body.maximized .app-container {
   min-height: 0;
 }
 
+.theme-light .log-terminal {
+  color: #2a253d;
+}
+
 .console-right {
   width: 180px;
   display: flex;
@@ -574,8 +608,8 @@ body.maximized .app-container {
 }
 
 .gateway-big-btn.stopped {
-  background: linear-gradient(135deg, #8c52ff 0%, #6200ee 100%);
-  box-shadow: 0 10px 25px rgba(140, 82, 255, 0.35);
+  background: linear-gradient(135deg, var(--accent-color) 0%, rgba(var(--accent-rgb), 0.7) 100%);
+  box-shadow: 0 10px 25px rgba(var(--accent-rgb), 0.35);
 }
 
 .gateway-big-btn.running {
@@ -1347,7 +1381,9 @@ input:focus, select:focus, textarea:focus {
   justify-content: center !important;
 }
 
-.sidebar.collapsed .status-text-zone {
+.sidebar.collapsed .status-text-zone,
+.sidebar.collapsed .status-app-icon,
+.sidebar.collapsed .status-percentage {
   display: none !important;
 }
 

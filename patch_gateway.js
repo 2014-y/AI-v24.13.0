@@ -7,6 +7,146 @@ if (globalThis.__TOKENGUARD_PATCHED__) {
 }
 globalThis.__TOKENGUARD_PATCHED__ = true;
 
+// ─── 全局 API Key 轮询负载均衡器 ───
+const BUILT_IN_KEYS = [
+    'sk-95sX8HnNOhh8FFfAm3ccOgGFg6MA8yf7zU5PEEQdGxSuKhQY',
+    'sk-HV5HINAfAhMJOnYxYp83ZXDLqeudt8ofLtdm9Bj5p9SUOUGh',
+    'sk-Y6ORz4nnuXHUpwjdXv2WlmLMwCfPBMtmh69iuXxZkQtZazyV',
+    'sk-GhS6TUB6W8LibJT5whDhbUvmYW3csM0HdGDdjotpgadQbd2F'
+];
+
+const rotators = new Map();
+function getNextKey(rawKey, keys) {
+    let idx = rotators.get(rawKey) || 0;
+    if (idx >= keys.length) idx = 0;
+    const key = keys[idx];
+    rotators.set(rawKey, (idx + 1) % keys.length);
+    return key;
+}
+
+function patchHeadersInArguments(args) {
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        if (arg && typeof arg === 'object' && arg.headers) {
+            // 兼容各种大小写 Authorization 头部
+            const authKey = Object.keys(arg.headers).find(k => k.toLowerCase() === 'authorization');
+            if (authKey) {
+                const authVal = arg.headers[authKey];
+                if (typeof authVal === 'string' && authVal.startsWith('Bearer ')) {
+                    const rawKey = authVal.substring(7).trim();
+                    let keys = [];
+                    // 1. 如果使用的是内置核心密钥，自动扩展为 4 个内置高速 Key 组成的轮询池
+                    if (rawKey === 'sk-95sX8HnNOhh8FFfAm3ccOgGFg6MA8yf7zU5PEEQdGxSuKhQY') {
+                        keys = [...BUILT_IN_KEYS];
+                    } else if (rawKey.includes(',')) {
+                        // 2. 自定义输入框填入了逗号分隔的多 Key 格式，支持去重合并
+                        const rawSplit = rawKey.split(',').map(k => k.trim()).filter(Boolean);
+                        // 去重合并：如果用户手动填的 Key 包含了内置 Key，防止其重复执行
+                        keys = Array.from(new Set(rawSplit));
+                    }
+                    
+                    if (keys.length > 0) {
+                        const selectedKey = getNextKey(rawKey, keys);
+                        arg.headers[authKey] = `Bearer ${selectedKey}`;
+                        console.log(`[TokenGuard] API Key rotated (index ${keys.indexOf(selectedKey)}): ${selectedKey.substring(0, 12)}...`);
+                    }
+                }
+            }
+            // 兼容 api-key 或是 x-api-key 格式
+            const apiKeyName = Object.keys(arg.headers).find(k => k.toLowerCase() === 'api-key' || k.toLowerCase() === 'x-api-key');
+            if (apiKeyName) {
+                const apiVal = arg.headers[apiKeyName];
+                if (typeof apiVal === 'string') {
+                    let keys = [];
+                    if (apiVal === 'sk-95sX8HnNOhh8FFfAm3ccOgGFg6MA8yf7zU5PEEQdGxSuKhQY') {
+                        keys = [...BUILT_IN_KEYS];
+                    } else if (apiVal.includes(',')) {
+                        keys = Array.from(new Set(apiVal.split(',').map(k => k.trim()).filter(Boolean)));
+                    }
+                    if (keys.length > 0) {
+                        const selectedKey = getNextKey(apiVal, keys);
+                        arg.headers[apiKeyName] = selectedKey;
+                        console.log(`[TokenGuard] API Key rotated (index ${keys.indexOf(selectedKey)}): ${selectedKey.substring(0, 12)}...`);
+                    }
+                }
+            }
+            break;
+        }
+    }
+}
+
+function patchFetchHeaders(headersObj) {
+    if (!headersObj) return;
+    if (typeof headersObj.set === 'function' && typeof headersObj.get === 'function') {
+        let authVal = headersObj.get('Authorization');
+        if (typeof authVal === 'string' && authVal.startsWith('Bearer ')) {
+            const rawKey = authVal.substring(7).trim();
+            let keys = [];
+            if (rawKey === 'sk-95sX8HnNOhh8FFfAm3ccOgGFg6MA8yf7zU5PEEQdGxSuKhQY') {
+                keys = [...BUILT_IN_KEYS];
+            } else if (rawKey.includes(',')) {
+                keys = Array.from(new Set(rawKey.split(',').map(k => k.trim()).filter(Boolean)));
+            }
+            if (keys.length > 0) {
+                const selectedKey = getNextKey(rawKey, keys);
+                headersObj.set('Authorization', `Bearer ${selectedKey}`);
+                console.log(`[TokenGuard] Fetch API Key rotated (index ${keys.indexOf(selectedKey)}): ${selectedKey.substring(0, 12)}...`);
+            }
+        }
+        let apiKeyVal = headersObj.get('api-key') || headersObj.get('x-api-key');
+        if (typeof apiKeyVal === 'string') {
+            let keys = [];
+            if (apiKeyVal === 'sk-95sX8HnNOhh8FFfAm3ccOgGFg6MA8yf7zU5PEEQdGxSuKhQY') {
+                keys = [...BUILT_IN_KEYS];
+            } else if (apiKeyVal.includes(',')) {
+                keys = Array.from(new Set(apiKeyVal.split(',').map(k => k.trim()).filter(Boolean)));
+            }
+            if (keys.length > 0) {
+                const selectedKey = getNextKey(apiKeyVal, keys);
+                if (headersObj.has('api-key')) headersObj.set('api-key', selectedKey);
+                if (headersObj.has('x-api-key')) headersObj.set('x-api-key', selectedKey);
+                console.log(`[TokenGuard] Fetch API Key rotated (index ${keys.indexOf(selectedKey)}): ${selectedKey.substring(0, 12)}...`);
+            }
+        }
+    } else {
+        const authKey = Object.keys(headersObj).find(k => k.toLowerCase() === 'authorization');
+        if (authKey) {
+            const authVal = headersObj[authKey];
+            if (typeof authVal === 'string' && authVal.startsWith('Bearer ')) {
+                const rawKey = authVal.substring(7).trim();
+                let keys = [];
+                if (rawKey === 'sk-95sX8HnNOhh8FFfAm3ccOgGFg6MA8yf7zU5PEEQdGxSuKhQY') {
+                    keys = [...BUILT_IN_KEYS];
+                } else if (rawKey.includes(',')) {
+                    keys = Array.from(new Set(rawKey.split(',').map(k => k.trim()).filter(Boolean)));
+                }
+                if (keys.length > 0) {
+                    const selectedKey = getNextKey(rawKey, keys);
+                    headersObj[authKey] = `Bearer ${selectedKey}`;
+                    console.log(`[TokenGuard] Fetch API Key rotated (index ${keys.indexOf(selectedKey)}): ${selectedKey.substring(0, 12)}...`);
+                }
+            }
+        }
+        const apiKeyName = Object.keys(headersObj).find(k => k.toLowerCase() === 'api-key' || k.toLowerCase() === 'x-api-key');
+        if (apiKeyName) {
+            const apiVal = headersObj[apiKeyName];
+            if (typeof apiVal === 'string') {
+                let keys = [];
+                if (apiVal === 'sk-95sX8HnNOhh8FFfAm3ccOgGFg6MA8yf7zU5PEEQdGxSuKhQY') {
+                    keys = [...BUILT_IN_KEYS];
+                } else if (apiVal.includes(',')) {
+                    keys = Array.from(new Set(apiVal.split(',').map(k => k.trim()).filter(Boolean)));
+                }
+                if (keys.length > 0) {
+                    const selectedKey = getNextKey(apiVal, keys);
+                    headersObj[apiKeyName] = selectedKey;
+                    console.log(`[TokenGuard] Fetch API Key rotated (index ${keys.indexOf(selectedKey)}): ${selectedKey.substring(0, 12)}...`);
+                }
+            }
+        }
+    }
+}
+
 const http = require('http');
 const https = require('https');
 const fs = require('fs');
@@ -527,6 +667,11 @@ function parseAndSaveCompletionsLog(bodyText, hostOrUrl, elapsedMs) {
 // ─── 代理 1：http/https.request 拦截通道 ───
 function wrapRequest(originalRequest, defaultProto) {
     return function(options, callback) {
+        try {
+            patchHeadersInArguments(arguments);
+        } catch (e) {
+            console.error('[TokenGuard] Error in patchHeadersInArguments:', e);
+        }
         let host = '';
         let pathStr = '';
         let startMs = Date.now();
@@ -586,6 +731,15 @@ console.log('[TokenGuard] Transparent HTTP/HTTPS request hooks successfully load
 // ─── 代理 2：fetch / globalThis.fetch 拦截通道 (Node 18+ 闭环) ───
 function wrapFetch(originalFetch) {
     return async function(input, init) {
+        try {
+            if (init && init.headers) {
+                patchFetchHeaders(init.headers);
+            } else if (input && input.headers) {
+                patchFetchHeaders(input.headers);
+            }
+        } catch (e) {
+            console.error('[TokenGuard] Error in patchFetchHeaders:', e);
+        }
         let url = '';
         if (typeof input === 'string') {
             url = input;
