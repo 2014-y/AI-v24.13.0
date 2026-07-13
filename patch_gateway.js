@@ -763,6 +763,95 @@ function wrapRequest(originalRequest, defaultProto) {
         let clientRequest = originalRequest.apply(this, arguments);
 
         if (isCompletions) {
+            // ─── A. 请求体干预 (剔除本地模型的 tools 并清洗上下文) ───
+            let requestChunks = [];
+            const originalWrite = clientRequest.write;
+            const originalEnd = clientRequest.end;
+            
+            clientRequest.write = function(chunk, encoding, callback) {
+                if (chunk) {
+                    requestChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding));
+                }
+                return true;
+            };
+            
+            clientRequest.end = function(chunk, encoding, callback) {
+                if (chunk) {
+                    requestChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding));
+                }
+                
+                let finalBuffer = Buffer.concat(requestChunks);
+                try {
+                    let bodyStr = finalBuffer.toString('utf8');
+                    let parsedBody = JSON.parse(bodyStr);
+                    let hasModified = false;
+                    
+                    // 1. 清洗历史会话脏数据
+                    if (Array.isArray(parsedBody.messages)) {
+                        let cleanedMessages = [];
+                        for (let msg of parsedBody.messages) {
+                            if (!msg || typeof msg !== 'object') continue;
+                            let content = msg.content || '';
+                            if (typeof content === 'string') {
+                                if (content.includes('None of the functions provided') || 
+                                    content.includes('None of the functions in the provided list') ||
+                                    content.includes('None of the functions listed')) {
+                                    hasModified = true;
+                                    continue;
+                                }
+                                if (content.includes('"name"') && content.includes('"tts"') && content.includes('"arguments"')) {
+                                    hasModified = true;
+                                    try {
+                                        const textMatch = content.match(/"text"\s*:\s*"([^"]+)"/);
+                                        if (textMatch && textMatch[1]) {
+                                            msg.content = textMatch[1];
+                                        } else {
+                                            msg.content = '你好';
+                                        }
+                                    } catch (e) {
+                                        msg.content = '你好';
+                                    }
+                                }
+                            }
+                            cleanedMessages.push(msg);
+                        }
+                        if (parsedBody.messages.length !== cleanedMessages.length) hasModified = true;
+                        parsedBody.messages = cleanedMessages;
+                    }
+                    
+                    // 2. 本地模型判定
+                    const isLocalModel = parsedBody.model && (
+                        String(parsedBody.model).includes('ollama') || 
+                        String(parsedBody.model).includes('gemma') || 
+                        String(parsedBody.model).includes('jarvis') ||
+                        String(parsedBody.model).includes('qwen') ||
+                        String(parsedBody.model).includes('deepseek') ||
+                        String(parsedBody.model).includes('llama') ||
+                        (host && (host.includes('11434') || host.includes('localhost') || host.includes('127.0.0.1')))
+                    );
+                    
+                    // 3. 剔除 tools
+                    if (isLocalModel && (parsedBody.tools || parsedBody.tool_choice)) {
+                        delete parsedBody.tools;
+                        delete parsedBody.tool_choice;
+                        hasModified = true;
+                    }
+                    
+                    if (hasModified) {
+                        const newBodyStr = JSON.stringify(parsedBody);
+                        finalBuffer = Buffer.from(newBodyStr, 'utf8');
+                        clientRequest.setHeader('Content-Length', finalBuffer.length);
+                        console.log(`[TokenGuard] Cleaned messages and stripped tools in http.request for model: ${parsedBody.model}`);
+                    }
+                } catch (e) {}
+                
+                if (finalBuffer.length > 0) {
+                    originalWrite.call(clientRequest, finalBuffer);
+                }
+                return originalEnd.call(clientRequest, null, null, callback);
+            };
+
+            // ─── B. 响应体无损旁路监听 (统计 Token) ───
             clientRequest.on('response', (res) => {
                 let chunks = [];
                 const originalEmit = res.emit;
