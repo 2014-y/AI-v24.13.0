@@ -822,6 +822,71 @@ function wrapFetch(originalFetch) {
         const isCompletions = url.includes('/completions') || url.includes('/embeddings');
         const startMs = Date.now();
         
+        // 自动干预大模型请求，剔除本地模型的 tools 并清洗上下文脏数据
+        if (isCompletions && init && init.body && typeof init.body === 'string') {
+            try {
+                let parsedBody = JSON.parse(init.body);
+                
+                // 1. 自愈逻辑：清洗历史会话中的脏数据（过滤报错，将硬编码的工具调用重写为纯文本）
+                if (Array.isArray(parsedBody.messages)) {
+                    let cleanedMessages = [];
+                    for (let msg of parsedBody.messages) {
+                        if (!msg || typeof msg !== 'object') continue;
+                        let content = msg.content || '';
+                        if (typeof content === 'string') {
+                            // 丢弃无用的工具调用报错回显
+                            if (content.includes('None of the functions provided') || 
+                                content.includes('None of the functions in the provided list') ||
+                                content.includes('None of the functions listed')) {
+                                continue;
+                            }
+                            // 如果本地模型之前幻觉输出了包含 "name"、"tts"、"arguments" 的纯文本
+                            // 例如 "ronics {"name": "tts", "arguments": {"text": "你好"}}"
+                            // 我们在此自愈，将其重写为 "你好" 纯文本
+                            if (content.includes('"name"') && content.includes('"tts"') && content.includes('"arguments"')) {
+                                try {
+                                    const textMatch = content.match(/"text"\s*:\s*"([^"]+)"/);
+                                    if (textMatch && textMatch[1]) {
+                                        msg.content = textMatch[1];
+                                    } else {
+                                        msg.content = '你好';
+                                    }
+                                } catch (e) {
+                                    msg.content = '你好';
+                                }
+                            }
+                        }
+                        cleanedMessages.push(msg);
+                    }
+                    parsedBody.messages = cleanedMessages;
+                }
+                
+                // 2. 本地模型判定：检查是否是本地 Ollama/Llama 或是直连本地模型
+                const isLocalModel = parsedBody.model && (
+                    String(parsedBody.model).includes('ollama') || 
+                    String(parsedBody.model).includes('gemma') || 
+                    String(parsedBody.model).includes('jarvis') ||
+                    String(parsedBody.model).includes('qwen') ||
+                    String(parsedBody.model).includes('deepseek') ||
+                    String(parsedBody.model).includes('llama') ||
+                    url.includes('11434') ||
+                    url.includes('localhost') ||
+                    url.includes('127.0.0.1')
+                );
+                
+                // 3. 如果是本地模型，强行剔除 tools 和 tool_choice，防止其出现工具调用幻觉
+                if (isLocalModel && (parsedBody.tools || parsedBody.tool_choice)) {
+                    delete parsedBody.tools;
+                    delete parsedBody.tool_choice;
+                    console.log(`[TokenGuard] Cleaned messages and stripped tools for local model: ${parsedBody.model}`);
+                }
+                
+                init.body = JSON.stringify(parsedBody);
+            } catch (err) {
+                // 仅作防爆，解析失败不阻断请求
+            }
+        }
+        
         try {
             if (isCompletions) {
                 const response = await originalFetch.apply(this, arguments);
