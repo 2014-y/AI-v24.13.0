@@ -306,6 +306,12 @@
     }
   },
   "tools": {
+    "deny": ["tts"],
+    "byProvider": {
+      "ollama": {
+        "profile": "minimal"
+      }
+    },
     "media": {
       "image": {
         "models": [
