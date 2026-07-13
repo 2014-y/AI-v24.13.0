@@ -757,7 +757,8 @@ select option {
 /* --- 插件卡片 Tab --- */
 .plugins-masonry {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  align-content: start;
   gap: 16px;
   flex: 1;
   overflow-y: auto;
@@ -773,11 +774,13 @@ select option {
   flex-direction: column;
   justify-content: space-between;
   gap: 16px;
-  transition: transform 0.2s ease;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
 .plugin-card-item:hover {
   transform: translateY(-2px);
+  border-color: var(--border-focus);
+  box-shadow: 0 8px 24px rgba(var(--accent-rgb), 0.15);
 }
 
 .plugin-card-top h4 {
