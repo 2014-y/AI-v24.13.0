@@ -765,31 +765,42 @@ function wrapRequest(originalRequest, defaultProto) {
         if (isCompletions) {
             clientRequest.on('response', (res) => {
                 let chunks = [];
-                res.on('data', (chunk) => {
-                    chunks.push(chunk);
-                });
-                res.on('end', () => {
-                    const elapsed = Date.now() - startMs;
-                    try {
-                        const buffer = Buffer.concat(chunks);
-                        let bodyText = '';
-                        const encoding = res.headers['content-encoding'];
-                        try {
-                            if (encoding === 'gzip') {
-                                bodyText = require('zlib').gunzipSync(buffer).toString('utf8');
-                            } else if (encoding === 'br') {
-                                bodyText = require('zlib').brotliDecompressSync(buffer).toString('utf8');
-                            } else if (encoding === 'deflate') {
-                                bodyText = require('zlib').inflateSync(buffer).toString('utf8');
-                            } else {
-                                bodyText = buffer.toString('utf8');
-                            }
-                        } catch (decompressErr) {
-                            bodyText = buffer.toString('utf8');
+                const originalEmit = res.emit;
+                res.emit = function(event, ...args) {
+                    if (event === 'data') {
+                        const chunk = args[0];
+                        if (chunk) {
+                            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
                         }
-                        parseAndSaveCompletionsLog(bodyText, host || defaultProto, elapsed);
-                    } catch(err) {}
-                });
+                    } else if (event === 'end' || event === 'close') {
+                        if (!res.__COMPLETIONS_PARSED__) {
+                            res.__COMPLETIONS_PARSED__ = true;
+                            const elapsed = Date.now() - startMs;
+                            process.nextTick(() => {
+                                try {
+                                    const buffer = Buffer.concat(chunks);
+                                    let bodyText = '';
+                                    const encoding = res.headers['content-encoding'];
+                                    try {
+                                        if (encoding === 'gzip') {
+                                            bodyText = require('zlib').gunzipSync(buffer).toString('utf8');
+                                        } else if (encoding === 'br') {
+                                            bodyText = require('zlib').brotliDecompressSync(buffer).toString('utf8');
+                                        } else if (encoding === 'deflate') {
+                                            bodyText = require('zlib').inflateSync(buffer).toString('utf8');
+                                        } else {
+                                            bodyText = buffer.toString('utf8');
+                                        }
+                                    } catch (decompressErr) {
+                                        bodyText = buffer.toString('utf8');
+                                    }
+                                    parseAndSaveCompletionsLog(bodyText, host || defaultProto, elapsed);
+                                } catch(err) {}
+                            });
+                        }
+                    }
+                    return originalEmit.apply(this, arguments);
+                };
             });
         }
         return clientRequest;
