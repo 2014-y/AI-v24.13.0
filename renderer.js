@@ -1440,7 +1440,7 @@ function setupIpcListeners() {
 
                     totalRequestCount++;
                     const totalReqEl = document.getElementById('stat-total-requests');
-                    if (totalReqEl) totalReqEl.innerText = `${totalRequestCount} 次`;
+                    if (totalReqEl) totalReqEl.innerText = `${totalRequestCount}${t('次', '', '次')}`;
                 }
             }
         }
@@ -3695,6 +3695,20 @@ async function renderUsageCharts() {
     };
     lineData = processedLineData;
 
+    // 计算属于今天的请求总数并同步到网关状态界面
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayTimestamp = todayStart.getTime();
+    const todayLogs = (stats.logs || []).filter(log => {
+        const ts = log.timestamp || (log.time ? new Date(log.time).getTime() : Date.now());
+        return ts >= todayTimestamp;
+    });
+    totalRequestCount = todayLogs.length;
+    const totalReqEl = document.getElementById('stat-total-requests');
+    if (totalReqEl) {
+        totalReqEl.innerText = `${totalRequestCount}${t('次', '', '次')}`;
+    }
+
     // 更新界面核心汇总卡片的数字看板
     document.getElementById('summary-tokens').innerText = stats.total_tokens.toLocaleString();
     const tokensApprox = document.getElementById('summary-tokens-approx');
@@ -5791,7 +5805,7 @@ async function updateConsoleChannelStatusUI() {
         try {
             const result = await window.api.checkWeChatStatus();
             if (result.bound) {
-                setConsoleStatus(t('已启用', 'Enabled', '已啟用'), true);
+                setConsoleStatus(t('已配置', 'Configured', '已配置'), true);
                 const savedAtStr = result.details.savedAt ? new Date(result.details.savedAt).toLocaleString('zh-CN', { hour12: false }) : '--';
                 detailsEl.innerHTML = `
                     <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">${t('👤 微信绑定信息', '👤 WeChat Binding Info', '👤 微信綁定信息')}</div>
@@ -5800,7 +5814,7 @@ async function updateConsoleChannelStatusUI() {
                     <div style="margin-top: 10px; width: 100%;"><a href="#" id="lnk-go-communication" class="console-go-bind-btn">${t('⚙️ 去通讯管理解绑/绑定', '⚙️ Go to Channels to bind/unbind', '⚙️ 去通訊管理解綁/綁定')}</a></div>
                 `;
             } else {
-                setConsoleStatus(t('未启用', 'Disabled', '未啟用'), false);
+                setConsoleStatus(t('未配置', 'Not Configured', '未配置'), false);
                 detailsEl.innerHTML = `
                     <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">${t('👤 微信绑定信息', '👤 WeChat Binding Info', '👤 微信綁定信息')}</div>
                     <div style="color: #ff5252; font-weight: bold;">${t('当前未绑定微信', 'WeChat is not bound', '當前未綁定微信')}</div>
@@ -5819,7 +5833,7 @@ async function updateConsoleChannelStatusUI() {
         const isEnabled = feishu.enabled !== false && Object.keys(accounts).length > 0;
 
         if (isEnabled) {
-            setConsoleStatus(t('已启用', 'Enabled', '已啟用'), true);
+            setConsoleStatus(t('已配置', 'Configured', '已配置'), true);
             const defaultAcc = accounts[defaultAccId] || {};
             detailsEl.innerHTML = `
                 <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">${t('👤 飞书绑定信息', '👤 Feishu Binding Info', '👤 飛書綁定信息')}</div>
@@ -5828,7 +5842,7 @@ async function updateConsoleChannelStatusUI() {
                 <div style="margin-top: 10px; width: 100%;"><a href="#" id="lnk-go-communication" class="console-go-bind-btn">${t('⚙️ 去通讯管理管理飞书账号', '⚙️ Go to Channels to manage Feishu', '⚙️ 去通訊管理管理飛書帳號')}</a></div>
             `;
         } else {
-            setConsoleStatus(t('未启用', 'Disabled', '未啟用'), false);
+            setConsoleStatus(t('未配置', 'Not Configured', '未配置'), false);
             detailsEl.innerHTML = `
                 <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">${t('👤 飞书绑定信息', '👤 Feishu Binding Info', '👤 飛書綁定信息')}</div>
                 <div style="color: #ff5252; font-weight: bold;">${t('当前未配置飞书账号', 'Feishu account not configured', '當前未配置飛書帳號')}</div>
@@ -5844,7 +5858,7 @@ async function updateConsoleChannelStatusUI() {
         const isEnabled = qqbot.enabled === true && Object.keys(accounts).length > 0;
 
         if (isEnabled) {
-            setConsoleStatus(t('已启用', 'Enabled', '已啟用'), true);
+            setConsoleStatus(t('已配置', 'Configured', '已配置'), true);
             const defaultAcc = accounts[defaultAccId] || {};
             detailsEl.innerHTML = `
                 <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">${t('👤 QQ机器人绑定', '👤 QQ Bot Binding Info', '👤 QQ機器人綁定')}</div>
@@ -5853,7 +5867,7 @@ async function updateConsoleChannelStatusUI() {
                 <div style="margin-top: 10px; width: 100%;"><a href="#" id="lnk-go-communication" class="console-go-bind-btn">${t('⚙️ 去通讯管理管理QQ机器人', '⚙️ Go to Channels to manage QQ Bot', '⚙️ 去通訊管理管理QQ機器人')}</a></div>
             `;
         } else {
-            setConsoleStatus(t('未启用', 'Disabled', '未啟用'), false);
+            setConsoleStatus(t('未配置', 'Not Configured', '未配置'), false);
             detailsEl.innerHTML = `
                 <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">${t('👤 QQ机器人绑定', '👤 QQ Bot Binding Info', '👤 QQ機器人綁定')}</div>
                 <div style="color: #ff5252; font-weight: bold;">${t('当前未配置QQ机器人', 'QQ Bot not configured', '當前未配置QQ機器人')}</div>
