@@ -461,7 +461,9 @@ const BUNDLED_NPM_CHANNEL_PLUGINS = [
     { id: 'openclaw-weixin', candidates: [path.join('node_modules', '@tencent-weixin', 'openclaw-weixin')] },
     { id: 'qqbot', candidates: [path.join('node_modules', '@openclaw', 'qqbot')] },
     { id: 'feishu', candidates: [path.join('node_modules', '@openclaw', 'feishu')] },
-    { id: 'voice-call', candidates: [path.join('node_modules', '@openclaw', 'voice-call')] },
+    // voice-call 不要写入 load.paths：以 load.paths 加载会被当成非官方插件，
+    // OpenClaw 2026.7+ 会拒绝 openKeyedStore（通话记录 SQLite），报 trusted plugins 错误。
+    // 保留 package.json 依赖以随包交付；运行时走 AppData 里的官方 npm 安装记录。
     { id: 'slack', candidates: [path.join('node_modules', '@openclaw', 'slack')] },
     { id: 'whatsapp', candidates: [path.join('node_modules', '@openclaw', 'whatsapp')] },
     { id: 'matrix', candidates: [path.join('node_modules', '@openclaw', 'matrix')] }
@@ -1529,6 +1531,11 @@ ipcMain.handle('config-read', async () => {
         const originalPaths = config.plugins.load.paths || [];
         const filteredPaths = originalPaths.filter(p => {
             if (typeof p !== 'string') return false;
+            // 迁移：剔除 load.paths 里的 voice-call，避免 trusted store 被拒
+            if (/[\\/]@openclaw[\\/]voice-call(?:[\\/]|$)/i.test(p) || /[\\/]voice-call$/i.test(p)) {
+                needsSave = true;
+                return false;
+            }
             // 过滤掉所有不一致的微信插件旧路径
             if (p.endsWith('openclaw-weixin') && path.resolve(p) !== path.resolve(weixinPluginPath)) {
                 return false;
@@ -1536,7 +1543,7 @@ ipcMain.handle('config-read', async () => {
             return true;
         });
 
-        // 把随包 npm 渠道插件（微信 / QQ / 飞书 / Slack / WhatsApp / Matrix / 语音）注入 load.paths，
+        // 把随包 npm 渠道插件（微信 / QQ / 飞书 / Slack / WhatsApp / Matrix）注入 load.paths，
         // 保证别人电脑开箱即用，不依赖 openclaw plugins install / 联网下载。
         for (const entry of BUNDLED_NPM_CHANNEL_PLUGINS) {
             const abs = resolveBundledNpmPluginPath(entry);
@@ -1556,6 +1563,16 @@ ipcMain.handle('config-read', async () => {
                 config.plugins.allow.push(entry.id);
                 needsSave = true;
             }
+        }
+
+        // voice-call：只保留 entry/allow，不走 load.paths（否则 openKeyedStore 报 trusted 错误）
+        if (!config.plugins.entries['voice-call']) {
+            config.plugins.entries['voice-call'] = { enabled: true };
+            needsSave = true;
+        }
+        if (config.plugins.entries['voice-call'].enabled === true && !config.plugins.allow.includes('voice-call')) {
+            config.plugins.allow.push('voice-call');
+            needsSave = true;
         }
         
         if (JSON.stringify(config.plugins.load.paths) !== JSON.stringify(filteredPaths)) {
