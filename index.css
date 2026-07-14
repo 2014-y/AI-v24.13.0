@@ -1601,8 +1601,9 @@ input:focus, select:focus, textarea:focus {
 
 .status-badge-container.running .status-percentage {
   color: #00e676;
-  border-color: rgba(0, 230, 118, 0.2);
-  background: rgba(0, 230, 118, 0.08);
+  border-color: rgba(0, 230, 118, 0.4);
+  background: rgba(0, 230, 118, 0.15);
+  box-shadow: 0 0 8px rgba(0, 230, 118, 0.25);
   opacity: 1;
 }
 
