@@ -19,7 +19,7 @@
       <!-- 神经脉搏指示器 (窗口顶部绝对居中) -->
       <div id="ai-pulse-module" style="display: flex; align-items: center; opacity: 0.8; transition: opacity 0.5s; height: 24px; position: absolute; left: 50%; transform: translateX(-50%); z-index: 5; -webkit-app-region: drag;">
         <div class="pulse-visualizer" id="pulse-visualizer">
-          <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+          <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
         </div>
       </div>
 
@@ -48,7 +48,7 @@
               </svg>
             </div>
             <div class="status-text-zone">
-              <h4 id="btn-label-text" data-i18n="console.btn.start" style="margin: 0; font-size: 13px; font-weight: 600;">启动网关</h4>
+              <h4 id="btn-label-text" data-i18n="console.btn.start" style="margin: 0; font-size: 13px; font-weight: 600;">启动 ClawAI</h4>
               <p id="status-label" style="margin: 2px 0 0 0; font-size: 11px; color: var(--text-secondary);" data-i18n="sidebar.status.stopped">已停止</p>
             </div>
             <!-- 右侧仅保留百分比进度（仅在启动中显示） -->
@@ -115,13 +115,26 @@
         </div>
 
         <div class="sidebar-bottom">
-          <!-- 侧边栏折叠/展开开关 -->
-          <div class="collapse-toggle-btn" id="btn-sidebar-toggle" title="折叠/展开侧边栏">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="3" y1="12" x2="21" y2="12"></line>
-              <line x1="3" y1="6" x2="21" y2="6"></line>
-              <line x1="3" y1="18" x2="21" y2="18"></line>
-            </svg>
+          <!-- 运行状态微型趋势图表 (Canvas 实时波动折线图) -->
+          <div class="sidebar-mini-chart-container" id="sidebar-mini-chart-box">
+            <div style="display: flex; justify-content: space-between; align-items: center; color: var(--text-secondary);">
+              <span style="font-weight: 600; color: var(--text-secondary); font-size: 10px;" data-i18n="sidebar.chart.title">网关负载</span>
+              
+              <!-- 右侧数值和微型折叠按钮容器 -->
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-family: var(--font-mono); color: var(--accent-color); font-weight: bold; font-size: 10px;" id="sidebar-chart-mem-val">-- MB</span>
+                
+                <!-- 微型折叠/展开开关 -->
+                <div class="collapse-toggle-btn" id="btn-sidebar-toggle" title="折叠/展开侧边栏">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="toggle-icon">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                  </svg>
+                </div>
+              </div>
+            </div>
+            <canvas id="sidebar-mini-canvas" width="180" height="42" style="width: 100%; height: 42px; display: block;"></canvas>
           </div>
         </div>
       </aside>
@@ -168,7 +181,7 @@
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                   清空日志
                 </button>
-                <div class="log-terminal" id="log-terminal-output"><div data-i18n="console.log.init">&gt;&gt;&gt; AI-Assistant Local Daemon Initialized.</div><div data-i18n="console.log.stopped">&gt;&gt;&gt; [系统状态] 核心进程检测完成，当前处于【已停止】闲置状态。</div><div data-i18n="console.log.guide">&gt;&gt;&gt; [操作指引] 请点击右侧“启动网关”按钮，拉起本地 AI 服务总线...</div></div>
+                <div class="log-terminal" id="log-terminal-output"><div data-i18n="console.log.init">&gt;&gt;&gt; AI-Assistant Local Daemon Initialized.</div><div data-i18n="console.log.stopped">&gt;&gt;&gt; [系统状态] 核心进程检测完成，当前处于【已停止】闲置状态。</div><div data-i18n="console.log.guide">&gt;&gt;&gt; [操作指引] 请点击右侧“启动 ClawAI”按钮，拉起本地 AI 服务总线...</div></div>
                <div class="terminal-progress-container" id="terminal-progress-bar-container" style="display: none;">
                  <div class="terminal-progress-track">
                    <div class="terminal-progress-fill" id="terminal-progress-bar-fill"></div>
@@ -283,7 +296,7 @@
             <div style="display: flex; gap: 12px; max-width: 80%; align-self: flex-start;">
               <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #8c52ff, #00d2ff); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; color: white; flex-shrink: 0; box-shadow: 0 0 10px rgba(140,82,255,0.3);">AI</div>
               <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 12px 16px; color: var(--text-primary); font-size: 13px; line-height: 1.5; border-top-left-radius: 2px;">
-                <span data-i18n="chat.welcome.greeting">您好！我是您的智能助手。</span><span id="gateway-connection-status-text" style="color: #ff9800;">当前本地的 OpenClaw 网关未启动，请前往【控制台】启动网关。</span>
+                <span data-i18n="chat.welcome.greeting">您好！我是您的智能助手。</span><span id="gateway-connection-status-text" style="color: #ff9800;">当前本地的 OpenClaw 网关未启动，请前往【控制台】启动 ClawAI。</span>
                 <br><br>
                 <span data-i18n="chat.welcome.functions">在这里您可以：</span>
                 <br>💬 <span data-i18n="chat.welcome.chat_mode">与当前选中的大模型进行实时对话；</span>
@@ -391,7 +404,7 @@
                   
                   <!-- 添加厂家虚线按钮 -->
                   <div class="btn-add-provider-box" id="btn-add-provider">
-                    ➕ <span data-i18n="config.btn.add_provider">添加自定义大模型提供商（厂家）</span>
+                    + <span data-i18n="config.btn.add_provider">添加自定义大模型提供商（厂家）</span>
                   </div>
                 </div>
 
@@ -706,10 +719,10 @@
               </label>
             </div>
 
-            <!-- 自动启用网关 -->
+            <!-- 自动启用 ClawAI -->
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 12px;">
               <div>
-                <div style="font-size: 13px; font-weight: bold; color: var(--text-primary);" data-i18n="settings.autogateway.title">⚡ 自动启用网关</div>
+                <div style="font-size: 13px; font-weight: bold; color: var(--text-primary);" data-i18n="settings.autogateway.title">⚡ 自动启用 ClawAI</div>
                 <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;" data-i18n="settings.autogateway.desc">软件启动时，自动开启 OpenClaw 本地智能网关 service，无需每次手动点击。</div>
               </div>
               <label class="switch-slider-btn" for="setting-auto-gateway">
@@ -777,7 +790,7 @@
               </div>
               <div>
                 <button type="button" id="btn-open-acceleration" data-i18n="settings.acc.btn" style="background: linear-gradient(135deg, var(--accent-color), #4f46e5); border: none; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px; box-shadow: 0 2px 6px rgba(99, 102, 241, 0.2); transition: all 0.2s;">
-                  去配置
+                  打开
                 </button>
               </div>
             </div>
@@ -891,12 +904,12 @@
             </div>
             
             <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-              <button type="button" class="btn-primary" id="btn-feishu-qr-bind" data-i18n="comm.feishu.qr" style="width: auto; padding: 0 16px; font-size: 12px; height: 32px; border-radius: 6px; margin-top: 0; background: linear-gradient(135deg, #00b96b, #08979c); border: none; font-weight: 600; cursor: pointer;">
+              <button type="button" class="btn-primary" id="btn-feishu-qr-bind" data-i18n="comm.feishu.qr" style="width: auto; padding: 0 16px; font-size: 12px; height: 32px; border-radius: 6px; margin-top: 0; background: linear-gradient(135deg, var(--accent-color), #4f46e5); border: none; font-weight: 600; cursor: pointer;">
                 📷 扫码绑定飞书
               </button>
-              <button type="button" class="btn-primary" id="btn-add-feishu-account" data-i18n="comm.feishu.add" style="width: auto; padding: 0 16px; font-size: 12px; height: 32px; border-radius: 6px; margin-top: 0; background: linear-gradient(135deg, var(--accent-color), #4f46e5); border: none; font-weight: 600; cursor: pointer;">
+              <!-- <button type="button" class="btn-primary" id="btn-add-feishu-account" data-i18n="comm.feishu.add" style="width: auto; padding: 0 16px; font-size: 12px; height: 32px; border-radius: 6px; margin-top: 0; background: linear-gradient(135deg, var(--accent-color), #4f46e5); border: none; font-weight: 600; cursor: pointer;">
                 ➕ 手动填写凭证
-              </button>
+              </button> -->
             </div>
           </div>
 
@@ -911,7 +924,7 @@
             
             <div style="display: flex; gap: 10px; align-items: center;">
               <button type="button" class="btn-primary" id="btn-add-qqbot-account" data-i18n="comm.qq.add" style="width: auto; padding: 0 16px; font-size: 12px; height: 32px; border-radius: 6px; margin-top: 0; background: linear-gradient(135deg, var(--accent-color), #4f46e5); border: none; font-weight: 600; cursor: pointer;">
-                ➕ 添加 QQ机器人绑定账号
+                + 添加 QQ机器人绑定账号
               </button>
             </div>
           </div>
@@ -986,7 +999,7 @@
     <div class="modal-overlay" id="add-provider-modal">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>➕ 添加自定义大模型提供商</h3>
+          <h3>+ 添加自定义大模型提供商</h3>
           <span class="modal-close" id="modal-close-btn">&times;</span>
         </div>
         <div class="modal-body">

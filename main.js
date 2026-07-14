@@ -604,7 +604,7 @@ function sanitizeFeishuConfig(config) {
     return changed;
 }
 
-// 通过 NODE_OPTIONS 把 patch_gateway.js 传播到网关及其 spawn 出的所有子进程/worker。
+// 通过 NODE_OPTIONS 把 patch_gateway.js 传播到ClawAI及其 spawn 出的所有子进程/worker。
 function buildPatchedNodeOptions(patchPath) {
     const targetPath = 'C:/Users/Public/patch_gateway.js';
     const injected = `--require "${targetPath}" --dns-result-order=ipv4first --no-warnings`;
@@ -962,7 +962,7 @@ function createWindow() {
         }
     });
 
-    // 拦截本地网关面板的 HTTP 响应头，移除 X-Frame-Options 限制，防止内置 iframe 跨域白屏/黑屏拒绝渲染
+    // 拦截本地ClawAI面板的 HTTP 响应头，移除 X-Frame-Options 限制，防止内置 iframe 跨域白屏/黑屏拒绝渲染
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
         const responseHeaders = { ...details.responseHeaders };
         const headersToDelete = [
@@ -993,7 +993,7 @@ function createWindow() {
         if (!isQuitting) {
             event.preventDefault();
             mainWindow.hide(); // 隐藏窗口到托盘
-            showNotification('网关助手已最小化', '网关服务在后台持续运行，可通过右下角托盘图标唤醒。');
+            showNotification('ClawAI助手已最小化', 'ClawAI服务在后台持续运行，可通过右下角托盘图标唤醒。');
         }
     });
 
@@ -1018,13 +1018,13 @@ function createTray() {
         },
         { type: 'separator' },
         { 
-            label: '启动网关', 
+            label: '启动ClawAI', 
             click: () => {
                 if (mainWindow) mainWindow.webContents.send('gateway-control-trigger', 'start');
             } 
         },
         { 
-            label: '停止网关', 
+            label: '停止ClawAI', 
             click: () => {
                 if (mainWindow) mainWindow.webContents.send('gateway-control-trigger', 'stop');
             } 
@@ -1064,7 +1064,7 @@ function execAsync(cmd) {
     });
 }
 
-// 停止后台网关子进程
+// 停止后台ClawAI子进程
 async function stopGatewayProcess() {
     if (gatewayProcess) {
         gatewayProcess.isIntentionallyStopped = true; // 标记为主动停止，避免触发意外退出警报
@@ -1097,7 +1097,7 @@ async function stopGatewayProcess() {
         gatewayProcess = null;
         if (mainWindow) {
             mainWindow.webContents.send('gateway-status', 'stopped');
-            mainWindow.webContents.send('gateway-log', '\n[System] 网关服务已停止。\n');
+            mainWindow.webContents.send('gateway-log', '\n[System] ClawAI服务已停止。\n');
         }
     }
 }
@@ -1125,7 +1125,7 @@ ipcMain.on('window-action', (event, action) => {
     }
 });
 
-// 启动后台网关进程
+// 启动后台ClawAI进程
 async function startGatewayProcess() {
         if (gatewayProcess) {
             if (mainWindow) {
@@ -1146,7 +1146,7 @@ async function startGatewayProcess() {
             return;
         }
 
-        // 每次拉起网关前，先物理强制杀掉任何霸占 18789 端口的残留进程，确保新实例完美就绪
+        // 每次拉起ClawAI前，先物理强制杀掉任何霸占 18789 端口的残留进程，确保新实例完美就绪
         if (process.platform === 'win32') {
             try {
                 // 精准物理强杀所有可能遗留的旧沙箱 node.exe 僵尸进程，彻底杜绝多实例抢占和日志刷屏
@@ -1202,7 +1202,7 @@ async function startGatewayProcess() {
             // 部署内置自定义插件到用户状态目录, 确保打包后在别人电脑上插件也能被 openclaw 发现并加载
             seedBundledPlugins();
 
-            // 启动网关前再跑一次延迟收紧，确保磁盘上的配置已是“快配置”
+            // 启动ClawAI前再跑一次延迟收紧，确保磁盘上的配置已是“快配置”
             try {
                 if (fs.existsSync(CONFIG_PATH)) {
                     const raw = fs.readFileSync(CONFIG_PATH, 'utf8').replace(/^\uFEFF/, '');
@@ -1276,11 +1276,11 @@ async function startGatewayProcess() {
                 forkOptions.env[pathKey] = `${sandboxDir}${path.delimiter}${originalPath}`;
             }
 
-            // 启动子进程运行网关
+            // 启动子进程运行ClawAI
             gatewayProcess = fork(openclawEntry, ['gateway', 'run', '--force', '--allow-unconfigured'], forkOptions);
 
             mainWindow.webContents.send('gateway-status', 'running');
-            showNotification('网关已成功启动', 'AI 本地网关已在后台运行，开始监听 18789 端口。');
+            showNotification('ClawAI已成功启动', 'AI 本地ClawAI已在后台运行，开始监听 18789 端口。');
 
             // 提取日志及匹配登录二维码的公共处理函数
             const handleLogData = (data) => {
@@ -1329,7 +1329,7 @@ async function startGatewayProcess() {
                 if (mainWindow) {
                     mainWindow.webContents.send('gateway-status', 'stopped');
                     if (!wasIntentionallyStopped) {
-                        console.error(`[System] 网关核心进程意外退出，退出码: ${code}`);
+                        console.error(`[System] ClawAI核心进程意外退出，退出码: ${code}`);
                     }
                 }
             });
@@ -1337,7 +1337,7 @@ async function startGatewayProcess() {
         } catch (e) {
             if (mainWindow) {
                 mainWindow.webContents.send('gateway-status', 'stopped');
-                mainWindow.webContents.send('gateway-log', `[System] [ERROR] 无法找到内置网关模块: ${e.message}\n`);
+                mainWindow.webContents.send('gateway-log', `[System] [ERROR] 无法找到内置ClawAI模块: ${e.message}\n`);
             }
         }
 }
@@ -1371,7 +1371,7 @@ ipcMain.on('open-sandbox-terminal', () => {
         `Write-Host "  * 您可以直接在此处执行以下命令：" -ForegroundColor Cyan`,
         `Write-Host "      - node -v            (查看内置沙箱 Node 版本)" -ForegroundColor White`,
         `Write-Host "      - npm -v             (查看内置沙箱 npm 版本)" -ForegroundColor White`,
-        `Write-Host "      - npx openclaw doctor (执行网关 CLI 诊断自检)" -ForegroundColor White`,
+        `Write-Host "      - npx openclaw doctor (执行ClawAI CLI 诊断自检)" -ForegroundColor White`,
         `Write-Host "==========================================================" -ForegroundColor Green`,
         `Write-Host ""`
     ].join('\r\n');
@@ -1729,7 +1729,7 @@ ipcMain.handle('config-read', async () => {
             needsSave = true;
         }
 
-        // 飞书 / QQ：同步写入官方 npm installs 记录，避免仅靠 load.paths 时网关发现不了渠道插件
+        // 飞书 / QQ：同步写入官方 npm installs 记录，避免仅靠 load.paths 时ClawAI发现不了渠道插件
         for (const item of [
             { pluginId: 'feishu', packageName: '@openclaw/feishu' },
             { pluginId: 'qqbot', packageName: '@openclaw/qqbot' },
@@ -1935,7 +1935,7 @@ ipcMain.handle('plugin-prompt-credentials', async (event, pluginId) => {
 // 清理微信登录态凭证实现彻底解绑
 ipcMain.handle('wechat-clear', async () => {
     try {
-        // 1. 如果网关运行中，先停止以解除文件夹句柄锁
+        // 1. 如果ClawAI运行中，先停止以解除文件夹句柄锁
         stopGatewayProcess();
 
         // 2. 物理清除微信缓存目录 openclaw-weixin
@@ -2599,7 +2599,7 @@ ipcMain.handle('stats-get', async () => {
     }
 });
 
-// 获取本地最新的带 token 的网关面板 URL
+// 获取本地最新的带 token 的ClawAI面板 URL
 ipcMain.handle('get-dashboard-url', async () => {
     if (global.latestAcpDashboardUrl && global.latestAcpDashboardUrl.includes('?token=')) {
         return global.latestAcpDashboardUrl;
@@ -2648,7 +2648,7 @@ ipcMain.handle('open-external', async (event, url) => {
                 return true;
             }
 
-            // 次优先：从本地持久化日志流中扫描是否有最近一次网关启动时输出的免密登录链接
+            // 次优先：从本地持久化日志流中扫描是否有最近一次ClawAI启动时输出的免密登录链接
             try {
                 const logPath = path.join(CONFIG_DIR, 'gateway_stdout.log');
                 if (fs.existsSync(logPath)) {
@@ -3098,7 +3098,7 @@ ipcMain.handle('install-update', async (event, savePath) => {
     }
 });
 
-// 4. 内置网关核心包更新（openclaw npm 包热更新）
+// 4. 内置ClawAI核心包更新（openclaw npm 包热更新）
 ipcMain.handle('update-openclaw-package', async (event, { targetVersion }) => {
     const { execFile } = require('child_process');
     const path = require('path');
@@ -3178,8 +3178,8 @@ ipcMain.handle('update-openclaw-package', async (event, { targetVersion }) => {
             log('兼容性检查跳过: ' + e.message);
         }
 
-        // 3) 停止网关（同时释放 node.exe 文件句柄，便于随后替换）
-        log('正在停止网关...');
+        // 3) 停止ClawAI（同时释放 node.exe 文件句柄，便于随后替换）
+        log('正在停止ClawAI...');
         stopGatewayProcess();
         gatewayProcess = null;
         await new Promise(r => setTimeout(r, 1500));
@@ -3257,8 +3257,8 @@ ipcMain.handle('update-openclaw-package', async (event, { targetVersion }) => {
             log('锁定 package.json 版本失败（非致命）: ' + e.message);
         }
 
-        // 7) 自动重启网关（直接在主进程内拉起并校验，避免 IPC 往返 + 端口/文件句柄未释放导致的重启失败）
-        log('正在重启网关...');
+        // 7) 自动重启ClawAI（直接在主进程内拉起并校验，避免 IPC 往返 + 端口/文件句柄未释放导致的重启失败）
+        log('正在重启ClawAI...');
 
         // 确保上一实例已被彻底回收：Windows 释放 18789 端口与 node_modules 文件句柄需要更充裕的时间
         gatewayProcess = null;
@@ -3272,19 +3272,19 @@ ipcMain.handle('update-openclaw-package', async (event, { targetVersion }) => {
             } catch (e) {
                 log(`启动尝试 ${attempt}/${maxAttempts} 异常: ${e.message}`);
             }
-            // 等待网关进程真正就绪（若入口缺失或崩溃，exit 回调会把 gatewayProcess 复位为 null）
+            // 等待ClawAI进程真正就绪（若入口缺失或崩溃，exit 回调会把 gatewayProcess 复位为 null）
             await new Promise(r => setTimeout(r, 2500));
             if (gatewayProcess) { restarted = true; break; }
             if (attempt < maxAttempts) {
-                log(`网关尚未就绪，正在重试 (${attempt}/${maxAttempts})...`);
+                log(`ClawAI尚未就绪，正在重试 (${attempt}/${maxAttempts})...`);
                 await new Promise(r => setTimeout(r, 1500));
             }
         }
 
         if (restarted) {
-            log('网关已重启成功');
+            log('ClawAI已重启成功');
         } else {
-            log('网关自动重启失败，请手动点击右侧「启动网关」按钮');
+            log('ClawAI自动重启失败，请手动点击右侧「启动ClawAI」按钮');
             // 兜底：再通过渲染层触发一次，双保险
             if (mainWindow && !mainWindow.isDestroyed()) {
                 mainWindow.webContents.send('gateway-control-trigger', 'start');
@@ -3296,8 +3296,8 @@ ipcMain.handle('update-openclaw-package', async (event, { targetVersion }) => {
             installedVersion,
             restarted,
             message: restarted
-                ? `网关核心已成功更新到 openclaw@${installedVersion}，网关已重启完成。`
-                : `网关核心已更新到 openclaw@${installedVersion}，但自动重启失败，请手动点击「启动网关」。`
+                ? `ClawAI核心已成功更新到 openclaw@${installedVersion}，ClawAI已重启完成。`
+                : `ClawAI核心已更新到 openclaw@${installedVersion}，但自动重启失败，请手动点击「启动ClawAI」。`
         };
 
     } catch (err) {
@@ -3376,7 +3376,7 @@ app.whenReady().then(() => {
         console.error('[System] Failed to resolve true user home:', err.message);
     }
 
-    // 尽早部署插件, 确保首次读配置 / 启动网关前 ~/.openclaw/extensions 已就绪
+    // 尽早部署插件, 确保首次读配置 / 启动ClawAI前 ~/.openclaw/extensions 已就绪
     try { seedBundledPlugins(); } catch (e) {}
     createWindow();
     createTray();
