@@ -385,6 +385,8 @@ function renderFeishuAccounts() {
                 <div style="font-size: 11px; color: var(--text-secondary); margin-top: 6px; display: flex; flex-direction: column; gap: 2px;">
                     <span>App ID: ${acc.appId || '--'}</span>
                     <span>Encrypt Key: ${acc.encryptKey ? '已配置' : '未配置'}</span>
+                    ${acc.domain ? `<span>域名: ${acc.domain === 'lark' ? 'Lark' : '飞书'}</span>` : ''}
+                    ${Array.isArray(acc.allowFrom) && acc.allowFrom.length ? `<span>私信白名单: ${acc.allowFrom.length === 1 ? '仅本人(扫码绑定)' : acc.allowFrom.length + ' 人'}</span>` : ''}
                 </div>
             </div>
             <div style="display: flex; gap: 8px;">
@@ -630,6 +632,7 @@ const UI_PLUGIN_ORDER = [
     'dual-model-trainer',
     'openclaw-weixin',
     'long-term-memory',
+    'feishu',
     'qqbot',
     'voice-call',
     'telegram',
@@ -649,6 +652,7 @@ const pluginMetadata = {
     'dual-model-trainer': { name: '🧠 双模型教学', desc: '利用主备模型对比，自动本地收集并训练属于你的专属模型', tier: 'zero' },
     'openclaw-weixin': { name: '💬 微信渠道', desc: '一键将网关接入微信聊天，支持私聊、群聊和图片理解', tier: 'zero' },
     'long-term-memory': { name: '📚 长期记忆', desc: '开箱即用：自动摘要、记忆旋转与压缩护栏，将关键信息持久写入 MEMORY.md，对话压缩后仍可召回。', tier: 'zero' },
+    'feishu': { name: '🦆 飞书渠道', desc: '接入飞书/Lark 机器人：支持扫码创建应用或手动填写 App ID/Secret，处理私聊与群聊消息', tier: 'credentials' },
     'qqbot': { name: '🐧 QQ机器人', desc: '将网关接入 QQ 开放平台机器人（QQ Bot）消息通道，实现 QQ 群聊及私聊交互。', tier: 'credentials' },
     'voice-call': { name: '📞 语音通话', desc: '开启实时语音对话服务，支持通过微信向 AI 拨打电话', tier: 'credentials' },
     'telegram': { name: '✈️ Telegram', desc: '通过 Telegram 机器人消息通道直接与您的 AI 网关对话', tier: 'credentials' },
@@ -898,7 +902,39 @@ async function init() {
         if (appUptimeEl) appUptimeEl.innerText = timeStr;
     }, 1000);
 
-    // 绑定添加飞书账号事件
+    // 飞书第二种配置模型：扫码一键创建机器人
+    const btnFeishuQr = document.getElementById('btn-feishu-qr-bind');
+    if (btnFeishuQr) {
+        btnFeishuQr.addEventListener('click', async () => {
+            if (btnFeishuQr.disabled) return;
+            const oldHtml = btnFeishuQr.innerHTML;
+            btnFeishuQr.disabled = true;
+            btnFeishuQr.style.opacity = '0.6';
+            btnFeishuQr.style.cursor = 'not-allowed';
+            btnFeishuQr.innerHTML = '⏳ 正在生成二维码...';
+            showCommBindingOverlay('⏳ 正在发起飞书扫码绑定...');
+            try {
+                if (logTerminal) logTerminal.innerText += '\n[Feishu QR] 正在发起扫码创建机器人...\n';
+                const result = await window.api.triggerFeishuQrLogin({ domain: 'feishu' });
+                if (result && result.success) {
+                    if (logTerminal) logTerminal.innerText += '[Feishu QR] 二维码已生成，请用飞书 App 扫码...\n';
+                } else {
+                    hideCommBindingOverlay();
+                    showToast('拉起飞书扫码失败：' + ((result && (result.error || (result.cancelled && '已取消'))) || '未知错误'));
+                }
+            } catch (err) {
+                hideCommBindingOverlay();
+                showToast('拉起飞书扫码异常：' + err.message);
+            } finally {
+                btnFeishuQr.disabled = false;
+                btnFeishuQr.style.opacity = '1';
+                btnFeishuQr.style.cursor = 'pointer';
+                btnFeishuQr.innerHTML = oldHtml;
+            }
+        });
+    }
+
+    // 绑定添加飞书账号事件（第一种：手动填写 App ID / Secret）
     const btnAddFeishu = document.getElementById('btn-add-feishu-account');
     if (btnAddFeishu) {
         btnAddFeishu.addEventListener('click', async () => {
@@ -1317,11 +1353,13 @@ async function init() {
         });
     }
 
-    // 微信二维码弹窗关闭
+    // 微信 / 飞书二维码弹窗关闭
     qrcodeCloseBtn.addEventListener('click', () => {
         qrcodeOverlay.style.opacity = '0';
         qrcodeOverlay.style.display = 'none';
         window.api.cancelWeChatLogin();
+        if (window.api.cancelFeishuQrLogin) window.api.cancelFeishuQrLogin();
+        window.__activeQrChannel = null;
         // 停止扫码期间的高频轮询兜底
         if (typeof stopWeChatBindingFastPoll === 'function') stopWeChatBindingFastPoll();
         // 解除通讯管理页面操作锁
@@ -1599,24 +1637,82 @@ function setupIpcListeners() {
         }
     });
 
-    // 微信扫码二维码捕获并画图
-    window.api.onQrCodeReceived((url) => {
+    // 微信 / 飞书扫码二维码捕获并画图（payload 支持 string URL 或 {url, channel, title, tip}）
+    window.api.onQrCodeReceived((payload) => {
+        const isObj = payload && typeof payload === 'object';
+        const url = isObj ? payload.url : payload;
+        const channel = (isObj && payload.channel) || 'wechat';
+        if (!url) return;
+        window.__activeQrChannel = channel;
+
+        const titleEl = document.getElementById('qrcode-overlay-title');
+        const descEl = document.getElementById('qrcode-overlay-desc');
+        if (channel === 'feishu') {
+            if (titleEl) titleEl.textContent = (isObj && payload.title) || '🦆 飞书扫码绑定';
+            if (descEl) descEl.textContent = (isObj && payload.tip) || '请使用手机飞书扫描下方二维码，自动创建并绑定机器人。';
+        } else {
+            if (titleEl) titleEl.textContent = (isObj && payload.title) || '💬 微信扫码登录';
+            if (descEl) descEl.textContent = (isObj && payload.tip) || '请使用手机微信扫描下方二维码授权登录。';
+        }
+
         qrcodeOverlay.style.display = 'flex';
         qrcodeOverlay.style.opacity = '0';
         document.getElementById('qrcode-raw-url').value = url;
         drawQrCode(url);
-        // 更新通讯管理操作锁提示文字
-        if (typeof showCommBindingOverlay === 'function') showCommBindingOverlay('⏳ 微信扫码绑定进行中...');
-        // 二维码展示期间启用高频轮询兜底，确保扫码完成后秒级刷新“已绑定”状态
-        startWeChatBindingFastPoll();
+        if (typeof showCommBindingOverlay === 'function') {
+            showCommBindingOverlay(channel === 'feishu' ? '⏳ 飞书扫码绑定进行中...' : '⏳ 微信扫码绑定进行中...');
+        }
+        if (channel === 'wechat') startWeChatBindingFastPoll();
     });
 
-    // 主进程探测到扫码绑定成功后的即时刷新（无需等待常规 10s 轮询）
+    // 主进程探测到微信扫码绑定成功后的即时刷新
     window.api.onWeChatLoginSuccess(() => {
         stopWeChatBindingFastPoll();
         if (typeof showToast === 'function') showToast('✅ 微信绑定成功！');
         updateWeChatStatusUI();
+        window.__activeQrChannel = null;
+        if (qrcodeOverlay) {
+            qrcodeOverlay.style.opacity = '0';
+            qrcodeOverlay.style.display = 'none';
+        }
+        if (typeof hideCommBindingOverlay === 'function') hideCommBindingOverlay();
     });
+
+    // 飞书扫码绑定成功：重载配置、刷新账号列表、关弹窗
+    if (window.api.onFeishuLoginSuccess) {
+        window.api.onFeishuLoginSuccess(async (status) => {
+            try {
+                configData = await window.api.readConfig();
+            } catch (e) {}
+            renderFeishuAccounts();
+            if (typeof showToast === 'function') {
+                showToast(`✅ 飞书扫码绑定成功！账号：${(status && status.accountId) || 'feishu-scan'}`);
+            }
+            window.__activeQrChannel = null;
+            if (qrcodeOverlay) {
+                qrcodeOverlay.style.opacity = '0';
+                qrcodeOverlay.style.display = 'none';
+            }
+            if (typeof hideCommBindingOverlay === 'function') hideCommBindingOverlay();
+            if (gatewayStatus === 'running') {
+                window.api.gatewayAction('stop');
+                setTimeout(() => window.api.gatewayAction('start'), 1200);
+            }
+        });
+    }
+    if (window.api.onFeishuLoginFailed) {
+        window.api.onFeishuLoginFailed((status) => {
+            if (typeof showToast === 'function') {
+                showToast('❌ 飞书扫码绑定失败：' + ((status && status.error) || '未知错误'));
+            }
+            window.__activeQrChannel = null;
+            if (qrcodeOverlay) {
+                qrcodeOverlay.style.opacity = '0';
+                qrcodeOverlay.style.display = 'none';
+            }
+            if (typeof hideCommBindingOverlay === 'function') hideCommBindingOverlay();
+        });
+    }
 
     // 绑定一键复制授权链接
     document.getElementById('qrcode-copy-btn').addEventListener('click', () => {
@@ -1624,7 +1720,10 @@ function setupIpcListeners() {
         urlInput.select();
         urlInput.setSelectionRange(0, 99999);
         navigator.clipboard.writeText(urlInput.value);
-        alert('授权登录链接已成功复制到剪贴板！\n\n您可以粘贴发给微信里的任意聊天框（如“文件传输助手”），在手机端直接点击链接即可开始授权登录。');
+        const isFeishu = window.__activeQrChannel === 'feishu';
+        alert(isFeishu
+            ? '授权登录链接已成功复制到剪贴板！\n\n也可直接用飞书 App 扫描屏幕上的二维码完成绑定。'
+            : '授权登录链接已成功复制到剪贴板！\n\n您可以粘贴发给微信里的任意聊天框（如“文件传输助手”），在手机端直接点击链接即可开始授权登录。');
     });
 
     // 托盘控制触发

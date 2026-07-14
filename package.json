@@ -39,7 +39,7 @@
   "dependencies": {
     "@openclaw/feishu": "2026.6.11",
     "@openclaw/matrix": "^2026.7.1",
-    "@openclaw/qqbot": "2026.5.22",
+    "@openclaw/qqbot": "^2026.7.1",
     "@openclaw/slack": "^2026.7.1",
     "@openclaw/voice-call": "^2026.7.1",
     "@openclaw/whatsapp": "^2026.7.1",

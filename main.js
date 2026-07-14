@@ -477,6 +477,92 @@ function resolveBundledNpmPluginPath(entry) {
     return null;
 }
 
+/**
+ * OpenClaw 官方外部插件的 managed npm 项目目录名（与 openclaw install-safe-path 一致）。
+ * 例: @openclaw/voice-call → openclaw-voice-call-<sha256前10位>
+ */
+function encodeOpenClawNpmProjectDirName(packageName) {
+    const crypto = require('crypto');
+    const trimmed = String(packageName || '').trim();
+    if (!trimmed) throw new Error('invalid npm package name');
+    const base = trimmed
+        .replace(/[\\/]/g, '-')
+        .replace(/[^a-zA-Z0-9._-]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-+/g, '')
+        .replace(/-+$/g, '');
+    const safe = (!base || base === '.' || base === '..') ? 'skill' : base;
+    const hash = crypto.createHash('sha256').update(trimmed).digest('hex').slice(0, 10);
+    if (safe !== trimmed) return `${safe.length > 50 ? safe.slice(0, 50) : safe}-${hash}`;
+    if (safe.length > 60) return `${safe.slice(0, 50)}-${hash}`;
+    return safe;
+}
+
+/**
+ * 把随包自带的官方 npm 插件离线种进 ~/.openclaw/npm/projects/...，
+ * 让 OpenClaw 按官方安装恢复 install record → trustedOfficialInstall=true。
+ * 这样别人电脑无需联网 npm install，也不必写 load.paths（load.paths 会丢掉 trust）。
+ * @returns {{ seeded: boolean, installPath?: string, reason?: string }}
+ */
+function ensureOfficialExternalNpmPluginSeeded(params) {
+    const packageName = params.packageName;
+    const pluginId = params.pluginId;
+    const bundledSrc = params.bundledSrc
+        || path.join(__dirname, 'node_modules', ...packageName.split('/'));
+    if (!fs.existsSync(bundledSrc)) {
+        return { seeded: false, reason: `bundled package missing: ${bundledSrc}` };
+    }
+
+    let srcVersion = '';
+    try {
+        srcVersion = JSON.parse(fs.readFileSync(path.join(bundledSrc, 'package.json'), 'utf8')).version || '';
+    } catch (e) {}
+
+    const projectDir = path.join(
+        CONFIG_DIR,
+        'npm',
+        'projects',
+        encodeOpenClawNpmProjectDirName(packageName)
+    );
+    const installPath = path.join(projectDir, 'node_modules', ...packageName.split('/'));
+    const destPkgPath = path.join(installPath, 'package.json');
+
+    let needCopy = !fs.existsSync(destPkgPath);
+    if (!needCopy && srcVersion) {
+        try {
+            const destVersion = JSON.parse(fs.readFileSync(destPkgPath, 'utf8')).version || '';
+            if (destVersion && destVersion !== srcVersion) needCopy = true;
+        } catch (e) {
+            needCopy = true;
+        }
+    }
+
+    if (needCopy) {
+        fs.mkdirSync(path.dirname(installPath), { recursive: true });
+        fs.cpSync(bundledSrc, installPath, { recursive: true, force: true });
+        console.log(`[PluginSeed] Official npm seed: ${pluginId} → ${installPath}`);
+    }
+
+    // 项目级 package.json，供 OpenClaw buildRecoveredManagedNpmInstallRecords 扫描
+    const projectPkgPath = path.join(projectDir, 'package.json');
+    const depSpec = srcVersion || '2026.7.1';
+    let projectPkg = { private: true, dependencies: {} };
+    try {
+        if (fs.existsSync(projectPkgPath)) {
+            projectPkg = JSON.parse(fs.readFileSync(projectPkgPath, 'utf8')) || projectPkg;
+        }
+    } catch (e) {}
+    if (!projectPkg.dependencies) projectPkg.dependencies = {};
+    if (projectPkg.dependencies[packageName] !== depSpec) {
+        projectPkg.private = true;
+        projectPkg.dependencies[packageName] = depSpec;
+        fs.mkdirSync(projectDir, { recursive: true });
+        fs.writeFileSync(projectPkgPath, JSON.stringify(projectPkg, null, 2) + '\n', 'utf8');
+    }
+
+    return { seeded: true, installPath, version: srcVersion || depSpec };
+}
+
 // 飞书渠道配置自愈与规范化：返回是否发生了变更。
 function sanitizeFeishuConfig(config) {
     if (!config || !config.channels || !config.channels.feishu) return false;
@@ -1528,6 +1614,12 @@ ipcMain.handle('config-read', async () => {
         }
         
         const weixinPluginPath = path.join(__dirname, 'node_modules', '@tencent-weixin', 'openclaw-weixin');
+        // 当前安装目录下随包渠道插件的权威绝对路径（别人电脑 / 换安装位置后必须重写）
+        const bundledChannelAbsById = {};
+        for (const entry of BUNDLED_NPM_CHANNEL_PLUGINS) {
+            const abs = resolveBundledNpmPluginPath(entry);
+            if (abs) bundledChannelAbsById[entry.id] = path.resolve(abs);
+        }
         const originalPaths = config.plugins.load.paths || [];
         const filteredPaths = originalPaths.filter(p => {
             if (typeof p !== 'string') return false;
@@ -1537,7 +1629,37 @@ ipcMain.handle('config-read', async () => {
                 return false;
             }
             // 过滤掉所有不一致的微信插件旧路径
-            if (p.endsWith('openclaw-weixin') && path.resolve(p) !== path.resolve(weixinPluginPath)) {
+            if (/(?:^|[\\/])openclaw-weixin(?:[\\/]|$)/i.test(p) || p.endsWith('openclaw-weixin')) {
+                const want = bundledChannelAbsById['openclaw-weixin'] || path.resolve(weixinPluginPath);
+                if (path.resolve(p) !== want) {
+                    needsSave = true;
+                    return false;
+                }
+            }
+            // 飞书 / QQ / Slack / WhatsApp / Matrix：剔除其它机器或其它安装目录遗留的绝对路径
+            const channelPathMatchers = [
+                { id: 'feishu', re: /[\\/]@openclaw[\\/]feishu(?:[\\/]|$)/i },
+                { id: 'qqbot', re: /[\\/]@openclaw[\\/]qqbot(?:[\\/]|$)/i },
+                { id: 'slack', re: /[\\/]@openclaw[\\/]slack(?:[\\/]|$)/i },
+                { id: 'whatsapp', re: /[\\/]@openclaw[\\/]whatsapp(?:[\\/]|$)/i },
+                { id: 'matrix', re: /[\\/]@openclaw[\\/]matrix(?:[\\/]|$)/i }
+            ];
+            for (const m of channelPathMatchers) {
+                if (!m.re.test(p)) continue;
+                const want = bundledChannelAbsById[m.id];
+                if (!want || path.resolve(p) !== want) {
+                    needsSave = true;
+                    return false;
+                }
+            }
+            // 丢弃明显不可用的死路径（换机后最常见）
+            try {
+                if (!fs.existsSync(p)) {
+                    needsSave = true;
+                    return false;
+                }
+            } catch (e) {
+                needsSave = true;
                 return false;
             }
             return true;
@@ -1553,7 +1675,10 @@ ipcMain.handle('config-read', async () => {
             }
             const resolvedPath = path.resolve(abs);
             const hasPath = filteredPaths.some(p => typeof p === 'string' && path.resolve(p) === resolvedPath);
-            if (!hasPath) filteredPaths.push(abs);
+            if (!hasPath) {
+                filteredPaths.push(abs);
+                needsSave = true;
+            }
             // 确保配置里有 entry + allow（凭证类不强行写 enabled，尊重现有；缺省创建 enabled）
             if (!config.plugins.entries[entry.id]) {
                 config.plugins.entries[entry.id] = { enabled: true };
@@ -1565,7 +1690,36 @@ ipcMain.handle('config-read', async () => {
             }
         }
 
-        // voice-call：只保留 entry/allow，不走 load.paths（否则 openKeyedStore 报 trusted 错误）
+        // voice-call：不走 load.paths；离线种进官方 npm/projects，别人电脑也能 trusted + 开通话记录库
+        try {
+            const voiceSeed = ensureOfficialExternalNpmPluginSeeded({
+                pluginId: 'voice-call',
+                packageName: '@openclaw/voice-call'
+            });
+            if (!voiceSeed.seeded) {
+                console.warn('[PluginSeed] voice-call official seed skipped:', voiceSeed.reason);
+            } else if (voiceSeed.installPath) {
+                if (!config.plugins.installs) config.plugins.installs = {};
+                const prev = config.plugins.installs['voice-call'] || {};
+                const next = {
+                    ...prev,
+                    source: 'npm',
+                    spec: `@openclaw/voice-call@${voiceSeed.version || '2026.7.1'}`,
+                    installPath: voiceSeed.installPath,
+                    resolvedName: '@openclaw/voice-call',
+                    resolvedVersion: voiceSeed.version || prev.resolvedVersion || '2026.7.1',
+                    resolvedSpec: `@openclaw/voice-call@${voiceSeed.version || '2026.7.1'}`,
+                    version: voiceSeed.version || prev.version || '2026.7.1',
+                    installedAt: prev.installedAt || new Date().toISOString()
+                };
+                if (JSON.stringify(prev) !== JSON.stringify(next)) {
+                    config.plugins.installs['voice-call'] = next;
+                    needsSave = true;
+                }
+            }
+        } catch (e) {
+            console.warn('[PluginSeed] voice-call seed failed:', e.message);
+        }
         if (!config.plugins.entries['voice-call']) {
             config.plugins.entries['voice-call'] = { enabled: true };
             needsSave = true;
@@ -1573,6 +1727,40 @@ ipcMain.handle('config-read', async () => {
         if (config.plugins.entries['voice-call'].enabled === true && !config.plugins.allow.includes('voice-call')) {
             config.plugins.allow.push('voice-call');
             needsSave = true;
+        }
+
+        // 飞书 / QQ：同步写入官方 npm installs 记录，避免仅靠 load.paths 时网关发现不了渠道插件
+        for (const item of [
+            { pluginId: 'feishu', packageName: '@openclaw/feishu' },
+            { pluginId: 'qqbot', packageName: '@openclaw/qqbot' },
+        ]) {
+            try {
+                const seed = ensureOfficialExternalNpmPluginSeeded(item);
+                if (!seed.seeded) {
+                    console.warn(`[PluginSeed] ${item.pluginId} official seed skipped:`, seed.reason);
+                } else if (seed.installPath) {
+                    if (!config.plugins.installs) config.plugins.installs = {};
+                    const prev = config.plugins.installs[item.pluginId] || {};
+                    const ver = seed.version || prev.resolvedVersion || '2026.6.11';
+                    const next = {
+                        ...prev,
+                        source: 'npm',
+                        spec: `${item.packageName}@${ver}`,
+                        installPath: seed.installPath,
+                        resolvedName: item.packageName,
+                        resolvedVersion: ver,
+                        resolvedSpec: `${item.packageName}@${ver}`,
+                        version: ver,
+                        installedAt: prev.installedAt || new Date().toISOString()
+                    };
+                    if (JSON.stringify(prev) !== JSON.stringify(next)) {
+                        config.plugins.installs[item.pluginId] = next;
+                        needsSave = true;
+                    }
+                }
+            } catch (e) {
+                console.warn(`[PluginSeed] ${item.pluginId} seed failed:`, e.message);
+            }
         }
         
         if (JSON.stringify(config.plugins.load.paths) !== JSON.stringify(filteredPaths)) {
@@ -1968,6 +2156,304 @@ ipcMain.handle('wechat-login', async () => {
     } catch (e) {
         console.error('Failed to start WeChat login process:', e);
         return { success: false, error: e.message };
+    }
+});
+
+// ========== 飞书第二种配置模型：扫码创机器人（OAuth device-code）==========
+// 对接 @openclaw/feishu 官方 app-registration 流程；扫码后自动写入 App ID/Secret。
+const FEISHU_ACCOUNTS_URL = 'https://accounts.feishu.cn';
+const LARK_ACCOUNTS_URL = 'https://accounts.larksuite.com';
+const FEISHU_REGISTRATION_PATH = '/oauth/v1/app/registration';
+const FEISHU_SCAN_TP = 'ob_cli_app';
+let feishuQrAbortController = null;
+let feishuQrBusy = false;
+
+function feishuAccountsBaseUrl(domain) {
+    return domain === 'lark' ? LARK_ACCOUNTS_URL : FEISHU_ACCOUNTS_URL;
+}
+
+async function postFeishuAppRegistration(baseUrl, body, signal) {
+    const res = await fetch(`${baseUrl}${FEISHU_REGISTRATION_PATH}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams(body).toString(),
+        signal: signal || AbortSignal.timeout(10000)
+    });
+    if (!res.ok) {
+        throw new Error(`飞书注册接口 HTTP ${res.status}`);
+    }
+    return await res.json();
+}
+
+function sleepMs(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function writeOpenClawConfigObject(config) {
+    const cleanConfig = JSON.parse(JSON.stringify(config));
+    delete cleanConfig.videoGenerator;
+    delete cleanConfig.imageGenerator;
+    const originalBytes = fs.existsSync(CONFIG_PATH) ? fs.statSync(CONFIG_PATH).size : 39500;
+    let newJson = JSON.stringify(cleanConfig, null, 2);
+    const newBytes = Buffer.byteLength(newJson, 'utf8');
+    if (newBytes < originalBytes) {
+        const padSize = originalBytes - newBytes;
+        newJson = newJson + '\n' + ' '.repeat(Math.max(0, padSize - 1));
+    }
+    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(CONFIG_PATH, newJson, 'utf8');
+}
+
+function applyFeishuScanResultToConfig(result) {
+    let config = {};
+    if (fs.existsSync(CONFIG_PATH)) {
+        let content = fs.readFileSync(CONFIG_PATH, 'utf8').replace(/^\uFEFF/, '');
+        config = JSON.parse(content);
+    }
+    if (!config.channels) config.channels = {};
+    if (!config.channels.feishu || typeof config.channels.feishu !== 'object') {
+        config.channels.feishu = {};
+    }
+    const feishu = config.channels.feishu;
+    if (!feishu.accounts || typeof feishu.accounts !== 'object') feishu.accounts = {};
+
+    const baseId = 'feishu-scan';
+    let accountId = baseId;
+    let n = 2;
+    while (feishu.accounts[accountId]) {
+        accountId = `${baseId}-${n}`;
+        n += 1;
+    }
+
+    const accountPatch = {
+        appId: result.appId,
+        appSecret: result.appSecret,
+        enabled: true
+    };
+    if (result.domain) accountPatch.domain = result.domain;
+    if (result.openId) {
+        accountPatch.dmPolicy = 'allowlist';
+        accountPatch.allowFrom = [result.openId];
+    }
+
+    feishu.accounts[accountId] = accountPatch;
+    feishu.enabled = true;
+    if (!feishu.defaultAccount) feishu.defaultAccount = accountId;
+    if (result.domain) feishu.domain = result.domain;
+    // 扫码创建的个人 Agent：私信默认仅本人；群聊开放但需要 @
+    if (!feishu.groupPolicy) feishu.groupPolicy = 'open';
+    if (feishu.requireMention === undefined) feishu.requireMention = true;
+    if (result.openId && !feishu.dmPolicy) {
+        feishu.dmPolicy = 'allowlist';
+        if (!Array.isArray(feishu.allowFrom) || feishu.allowFrom.length === 0) {
+            feishu.allowFrom = [result.openId];
+        }
+    }
+
+    if (!config.plugins) config.plugins = {};
+    if (!config.plugins.entries) config.plugins.entries = {};
+    config.plugins.entries.feishu = { ...(config.plugins.entries.feishu || {}), enabled: true };
+    if (!Array.isArray(config.plugins.allow)) config.plugins.allow = [];
+    if (!config.plugins.allow.includes('feishu')) config.plugins.allow.push('feishu');
+
+    try { sanitizeFeishuConfig(config); } catch (e) {}
+    writeOpenClawConfigObject(config);
+    return { accountId, appId: result.appId, openId: result.openId || null, domain: result.domain || 'feishu' };
+}
+
+async function pollFeishuAppRegistration(params) {
+    const { deviceCode, expireIn, interval, initialDomain, abortSignal } = params;
+    let currentInterval = Math.max(1, Number(interval) || 5);
+    let domain = initialDomain || 'feishu';
+    let domainSwitched = false;
+    const expireMs = (Math.max(30, Number(expireIn) || 600)) * 1000;
+    const deadline = Date.now() + expireMs;
+
+    while (Date.now() < deadline) {
+        if (abortSignal?.aborted) return { status: 'cancelled' };
+        let pollRes;
+        try {
+            pollRes = await postFeishuAppRegistration(
+                feishuAccountsBaseUrl(domain),
+                {
+                    action: 'poll',
+                    device_code: deviceCode,
+                    tp: FEISHU_SCAN_TP
+                },
+                abortSignal
+            );
+        } catch (e) {
+            if (abortSignal?.aborted) return { status: 'cancelled' };
+            await sleepMs(currentInterval * 1000);
+            continue;
+        }
+
+        if (pollRes.user_info?.tenant_brand) {
+            const isLark = pollRes.user_info.tenant_brand === 'lark';
+            if (!domainSwitched && isLark) {
+                domain = 'lark';
+                domainSwitched = true;
+                continue;
+            }
+        }
+
+        if (pollRes.client_id && pollRes.client_secret) {
+            return {
+                status: 'success',
+                result: {
+                    appId: pollRes.client_id,
+                    appSecret: pollRes.client_secret,
+                    domain,
+                    openId: pollRes.user_info?.open_id
+                }
+            };
+        }
+
+        if (pollRes.error) {
+            if (pollRes.error === 'authorization_pending') {
+                // keep polling
+            } else if (pollRes.error === 'slow_down') {
+                currentInterval += 5;
+            } else if (pollRes.error === 'access_denied') {
+                return { status: 'access_denied' };
+            } else if (pollRes.error === 'expired_token') {
+                return { status: 'expired' };
+            } else {
+                return {
+                    status: 'error',
+                    message: `${pollRes.error}: ${pollRes.error_description || 'unknown'}`
+                };
+            }
+        }
+        await sleepMs(currentInterval * 1000);
+    }
+    return { status: 'timeout' };
+}
+
+ipcMain.handle('feishu-qr-login-cancel', async () => {
+    if (feishuQrAbortController) {
+        try { feishuQrAbortController.abort(); } catch (e) {}
+        feishuQrAbortController = null;
+    }
+    feishuQrBusy = false;
+    return { success: true };
+});
+
+ipcMain.handle('feishu-qr-login', async (_event, opts = {}) => {
+    if (feishuQrBusy) {
+        return { success: false, error: '飞书扫码绑定已在进行中' };
+    }
+    feishuQrBusy = true;
+    if (feishuQrAbortController) {
+        try { feishuQrAbortController.abort(); } catch (e) {}
+    }
+    feishuQrAbortController = new AbortController();
+    const abortSignal = feishuQrAbortController.signal;
+    const domain = (opts && opts.domain === 'lark') ? 'lark' : 'feishu';
+
+    try {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('gateway-log', '\n[Feishu QR] 正在发起扫码创建机器人...\n');
+        }
+
+        try {
+            const initRes = await postFeishuAppRegistration(
+                feishuAccountsBaseUrl(domain),
+                { action: 'init' },
+                abortSignal
+            );
+            if (!(initRes.supported_auth_methods || []).includes('client_secret')) {
+                feishuQrBusy = false;
+                return { success: false, error: '当前环境不支持扫码创建应用，请改用手动填写 App ID / Secret' };
+            }
+        } catch (e) {
+            if (abortSignal.aborted) {
+                feishuQrBusy = false;
+                return { success: false, cancelled: true };
+            }
+            feishuQrBusy = false;
+            return { success: false, error: '扫码创建暂不可用：' + (e.message || String(e)) };
+        }
+
+        const beginRes = await postFeishuAppRegistration(
+            feishuAccountsBaseUrl(domain),
+            {
+                action: 'begin',
+                archetype: 'PersonalAgent',
+                auth_method: 'client_secret',
+                request_user_info: 'open_id'
+            },
+            abortSignal
+        );
+
+        if (!beginRes.device_code || !beginRes.verification_uri_complete) {
+            feishuQrBusy = false;
+            return { success: false, error: '飞书未返回有效的扫码信息，请稍后重试或改用手动配置' };
+        }
+
+        const qrUrl = new URL(beginRes.verification_uri_complete);
+        qrUrl.searchParams.set('from', 'oc_onboard');
+        qrUrl.searchParams.set('tp', FEISHU_SCAN_TP);
+        const qrUrlStr = qrUrl.toString();
+
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('gateway-qrcode', {
+                url: qrUrlStr,
+                channel: 'feishu',
+                title: '飞书扫码绑定',
+                tip: '请使用手机飞书扫描下方二维码，自动创建并绑定机器人。'
+            });
+            mainWindow.webContents.send('gateway-log', `[Feishu QR] 二维码已生成，请使用飞书 App 扫码授权...\n`);
+        }
+
+        // 异步轮询，完成后推送事件（本 handler 先返回成功表示二维码已拉起）
+        (async () => {
+            try {
+                const outcome = await pollFeishuAppRegistration({
+                    deviceCode: beginRes.device_code,
+                    expireIn: beginRes.expire_in || 600,
+                    interval: beginRes.interval || 5,
+                    initialDomain: domain,
+                    abortSignal
+                });
+
+                if (outcome.status === 'success' && outcome.result) {
+                    const saved = applyFeishuScanResultToConfig(outcome.result);
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send('feishu-login-success', saved);
+                        mainWindow.webContents.send('gateway-log',
+                            `[Feishu QR] 扫码绑定成功：账号 ${saved.accountId} / AppId ${saved.appId}\n`);
+                    }
+                } else if (outcome.status !== 'cancelled') {
+                    const msgMap = {
+                        access_denied: '用户拒绝了授权',
+                        expired: '二维码已过期，请重新扫码绑定',
+                        timeout: '等待扫码超时，请重试',
+                        error: outcome.message || '扫码绑定失败'
+                    };
+                    const errMsg = msgMap[outcome.status] || ('扫码绑定失败: ' + outcome.status);
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send('feishu-login-failed', { error: errMsg });
+                        mainWindow.webContents.send('gateway-log', `[Feishu QR] ${errMsg}\n`);
+                    }
+                }
+            } catch (e) {
+                if (!abortSignal.aborted && mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('feishu-login-failed', { error: e.message || String(e) });
+                }
+            } finally {
+                feishuQrBusy = false;
+                feishuQrAbortController = null;
+            }
+        })();
+
+        return { success: true, qrUrl: qrUrlStr };
+    } catch (e) {
+        feishuQrBusy = false;
+        feishuQrAbortController = null;
+        if (abortSignal.aborted) return { success: false, cancelled: true };
+        console.error('Failed to start Feishu QR login:', e);
+        return { success: false, error: e.message || String(e) };
     }
 });
 

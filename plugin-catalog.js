@@ -47,7 +47,7 @@ const ZERO_CONFIG_DEFAULT_ON = [
 ];
 
 /** B：需外部平台凭证 / 渠道配置 */
-const CREDENTIAL_PLUGINS = ['slack', 'matrix', 'telegram', 'whatsapp', 'voice-call', 'qqbot'];
+const CREDENTIAL_PLUGINS = ['slack', 'matrix', 'telegram', 'whatsapp', 'voice-call', 'qqbot', 'feishu'];
 
 /** C：需本机安装软件 */
 const LOCAL_SOFTWARE_PLUGINS = ['auto-start-codex'];
@@ -57,6 +57,7 @@ const UI_PLUGIN_IDS = [
   'dual-model-trainer',
   'openclaw-weixin',
   LONG_TERM_MEMORY_UI_ID,
+  'feishu',
   'qqbot',
   'voice-call',
   'telegram',
@@ -419,6 +420,17 @@ function qqbotNeedsConfig(config) {
   return { needsConfig: true, missingFields: ['appId', 'clientSecret'], hint: '需要 QQ 开放平台机器人的 AppID 与 AppSecret' };
 }
 
+function feishuNeedsConfig(config) {
+  const feishu = (config.channels && config.channels.feishu) || {};
+  const accounts = feishu.accounts || {};
+  const hasTopLevel = Boolean(feishu.appId && feishu.appSecret);
+  const hasNamed = Object.keys(accounts).some((id) => accounts[id] && accounts[id].appId && accounts[id].appSecret);
+  if (hasTopLevel || hasNamed) {
+    return { needsConfig: false, missingFields: [], hint: '已配置飞书应用凭证；账号绑定请到「通讯管理」' };
+  }
+  return { needsConfig: true, missingFields: ['appId', 'appSecret'], hint: '需要飞书开放平台 App ID / App Secret，可在「通讯管理」扫码或手动添加' };
+}
+
 function voiceCallNeedsConfig() {
   // 语音通话默认关闭；开启即可加载插件，细项可在控制台配置
   return {
@@ -489,6 +501,11 @@ function probePlugin(pluginId, opts = {}) {
       const n = qqbotNeedsConfig(config);
       Object.assign(base, n);
       // 允许先开启插件再填凭证，不强制拦截开关
+      base.badge = n.needsConfig ? 'needs-config' : 'ready';
+      base.blockEnable = false;
+    } else if (pluginId === 'feishu') {
+      const n = feishuNeedsConfig(config);
+      Object.assign(base, n);
       base.badge = n.needsConfig ? 'needs-config' : 'ready';
       base.blockEnable = false;
     }
