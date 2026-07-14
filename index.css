@@ -1752,3 +1752,32 @@ input:focus, select:focus, textarea:focus {
   50% { transform: scale(1.1); box-shadow: 0 0 16px rgba(255, 255, 255, 0.55); border-radius: 50%; }
   100% { transform: scale(1); box-shadow: 0 0 8px rgba(255, 255, 255, 0.25); border-radius: 50%; }
 }
+
+.console-go-bind-btn {
+  color: var(--accent-color) !important;
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: rgba(var(--accent-rgb), 0.08);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.console-go-bind-btn:hover {
+  background: rgba(var(--accent-rgb), 0.15);
+  border-color: rgba(var(--accent-rgb), 0.35);
+  box-shadow: 0 2px 8px rgba(var(--accent-rgb), 0.15);
+  transform: translateY(-1px);
+}
+
+.console-go-bind-btn:active {
+  transform: translateY(0);
+}

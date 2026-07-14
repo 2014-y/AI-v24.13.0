@@ -5797,7 +5797,7 @@ async function updateConsoleChannelStatusUI() {
                     <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">${t('👤 微信绑定信息', '👤 WeChat Binding Info', '👤 微信綁定信息')}</div>
                     <div><span style="color: var(--text-secondary);">${t('账户标识', 'Account ID', '帳號標識')}: </span><span style="font-family: var(--font-mono); color: var(--text-primary); font-weight: bold;">${result.details.accountId || '--'}</span></div>
                     <div><span style="color: var(--text-secondary);">${t('绑定时间', 'Bind Time', '綁定時間')}: </span><span style="color: var(--text-primary);">${savedAtStr}</span></div>
-                    <div style="text-align: left; margin-top: 8px;"><a href="#" id="lnk-go-communication" style="color: var(--accent-color); text-decoration: none; font-size: 11px; font-weight: bold; display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: rgba(147, 51, 234, 0.08); border: 1px solid rgba(147, 51, 234, 0.15); border-radius: 6px; transition: all 0.2s;">${t('⚙️ 去通讯管理解绑/绑定', '⚙️ Go to Channels to bind/unbind', '⚙️ 去通訊管理解綁/綁定')}</a></div>
+                    <div style="margin-top: 10px; width: 100%;"><a href="#" id="lnk-go-communication" class="console-go-bind-btn">${t('⚙️ 去通讯管理解绑/绑定', '⚙️ Go to Channels to bind/unbind', '⚙️ 去通訊管理解綁/綁定')}</a></div>
                 `;
             } else {
                 setConsoleStatus(t('未启用', 'Disabled', '未啟用'), false);
@@ -5805,7 +5805,7 @@ async function updateConsoleChannelStatusUI() {
                     <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">${t('👤 微信绑定信息', '👤 WeChat Binding Info', '👤 微信綁定信息')}</div>
                     <div style="color: #ff5252; font-weight: bold;">${t('当前未绑定微信', 'WeChat is not bound', '當前未綁定微信')}</div>
                     <div style="color: var(--text-secondary); margin-top: 4px;">${t('扫码绑定微信后可作为助手收发微信消息。', 'Bind WeChat to send and receive messages.', '掃碼綁定微信後可作為助手收發微信消息。')}</div>
-                    <div style="text-align: left; margin-top: 8px;"><a href="#" id="lnk-go-communication" style="color: var(--accent-color); text-decoration: none; font-size: 11px; font-weight: bold; display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: rgba(147, 51, 234, 0.08); border: 1px solid rgba(147, 51, 234, 0.15); border-radius: 6px; transition: all 0.2s;">${t('⚙️ 去通讯管理绑定', '⚙️ Go to Channels to bind', '⚙️ 去通訊管理綁定')}</a></div>
+                    <div style="margin-top: 10px; width: 100%;"><a href="#" id="lnk-go-communication" class="console-go-bind-btn">${t('⚙️ 去通讯管理绑定', '⚙️ Go to Channels to bind', '⚙️ 去通訊管理綁定')}</a></div>
                 `;
             }
         } catch(e) {
@@ -5825,7 +5825,7 @@ async function updateConsoleChannelStatusUI() {
                 <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">${t('👤 飞书绑定信息', '👤 Feishu Binding Info', '👤 飛書綁定信息')}</div>
                 <div><span style="color: var(--text-secondary);">${t('默认账户', 'Default Account', '默認帳戶')}: </span><span style="font-family: var(--font-mono); color: var(--text-primary); font-weight: bold;">${defaultAccId || '--'}</span></div>
                 <div><span style="color: var(--text-secondary);">App ID: </span><span style="color: var(--text-primary);">${defaultAcc.appId || '--'}</span></div>
-                <div style="text-align: left; margin-top: 8px;"><a href="#" id="lnk-go-communication" style="color: var(--accent-color); text-decoration: none; font-size: 11px; font-weight: bold; display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: rgba(147, 51, 234, 0.08); border: 1px solid rgba(147, 51, 234, 0.15); border-radius: 6px; transition: all 0.2s;">${t('⚙️ 去通讯管理管理飞书账号', '⚙️ Go to Channels to manage Feishu', '⚙️ 去通訊管理管理飛書帳號')}</a></div>
+                <div style="margin-top: 10px; width: 100%;"><a href="#" id="lnk-go-communication" class="console-go-bind-btn">${t('⚙️ 去通讯管理管理飞书账号', '⚙️ Go to Channels to manage Feishu', '⚙️ 去通訊管理管理飛書帳號')}</a></div>
             `;
         } else {
             setConsoleStatus(t('未启用', 'Disabled', '未啟用'), false);
@@ -5833,7 +5833,7 @@ async function updateConsoleChannelStatusUI() {
                 <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">${t('👤 飞书绑定信息', '👤 Feishu Binding Info', '👤 飛書綁定信息')}</div>
                 <div style="color: #ff5252; font-weight: bold;">${t('当前未配置飞书账号', 'Feishu account not configured', '當前未配置飛書帳號')}</div>
                 <div style="color: var(--text-secondary); margin-top: 4px;">${t('请前往多渠道通讯管理配置飞书 App ID 和 Secret。', 'Please go to Channels to configure Feishu App ID & Secret.', '請前往多渠道通訊管理配置飛書 App ID 和 Secret。')}</div>
-                <div style="text-align: left; margin-top: 8px;"><a href="#" id="lnk-go-communication" style="color: var(--accent-color); text-decoration: none; font-size: 11px; font-weight: bold; display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: rgba(147, 51, 234, 0.08); border: 1px solid rgba(147, 51, 234, 0.15); border-radius: 6px; transition: all 0.2s;">${t('⚙️ 去通讯管理配置', '⚙️ Go to Channels to configure', '⚙️ 去通訊管理配置')}</a></div>
+                <div style="margin-top: 10px; width: 100%;"><a href="#" id="lnk-go-communication" class="console-go-bind-btn">${t('⚙️ 去通讯管理配置', '⚙️ Go to Channels to configure', '⚙️ 去通訊管理配置')}</a></div>
             `;
         }
     } 
@@ -5850,7 +5850,7 @@ async function updateConsoleChannelStatusUI() {
                 <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">${t('👤 QQ机器人绑定', '👤 QQ Bot Binding Info', '👤 QQ機器人綁定')}</div>
                 <div><span style="color: var(--text-secondary);">${t('默认账户', 'Default Account', '默認帳戶')}: </span><span style="font-family: var(--font-mono); color: var(--text-primary); font-weight: bold;">${defaultAccId || '--'}</span></div>
                 <div><span style="color: var(--text-secondary);">App ID: </span><span style="color: var(--text-primary);">${defaultAcc.appId || '--'}</span></div>
-                <div style="text-align: left; margin-top: 8px;"><a href="#" id="lnk-go-communication" style="color: var(--accent-color); text-decoration: none; font-size: 11px; font-weight: bold; display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: rgba(147, 51, 234, 0.08); border: 1px solid rgba(147, 51, 234, 0.15); border-radius: 6px; transition: all 0.2s;">${t('⚙️ 去通讯管理管理QQ机器人', '⚙️ Go to Channels to manage QQ Bot', '⚙️ 去通訊管理管理QQ機器人')}</a></div>
+                <div style="margin-top: 10px; width: 100%;"><a href="#" id="lnk-go-communication" class="console-go-bind-btn">${t('⚙️ 去通讯管理管理QQ机器人', '⚙️ Go to Channels to manage QQ Bot', '⚙️ 去通訊管理管理QQ機器人')}</a></div>
             `;
         } else {
             setConsoleStatus(t('未启用', 'Disabled', '未啟用'), false);
@@ -5858,7 +5858,7 @@ async function updateConsoleChannelStatusUI() {
                 <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">${t('👤 QQ机器人绑定', '👤 QQ Bot Binding Info', '👤 QQ機器人綁定')}</div>
                 <div style="color: #ff5252; font-weight: bold;">${t('当前未配置QQ机器人', 'QQ Bot not configured', '當前未配置QQ機器人')}</div>
                 <div style="color: var(--text-secondary); margin-top: 4px;">${t('请前往多渠道通讯管理配置 QQ 机器人凭证。', 'Please go to Channels to configure QQ Bot credentials.', '請前往多渠道通訊管理配置 QQ 機器人憑證。')}</div>
-                <div style="text-align: left; margin-top: 8px;"><a href="#" id="lnk-go-communication" style="color: var(--accent-color); text-decoration: none; font-size: 11px; font-weight: bold; display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: rgba(147, 51, 234, 0.08); border: 1px solid rgba(147, 51, 234, 0.15); border-radius: 6px; transition: all 0.2s;">${t('⚙️ 去通讯管理配置', '⚙️ Go to Channels to configure', '⚙️ 去通訊管理配置')}</a></div>
+                <div style="margin-top: 10px; width: 100%;"><a href="#" id="lnk-go-communication" class="console-go-bind-btn">${t('⚙️ 去通讯管理配置', '⚙️ Go to Channels to configure', '⚙️ 去通訊管理配置')}</a></div>
             `;
         }
     }
