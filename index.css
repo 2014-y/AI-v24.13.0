@@ -300,7 +300,7 @@ body.maximized .app-container {
   justify-content: center;
   background: rgba(255, 95, 86, 0.1);
   color: #ff5f56;
-  box-shadow: 0 0 10px rgba(255, 95, 86, 0.2);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
   transition: all 0.3s ease;
   flex-shrink: 0;
 }
@@ -308,14 +308,14 @@ body.maximized .app-container {
 .status-light-btn-container.running {
   background: rgba(0, 230, 118, 0.15);
   color: #00e676;
-  box-shadow: 0 0 12px rgba(0, 230, 118, 0.4);
-  animation: pulse 1.8s infinite;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.4);
+  animation: pulse-circle 1.8s infinite;
 }
 
 .status-light-btn-container.starting {
   background: rgba(255, 189, 46, 0.15);
   color: #ffbd2e;
-  box-shadow: 0 0 10px rgba(255, 189, 46, 0.4);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
 }
 
 .status-text-zone h4 {
@@ -1745,4 +1745,10 @@ input:focus, select:focus, textarea:focus {
 @keyframes pulse-bar {
   0% { height: 4px; }
   100% { height: 100%; }
+}
+
+@keyframes pulse-circle {
+  0% { transform: scale(1); box-shadow: 0 0 8px rgba(255, 255, 255, 0.25); border-radius: 50%; }
+  50% { transform: scale(1.1); box-shadow: 0 0 16px rgba(255, 255, 255, 0.55); border-radius: 50%; }
+  100% { transform: scale(1); box-shadow: 0 0 8px rgba(255, 255, 255, 0.25); border-radius: 50%; }
 }
