@@ -1,5 +1,5 @@
 // start-gateway.js
-// AI-v24.13.0 开源版 - Node.js 启动入口
+// AI-v24.13.0 - Node.js 启动入口
 // 用法: node start-gateway.js
 
 const { execSync } = require('child_process');
@@ -63,7 +63,7 @@ function checkPrerequisites() {
   }
   
   console.log('\n========================================');
-  console.log(' AI-v24.13.0 开源版 - 启动中...');
+  console.log('  AI-v24.13.0 - 启动中...');
   console.log('========================================\n');
 }
 

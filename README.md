@@ -1,4 +1,4 @@
-# ClawAI 开源版 🤖
+# ClawAI 🤖
 
 <p align="center">
   <img src="config/icon.ico" width="100" height="100" alt="ClawAI Logo" />
@@ -149,6 +149,6 @@ npm run app:dist
 
 ---
 
-## 📜 开源协议
+## 📜 许可协议
 
 本项目遵循 [MIT License](LICENSE) 许可协议。
