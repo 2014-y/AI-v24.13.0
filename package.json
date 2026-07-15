@@ -109,7 +109,15 @@
       "!node_modules/electron-builder/**/*",
       "!node_modules/electron-packager/**/*",
       ".node-sandbox/**/*",
+      "!.node-sandbox/node_modules/**/*",
       "extensions/**/*"
+    ],
+    "extraFiles": [
+      {
+        "from": ".node-sandbox/node_modules",
+        "to": "resources/app/.node-sandbox/node_modules",
+        "filter": ["**/*"]
+      }
     ]
   }
 }

@@ -1626,6 +1626,10 @@ function setupIpcListeners() {
                 targetProgress = 20;
                 targetText = '正在校验ClawAI配置文件与诊断系统...';
                 updated = true;
+            } else if (text.includes('Failed to install missing configured plugin') || text.includes('TokenGuard')) {
+                targetProgress = 60;
+                targetText = '正在后台下载并安装缺失的扩展插件，可能需要1-3分钟，请耐心等待...';
+                updated = true;
             } else if (text.includes('[plugins]') || text.includes('plugin not installed') || text.includes('resolving authentication')) {
                 targetProgress = 50;
                 targetText = '正在装载核心插件驱动程序...';
@@ -1674,6 +1678,43 @@ function setupIpcListeners() {
         } else if (text.includes('ready') && text.includes('[gateway]')) {
             cleanedText = cleanedText.replace('ready', 'ClawAI全部引擎启动就绪，正在静候业务请求传入...');
         }
+
+        // --- 开始：前端终端下载进度注入 ---
+        if ((text.includes('TokenGuard') || text.includes('Failed to install missing configured plugin')) && !window.pluginDownloadTimer) {
+            window.pluginDownloadSeconds = 0;
+            window.pluginDownloadTimer = setInterval(() => {
+                window.pluginDownloadSeconds += 5;
+                const msgTemplate = t('console.log.downloading_plugins');
+                const msg = msgTemplate.replace('{0}', window.pluginDownloadSeconds);
+                
+                // 模拟插入日志
+                const timerSpan = document.createElement('span');
+                timerSpan.textContent = msg;
+                timerSpan.style.color = '#ff9800';
+                if (logTerminal) {
+                    logTerminal.appendChild(timerSpan);
+                    if (autoScroll) {
+                        logTerminal.scrollTop = logTerminal.scrollHeight;
+                    }
+                }
+            }, 5000);
+        }
+        
+        if (window.pluginDownloadTimer && (text.includes('HTTP server listening on') || text.includes('ready') || text.includes('listening on port'))) {
+            clearInterval(window.pluginDownloadTimer);
+            window.pluginDownloadTimer = null;
+            
+            const doneSpan = document.createElement('span');
+            doneSpan.textContent = t('console.log.downloading_done');
+            doneSpan.style.color = '#4caf50';
+            if (logTerminal) {
+                logTerminal.appendChild(doneSpan);
+                if (autoScroll) {
+                    logTerminal.scrollTop = logTerminal.scrollHeight;
+                }
+            }
+        }
+        // --- 结束：前端终端下载进度注入 ---
 
         // 追加日志并做中文翻译及着色
         const span = document.createElement('span');
@@ -1772,7 +1813,7 @@ function setupIpcListeners() {
         }
 
         qrcodeOverlay.style.display = 'flex';
-        qrcodeOverlay.style.opacity = '1';
+        qrcodeOverlay.style.opacity = '0'; // 初始透明，等待二维码图片加载完毕后再渐显，防止闪白
         document.getElementById('qrcode-raw-url').value = url;
         drawQrCode(url);
         markCommBindingQrReady(channel);
