@@ -6562,6 +6562,7 @@ async function updateConsoleChannelStatusUI() {
             if (result.bound) {
                 setConsoleStatus(t('已配置', 'Configured', '已配置'), true);
                 const savedAtStr = result.details.savedAt ? new Date(result.details.savedAt).toLocaleString('zh-CN', { hour12: false }) : '--';
+                detailsEl.style.display = 'block';
                 detailsEl.innerHTML = `
                     <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">${t('👤 微信绑定信息', '👤 WeChat Binding Info', '👤 微信綁定信息')}</div>
                     <div style="margin-bottom: 6px;">
@@ -6575,6 +6576,7 @@ async function updateConsoleChannelStatusUI() {
                 `;
             } else {
                 setConsoleStatus(t('未配置', 'Not Configured', '未配置'), false);
+                detailsEl.style.display = 'block';
                 detailsEl.innerHTML = `
                     <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">${t('👤 微信绑定信息', '👤 WeChat Binding Info', '👤 微信綁定信息')}</div>
                     <div style="color: #ff5252; font-weight: bold;">${t('当前未绑定微信', 'WeChat is not bound', '當前未綁定微信')}</div>
@@ -6595,6 +6597,7 @@ async function updateConsoleChannelStatusUI() {
         if (isEnabled) {
             setConsoleStatus(t('已配置', 'Configured', '已配置'), true);
             const defaultAcc = accounts[defaultAccId] || {};
+            detailsEl.style.display = 'block';
             detailsEl.innerHTML = `
                 <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">${t('👤 飞书绑定信息', '👤 Feishu Binding Info', '👤 飛書綁定信息')}</div>
                 <div style="margin-bottom: 6px;">
@@ -6608,6 +6611,7 @@ async function updateConsoleChannelStatusUI() {
             `;
         } else {
             setConsoleStatus(t('未配置', 'Not Configured', '未配置'), false);
+            detailsEl.style.display = 'block';
             detailsEl.innerHTML = `
                 <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">${t('👤 飞书绑定信息', '👤 Feishu Binding Info', '👤 飛書綁定信息')}</div>
                 <div style="color: #ff5252; font-weight: bold;">${t('当前未配置飞书账号', 'Feishu account not configured', '當前未配置飛書帳號')}</div>
@@ -6625,6 +6629,7 @@ async function updateConsoleChannelStatusUI() {
         if (isEnabled) {
             setConsoleStatus(t('已配置', 'Configured', '已配置'), true);
             const defaultAcc = accounts[defaultAccId] || {};
+            detailsEl.style.display = 'block';
             detailsEl.innerHTML = `
                 <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">${t('👤 QQ机器人绑定', '👤 QQ Bot Binding Info', '👤 QQ機器人綁定')}</div>
                 <div style="margin-bottom: 6px;">
@@ -6638,6 +6643,7 @@ async function updateConsoleChannelStatusUI() {
             `;
         } else {
             setConsoleStatus(t('未配置', 'Not Configured', '未配置'), false);
+            detailsEl.style.display = 'block';
             detailsEl.innerHTML = `
                 <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">${t('👤 QQ机器人绑定', '👤 QQ Bot Binding Info', '👤 QQ機器人綁定')}</div>
                 <div style="color: #ff5252; font-weight: bold;">${t('当前未配置QQ机器人', 'QQ Bot not configured', '當前未配置QQ機器人')}</div>
