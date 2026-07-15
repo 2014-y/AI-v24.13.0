@@ -1680,7 +1680,7 @@ function setupIpcListeners() {
         }
 
         // --- 开始：前端终端下载进度注入 ---
-        if ((text.includes('TokenGuard') || text.includes('Failed to install missing configured plugin')) && !window.pluginDownloadTimer) {
+        if (text.includes('Failed to install missing configured plugin') && !window.pluginDownloadTimer) {
             window.pluginDownloadSeconds = 0;
             window.pluginDownloadTimer = setInterval(() => {
                 window.pluginDownloadSeconds += 5;
