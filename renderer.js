@@ -1693,9 +1693,7 @@ function setupIpcListeners() {
                 timerSpan.style.color = '#ff9800';
                 if (logTerminal) {
                     logTerminal.appendChild(timerSpan);
-                    if (autoScroll) {
-                        logTerminal.scrollTop = logTerminal.scrollHeight;
-                    }
+                    logTerminal.scrollTop = logTerminal.scrollHeight;
                 }
             }, 5000);
         }
@@ -1709,9 +1707,7 @@ function setupIpcListeners() {
             doneSpan.style.color = '#4caf50';
             if (logTerminal) {
                 logTerminal.appendChild(doneSpan);
-                if (autoScroll) {
-                    logTerminal.scrollTop = logTerminal.scrollHeight;
-                }
+                logTerminal.scrollTop = logTerminal.scrollHeight;
             }
         }
         // --- 结束：前端终端下载进度注入 ---
