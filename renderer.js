@@ -7083,7 +7083,7 @@ async function updateConsoleChannelStatusUI() {
                         </div>
                     `;
                 } else {
-                    setConsoleStatus(t('未配置', 'Not Configured', '未配置'), false);
+                    setConsoleStatus('', false);
                     detailsEl.style.display = 'block';
                     detailsEl.innerHTML = `
                         <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">${t('👤 微信绑定信息', '👤 WeChat Binding Info', '👤 微信綁定信息')}</div>
@@ -7118,7 +7118,7 @@ async function updateConsoleChannelStatusUI() {
                     </div>
                 `;
             } else {
-                setConsoleStatus(t('未配置', 'Not Configured', '未配置'), false);
+                setConsoleStatus('', false);
                 detailsEl.style.display = 'block';
                 detailsEl.innerHTML = `
                     <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">${t('👤 飞书绑定信息', '👤 Feishu Binding Info', '👤 飛書綁定信息')}</div>
@@ -7150,7 +7150,7 @@ async function updateConsoleChannelStatusUI() {
                     </div>
                 `;
             } else {
-                setConsoleStatus(t('未配置', 'Not Configured', '未配置'), false);
+                setConsoleStatus('', false);
                 detailsEl.style.display = 'block';
                 detailsEl.innerHTML = `
                     <div style="font-weight: bold; color: var(--text-primary); margin-bottom: 6px; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; display: flex; align-items: center; gap: 4px;">${t('👤 QQ机器人绑定', '👤 QQ Bot Binding Info', '👤 QQ機器人綁定')}</div>
