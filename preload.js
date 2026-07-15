@@ -52,6 +52,7 @@ contextBridge.exposeInMainWorld('api', {
     // 主进程向渲染进程的数据推送回调
     onLogReceived: (callback) => ipcRenderer.on('gateway-log', (event, data) => callback(data)),
     onStatusChanged: (callback) => ipcRenderer.on('gateway-status', (event, status) => callback(status)),
+    onGatewayHttpReady: (callback) => ipcRenderer.on('gateway-http-ready', (event, data) => callback(data)),
     onQrCodeReceived: (callback) => ipcRenderer.on('gateway-qrcode', (event, payload) => callback(payload)),
     onWeChatLoginSuccess: (callback) => ipcRenderer.on('wechat-login-success', (event, status) => callback(status)),
     onWeChatLoginFailed: (callback) => ipcRenderer.on('wechat-login-failed', (event, status) => callback(status)),

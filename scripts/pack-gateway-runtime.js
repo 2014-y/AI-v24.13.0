@@ -107,21 +107,48 @@ function buildExcludeArgs() {
   add('**/test');
   add('**/tests');
   add('**/__tests__');
-  add('**/docs');
   add('**/example');
   add('**/examples');
   add('**/coverage');
   add('**/.github');
+  // 默认排除 md，稍后强制追加 openclaw 模板 md
   add('**/*.md');
   add('**/*.markdown');
   add('**/*.map');
   add('**/*.d.ts');
-  add('node_modules/openclaw/docs');
-  add('node_modules/openclaw/src');
+  add('node_modules/openclaw/docs/cli');
+  add('node_modules/openclaw/docs/channels');
+  add('node_modules/openclaw/docs/concepts');
+  add('node_modules/openclaw/docs/gateway');
+  add('node_modules/openclaw/docs/plugins');
+  add('node_modules/openclaw/docs/tools');
+  add('node_modules/openclaw/docs/automation');
   add('node_modules/openclaw/scripts');
   add('node_modules/openclaw/skills');
   add('.node-sandbox/node_modules');
   return args;
+}
+
+/** 模板曾被 md 通配符排除，必须追加进 zip（否则 Missing workspace template） */
+function appendOpenClawTemplates() {
+  const tplPaths = [
+    'node_modules/openclaw/docs/reference/templates',
+    'node_modules/openclaw/src/agents/templates'
+  ];
+  for (const rel of tplPaths) {
+    const abs = path.join(ROOT, rel);
+    if (!fs.existsSync(abs)) continue;
+    const r = spawnSync('tar', ['-a', '-rf', ZIP_PATH, '-C', ROOT, rel], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      windowsHide: true
+    });
+    if (r.status !== 0) {
+      console.warn('[pack-gateway-runtime] template append warn:', rel, String(r.stderr || r.stdout || '').slice(0, 200));
+    } else {
+      console.log('  + forced templates:', rel);
+    }
+  }
 }
 
 function main() {
@@ -145,7 +172,6 @@ function main() {
   mkdirp(STAMP_DIR);
   fs.writeFileSync(path.join(STAMP_DIR, '.runtime-version'), String(pkg.version || '0.0.0'), 'utf8');
 
-  // 把版本戳临时放到工程根，一次 tar 打进正确文件名，避免 zip 追加
   const stampAtRoot = path.join(ROOT, '.runtime-version');
   const stampBackup = path.join(OUT_DIR, '_runtime-version-backup');
   let hadExistingStamp = false;
@@ -181,6 +207,7 @@ function main() {
     if (r.status !== 0) {
       throw new Error(String(r.stderr || r.stdout || 'tar failed').slice(0, 1200));
     }
+    appendOpenClawTemplates();
   } finally {
     try { fs.unlinkSync(stampAtRoot); } catch (e) {}
     if (hadExistingStamp) {

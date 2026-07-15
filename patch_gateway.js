@@ -1360,7 +1360,13 @@ if (fs.promises && fs.promises.writeFile) {
 
 
 // ─── Surgical Virtual Memory FS for skills-prompts ───
+// 热路径默认静默：每次 ENOENT 都 console.warn 会堵日志管道并拖慢 Gateway Ready
 globalThis.__SURGICAL_CACHE__ = globalThis.__SURGICAL_CACHE__ || {};
+const __VMFS_DEBUG__ = process.env.CLAWAI_VMFS_DEBUG === '1';
+function vmfsLog() {
+    if (!__VMFS_DEBUG__) return;
+    try { console.warn.apply(console, arguments); } catch (e) {}
+}
 
 const createFakeStats = function(file) {
     const data = globalThis.__SURGICAL_CACHE__[file];
@@ -1382,7 +1388,7 @@ fs.mkdirSync = function(target, options) {
     try { return originalMkdirSyncNew.apply(this, arguments); }
     catch (e) {
         if (e && String(target).includes('skills-prompts')) {
-            console.warn('[VM-FS] Intercepted mkdirSync: ' + target);
+            vmfsLog('[VM-FS] Intercepted mkdirSync: ' + target);
             return undefined;
         }
         throw e;
@@ -1394,7 +1400,7 @@ fs.mkdir = function(target, options, callback) {
     if (typeof options === 'function') { callback = options; options = undefined; }
     originalMkdirNew(target, options, function(err, result) {
         if (err && String(target).includes('skills-prompts')) {
-            console.warn('[VM-FS] Intercepted mkdir: ' + target);
+            vmfsLog('[VM-FS] Intercepted mkdir: ' + target);
             if (callback) callback(null, result);
         } else {
             if (callback) callback(err, result);
@@ -1408,7 +1414,7 @@ if (fs.promises && fs.promises.mkdir) {
         try { return await originalPromisesMkdirNew.apply(this, arguments); }
         catch (e) {
             if (e && String(target).includes('skills-prompts')) {
-                console.warn('[VM-FS] Intercepted promises.mkdir: ' + target);
+                vmfsLog('[VM-FS] Intercepted promises.mkdir: ' + target);
                 return undefined;
             }
             throw e;
@@ -1421,10 +1427,10 @@ const originalWriteFileSyncNew = fs.writeFileSync;
 fs.writeFileSync = function(file, data, options) {
     if (String(file).includes('skills-prompts')) {
         globalThis.__SURGICAL_CACHE__[file] = data;
-        console.warn('[VM-FS] Saved sync cache for: ' + file);
+        vmfsLog('[VM-FS] Saved sync cache for: ' + file);
         try { return originalWriteFileSyncNew.apply(this, arguments); }
         catch (e) {
-            console.warn('[VM-FS] Swallowed writeFileSync error for: ' + file);
+            vmfsLog('[VM-FS] Swallowed writeFileSync error for: ' + file);
             return undefined;
         }
     }
@@ -1436,10 +1442,10 @@ fs.writeFile = function(file, data, options, callback) {
     if (typeof options === 'function') { callback = options; options = undefined; }
     if (String(file).includes('skills-prompts')) {
         globalThis.__SURGICAL_CACHE__[file] = data;
-        console.warn('[VM-FS] Saved async cache for: ' + file);
+        vmfsLog('[VM-FS] Saved async cache for: ' + file);
         originalWriteFileNew(file, data, options, function(err) {
             if (err) {
-                console.warn('[VM-FS] Swallowed writeFile error for: ' + file);
+                vmfsLog('[VM-FS] Swallowed writeFile error for: ' + file);
                 if (callback) callback(null);
             } else {
                 if (callback) callback(null);
@@ -1455,10 +1461,10 @@ if (fs.promises && fs.promises.writeFile) {
     fs.promises.writeFile = async function(file, data, options) {
         if (String(file).includes('skills-prompts')) {
             globalThis.__SURGICAL_CACHE__[file] = data;
-            console.warn('[VM-FS] Saved promises cache for: ' + file);
+            vmfsLog('[VM-FS] Saved promises cache for: ' + file);
             try { return await originalPromisesWriteFileNew.apply(this, arguments); }
             catch (e) {
-                console.warn('[VM-FS] Swallowed promises.writeFile error for: ' + file);
+                vmfsLog('[VM-FS] Swallowed promises.writeFile error for: ' + file);
                 return undefined;
             }
         }
@@ -1471,14 +1477,14 @@ const originalReadFileSyncNew = fs.readFileSync;
 fs.readFileSync = function(file, options) {
     if (String(file).includes('skills-prompts')) {
         if (globalThis.__SURGICAL_CACHE__[file] !== undefined) {
-            console.warn('[VM-FS] Read sync cache hit for: ' + file);
+            vmfsLog('[VM-FS] Read sync cache hit for: ' + file);
             const val = globalThis.__SURGICAL_CACHE__[file];
             return typeof val === 'string' && (!options || typeof options === 'string' && options.includes('utf')) ? val : Buffer.from(val);
         }
         try { return originalReadFileSyncNew.apply(this, arguments); }
         catch (e) {
             if (e && e.code === 'ENOENT') {
-                console.warn('[VM-FS] Read sync cache miss & ENOENT for: ' + file);
+                vmfsLog('[VM-FS] Read sync cache miss & ENOENT for: ' + file);
                 return options && typeof options === 'string' && options.includes('utf') ? '' : Buffer.alloc(0);
             }
             throw e;
@@ -1492,7 +1498,7 @@ fs.readFile = function(file, options, callback) {
     if (typeof options === 'function') { callback = options; options = undefined; }
     if (String(file).includes('skills-prompts')) {
         if (globalThis.__SURGICAL_CACHE__[file] !== undefined) {
-            console.warn('[VM-FS] Read async cache hit for: ' + file);
+            vmfsLog('[VM-FS] Read async cache hit for: ' + file);
             const val = globalThis.__SURGICAL_CACHE__[file];
             const res = typeof val === 'string' && (!options || typeof options === 'string' && options.includes('utf')) ? val : Buffer.from(val);
             if (callback) callback(null, res);
@@ -1500,7 +1506,7 @@ fs.readFile = function(file, options, callback) {
         }
         originalReadFileNew(file, options, function(err, data) {
             if (err && err.code === 'ENOENT') {
-                console.warn('[VM-FS] Read async cache miss & ENOENT for: ' + file);
+                vmfsLog('[VM-FS] Read async cache miss & ENOENT for: ' + file);
                 const res = options && typeof options === 'string' && options.includes('utf') ? '' : Buffer.alloc(0);
                 if (callback) callback(null, res);
             } else {
@@ -1517,14 +1523,14 @@ if (fs.promises && fs.promises.readFile) {
     fs.promises.readFile = async function(file, options) {
         if (String(file).includes('skills-prompts')) {
             if (globalThis.__SURGICAL_CACHE__[file] !== undefined) {
-                console.warn('[VM-FS] Read promises cache hit for: ' + file);
+                vmfsLog('[VM-FS] Read promises cache hit for: ' + file);
                 const val = globalThis.__SURGICAL_CACHE__[file];
                 return typeof val === 'string' && (!options || typeof options === 'string' && options.includes('utf')) ? val : Buffer.from(val);
             }
             try { return await originalPromisesReadFileNew.apply(this, arguments); }
             catch (e) {
                 if (e && e.code === 'ENOENT') {
-                    console.warn('[VM-FS] Read promises cache miss & ENOENT for: ' + file);
+                    vmfsLog('[VM-FS] Read promises cache miss & ENOENT for: ' + file);
                     return options && typeof options === 'string' && options.includes('utf') ? '' : Buffer.alloc(0);
                 }
                 throw e;
@@ -1556,7 +1562,7 @@ fs.existsSync = function(file) {
         try { return orig.apply(this, arguments); }
         catch (e) {
             if (e && e.code === 'ENOENT' && String(p).includes('skills-prompts')) {
-                console.warn('[VM-FS] Intercepted ' + m + ' ENOENT for: ' + p);
+                vmfsLog('[VM-FS] Intercepted ' + m + ' ENOENT for: ' + p);
                 return createFakeStats(p);
             }
             throw e;
@@ -1576,7 +1582,7 @@ fs.existsSync = function(file) {
         }
         args.push(function(err, stats) {
             if (err && err.code === 'ENOENT' && String(args[0]).includes('skills-prompts')) {
-                console.warn('[VM-FS] Intercepted ' + m + ' for: ' + args[0]);
+                vmfsLog('[VM-FS] Intercepted ' + m + ' for: ' + args[0]);
                 if (cb) cb(null, createFakeStats(args[0]));
             } else {
                 if (cb) cb(err, stats);
@@ -1597,7 +1603,7 @@ if (fs.promises) {
             try { return await orig.apply(this, arguments); }
             catch (e) {
                 if (e && e.code === 'ENOENT' && String(p).includes('skills-prompts')) {
-                    console.warn('[VM-FS] Intercepted promises.' + m + ' for: ' + p);
+                    vmfsLog('[VM-FS] Intercepted promises.' + m + ' for: ' + p);
                     return createFakeStats(p);
                 }
                 throw e;
@@ -1619,7 +1625,7 @@ if (fs.promises) {
             }
             try { return orig.apply(this, arguments); }
             catch (e) {
-                console.warn('[VM-FS] Swallowed ' + m + ' for: ' + p1);
+                vmfsLog('[VM-FS] Swallowed ' + m + ' for: ' + p1);
                 return;
             }
         }
@@ -1643,7 +1649,7 @@ if (fs.promises) {
             }
             args.push(function(err) {
                 if (err) {
-                    console.warn('[VM-FS] Swallowed ' + m + ' error for: ' + p1);
+                    vmfsLog('[VM-FS] Swallowed ' + m + ' error for: ' + p1);
                     if (cb) cb(null);
                 } else {
                     if (cb) cb(null);
@@ -1669,7 +1675,7 @@ if (fs.promises) {
                 }
                 try { return await orig.apply(this, arguments); }
                 catch (e) {
-                    console.warn('[VM-FS] Swallowed promises.' + m + ' for: ' + p1);
+                    vmfsLog('[VM-FS] Swallowed promises.' + m + ' for: ' + p1);
                     return;
                 }
             }

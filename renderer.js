@@ -733,6 +733,79 @@ let progressTimeout = null;
 let currentProgress = 0;
 let uptimeInterval = null;
 let totalRequestCount = 0;
+let gatewayReadyProbeTimer = null;
+let gatewayLogReadyTail = '';
+
+function stopGatewayReadyProbe() {
+    if (gatewayReadyProbeTimer) {
+        clearInterval(gatewayReadyProbeTimer);
+        gatewayReadyProbeTimer = null;
+    }
+}
+
+function resolveGatewayProbePort() {
+    try {
+        const el = document.getElementById('gateway-port') || document.getElementById('stat-port');
+        const n = parseInt(el && el.value != null ? el.value : (el && el.innerText), 10);
+        if (Number.isFinite(n) && n > 0) return n;
+    } catch (e) {}
+    return 18789;
+}
+
+/** HTTP 端口一旦可连就解锁（不等日志分片把 "listening" 拼齐） */
+function startGatewayReadyProbe(reason) {
+    if (gatewayFullyReady || gatewayReadyProbeTimer) return;
+    const port = resolveGatewayProbePort();
+    let tries = 0;
+    gatewayReadyProbeTimer = setInterval(() => {
+        if (gatewayFullyReady) {
+            stopGatewayReadyProbe();
+            return;
+        }
+        tries += 1;
+        if (tries > 90) {
+            stopGatewayReadyProbe();
+            return;
+        }
+        const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timer = setTimeout(() => { try { ctrl && ctrl.abort(); } catch (e) {} }, 400);
+        fetch(`http://127.0.0.1:${port}/`, { method: 'GET', signal: ctrl ? ctrl.signal : undefined, cache: 'no-store' })
+            .then(() => {
+                clearTimeout(timer);
+                if (!gatewayFullyReady) markGatewayReadyFromLog('核心服务已就绪，可打开 OpenClaw');
+            })
+            .catch(() => { clearTimeout(timer); });
+        if (tries % 3 === 0) {
+            fetch(`http://127.0.0.1:${port}/`, { mode: 'no-cors', cache: 'no-store' })
+                .then(() => {
+                    if (!gatewayFullyReady) markGatewayReadyFromLog('核心服务已就绪，可打开 OpenClaw');
+                })
+                .catch(() => {});
+        }
+    }, 500);
+}
+
+function markGatewayReadyFromLog(msg) {
+    if (gatewayFullyReady) return;
+    stopGatewayReadyProbe();
+    setGatewayFullyReadyUI();
+    updateProgressUI(100, msg || '核心服务已就绪，可打开 OpenClaw');
+    const pane = document.getElementById('openclaw-panel-view');
+    if (pane && pane.classList.contains('active')) {
+        setTimeout(() => loadOpenclawControlUi(true), 200);
+    }
+}
+
+function setGatewayFullyReadyUI() {
+    if (gatewayFullyReady) return;
+    gatewayFullyReady = true;
+    gatewayStatus = 'running';
+    stopGatewayReadyProbe();
+    updateGatewayStatusUI('running');
+    try { updateProgressUI(100, '本地 AI ClawAI服务就绪！'); } catch (e) {}
+    try { sendDesktopNotification('ClawAI状态变更', 'OpenClaw 本地智能ClawAI已成功启动运行！'); } catch (e) {}
+    __openclawPanelLastUrl = '';
+}
 
 // 2. DOM 元素获取
 const winBtnMinimize = document.getElementById('win-btn-minimize');
@@ -1629,15 +1702,33 @@ function setupIpcListeners() {
         }
         text = filteredLines.join('\n');
 
-        if (text.includes('agent runtime plugins pre-warmed')) {
+        // 跨 IPC 分片拼接，避免 "http server listening" 被拆开导致一直卡在进度条
+        gatewayLogReadyTail = (gatewayLogReadyTail + '\n' + text).slice(-8000);
+        const readyHaystack = gatewayLogReadyTail;
+
+        if (
+            readyHaystack.includes('[gateway] ready')
+            || readyHaystack.includes('gateway] ready')
+            || readyHaystack.toLowerCase().includes('http server listening')
+            || readyHaystack.includes('agent runtime plugins pre-warmed')
+        ) {
             const wasReady = gatewayFullyReady;
-            setGatewayFullyReadyUI();
-            // 网关刚就绪：若已在 OpenClaw 面板，强制用当前令牌免密重载一次
+            markGatewayReadyFromLog('本地 AI ClawAI服务就绪！');
             if (!wasReady) {
                 const pane = document.getElementById('openclaw-panel-view');
                 if (pane && pane.classList.contains('active')) {
-                    setTimeout(() => loadOpenclawControlUi(true), 800);
+                    setTimeout(() => loadOpenclawControlUi(true), 200);
                 }
+            }
+        } else if (
+            text.includes('starting HTTP server')
+            || text.includes('started (interval:')
+            || text.includes('[TokenGuard]')
+            || text.includes('agent model:')
+        ) {
+            startGatewayReadyProbe('http-near');
+            if (currentProgress < 90) {
+                updateProgressUI(Math.max(currentProgress, 85), '正在绑定端口并装载渠道插件…');
             }
         }
         // 仅在ClawAI真正运行中，且越过ClawAI刚启动时的 5 秒历史控制台日志喷吐垃圾冷区，才对全新实时流量记账
@@ -1677,29 +1768,40 @@ function setupIpcListeners() {
             let updated = false;
             
             if (text.includes('loading configuration') || text.includes('Doctor') || text.includes('migration')) {
-                targetProgress = 20;
+                targetProgress = 25;
                 targetText = '正在校验ClawAI配置文件与诊断系统...';
                 updated = true;
             } else if (text.includes('Failed to install missing configured plugin')) {
                 targetProgress = 60;
-                targetText = '正在后台下载并安装缺失的扩展插件，可能需要1-3分钟，请耐心等待...';
+                targetText = '正在后台下载并安装缺失的扩展插件…';
                 updated = true;
             } else if (text.includes('[plugins]') || text.includes('plugin not installed') || text.includes('resolving authentication')) {
-                targetProgress = 50;
+                targetProgress = 55;
                 targetText = '正在装载核心插件驱动程序...';
                 updated = true;
-            } else if (text.includes('starting HTTP server') || text.includes('force: no listeners')) {
-                targetProgress = 70;
-                targetText = '正在拉起 HTTP 路由服务器端口服务...';
+            } else if (
+                /http server listening/i.test(text)
+                || text.includes('HTTP server listening on')
+                || text.includes('Server is running on')
+                || text.includes('running on port')
+                || text.includes('agent model:')
+            ) {
+                targetProgress = 96;
+                targetText = 'HTTP 已监听，正在完成收尾…';
                 updated = true;
-            } else if (text.includes('HTTP server listening on') || text.includes('Server is running on') || text.includes('Setup complete!') || text.includes('running on port') || text.includes('started (interval:')) {
-                targetProgress = 90;
-                targetText = '核心服务已开启，正在加载业务插件与长连接服务...';
+            } else if (text.includes('[gateway] ready') || text.includes('gateway] ready')) {
+                targetProgress = 100;
+                targetText = '本地 AI ClawAI服务就绪！';
                 updated = true;
             } else if (text.includes('agent runtime plugins pre-warmed')) {
                 targetProgress = 100;
                 targetText = '本地 AI ClawAI服务就绪！';
                 updated = true;
+            } else if (text.includes('starting HTTP server') || text.includes('force: no listeners') || text.includes('started (interval:')) {
+                targetProgress = 78;
+                targetText = '正在绑定端口并装载渠道插件…';
+                updated = true;
+                startGatewayReadyProbe('http-starting');
             }
 
             // 限制进度单调递增，绝不往回拉扯
@@ -1713,20 +1815,22 @@ function setupIpcListeners() {
 
         // 进行常见启动消息的汉化和修饰
         let cleanedText = text;
-        if (text.includes('loading configuration.')) {
-            cleanedText = cleanedText.replace('loading configuration.', '正在读取与解析ClawAI本地配置文件...');
-        } else if (text.includes('resolving authentication.')) {
-            cleanedText = cleanedText.replace('resolving authentication.', '正在与云端服务器进行开发者授权密钥安全核验...');
+        if (text.includes('loading configuration')) {
+            cleanedText = cleanedText.replace(/loading configuration[.….]*/, '正在读取与解析ClawAI本地配置文件...');
+        } else if (text.includes('resolving authentication')) {
+            cleanedText = cleanedText.replace(/resolving authentication[.….]*/, '正在与云端服务器进行开发者授权密钥安全核验...');
         } else if (text.includes('force: no listeners on port')) {
             cleanedText = cleanedText.replace(/force: no listeners on port (\d+)/, '检测到通信端口 $1 空闲，准备占用侦听...');
         } else if (text.includes('starting...')) {
             cleanedText = cleanedText.replace('starting...', '正在拉起ClawAI核心引擎，初始化网络钩子...');
         } else if (text.includes('started (interval:')) {
-            cleanedText = cleanedText.replace('started (interval: 60s, startup-grace: 60s, channel-connect-grace: 120s)', '健康状态监控已上线 (周期 60秒，连接宽限 120秒) ✅');
+            cleanedText = cleanedText.replace(/started \(interval: [^)]+\)/, '健康状态监控已上线 ✅');
         } else if (text.includes('provider auth state pre-warmed')) {
             cleanedText = cleanedText.replace(/provider auth state pre-warmed in (\d+)ms/, '内置模型云端鉴权通道安全预热就绪 (耗时 $1ms) ✅');
         } else if (text.includes('agent runtime plugins pre-warmed')) {
             cleanedText = cleanedText.replace(/agent runtime plugins pre-warmed in (\d+)ms/, 'ClawAI运行时全部核心业务插件装载完毕 (耗时 $1ms) 🚀');
+        } else if (/http server listening/i.test(text)) {
+            cleanedText = cleanedText.replace(/http server listening[^\n]*/i, 'HTTP 本地服务已监听，面板可打开 ✅');
         } else if (text.includes('HTTP server listening on')) {
             cleanedText = cleanedText.replace(/HTTP server listening on http:\/\/([^\s]+)/, 'HTTP 本地总线服务在 http://$1 上开启成功！');
         } else if (text.includes('Webhook server listening on')) {
@@ -1805,17 +1909,11 @@ function setupIpcListeners() {
         }
     });
 
-    // ClawAI状态同步
-function setGatewayFullyReadyUI() {
-    if (gatewayFullyReady) return;
-    gatewayFullyReady = true;
-    gatewayStatus = 'running';
-    
-    updateGatewayStatusUI('running');
-    sendDesktopNotification('ClawAI状态变更', 'OpenClaw 本地智能ClawAI已成功启动运行！');
-    // 重启后清掉缓存的面板 URL，下次进入强制免密重载
-    __openclawPanelLastUrl = '';
-}
+    if (window.api.onGatewayHttpReady) {
+        window.api.onGatewayHttpReady(() => {
+            markGatewayReadyFromLog('核心服务已就绪，可打开 OpenClaw');
+        });
+    }
 
     // ClawAI状态同步
     window.api.onStatusChanged((status) => {
@@ -1834,6 +1932,8 @@ function setGatewayFullyReadyUI() {
         if (status === 'stopped') {
             gatewayStatus = 'stopped';
             gatewayFullyReady = false;
+            gatewayLogReadyTail = '';
+            stopGatewayReadyProbe();
             updateGatewayStatusUI('stopped');
             if (oldStatus === 'running') {
                 sendDesktopNotification('ClawAI状态变更', 'OpenClaw 本地智能ClawAI已停止运行。');
@@ -1842,13 +1942,15 @@ function setGatewayFullyReadyUI() {
         } 
         else if (status === 'running') {
             gatewayRunningTime = Date.now();
-            // 如果是冷启动，当前进度还在进行中，不直接设为 running UI，而是维持在 starting
+            // 冷启动：维持 starting，同时开始端口探测，避免卡在 97%
             if (currentProgress > 0 && !gatewayFullyReady) {
                 gatewayStatus = 'starting';
                 updateGatewayStatusUI('starting');
+                startGatewayReadyProbe('status-running');
             } else {
                 gatewayStatus = 'running';
                 gatewayFullyReady = true;
+                stopGatewayReadyProbe();
                 updateGatewayStatusUI('running');
                 if (oldStatus !== 'running') {
                     sendDesktopNotification('ClawAI状态变更', 'OpenClaw 本地智能ClawAI已成功启动运行！');
@@ -4362,15 +4464,9 @@ function updateProgressUI(val, textLabel = '') {
     }
     if (progressText && textLabel) progressText.innerText = textLabel;
 
-    // 🌟 启动就绪成功提示弹窗
+    // 启动就绪：轻提示即可，避免 modal alert 打断
     if (gatewayStatus === 'starting' && oldProgress < 100 && val === 100) {
-        setTimeout(() => {
-            alert(t(
-                '🎉 ClawAI核心服务已成功启用并就绪！\n\n本地 AI 消息路由总线已在后台进入 stable 运行状态。',
-                '🎉 Gateway core service successfully started and ready!\n\nLocal AI message routing bus has entered stable running state in the background.',
-                '🎉 ClawAI核心服務已成功啟用並就緒！\n\n本地 AI 消息路由總線已在後台進入 stable 運行狀態。'
-            ));
-        }, 100);
+        try { showToast(t('ClawAI 已就绪', 'ClawAI is ready', 'ClawAI 已就緒')); } catch (e) {}
     }
 
     // 🌟 就绪 3 秒后优雅渐隐进度条
@@ -4390,7 +4486,7 @@ function updateProgressUI(val, textLabel = '') {
                         }
                     }, 800);
                 }
-            }, 3000);
+            }, 800);
         }
     }
 }
@@ -4446,13 +4542,16 @@ function updateGatewayStatusUI(status) {
 
     if (status === 'running') {
         statusLight.className = 'status-light-btn-container running';
+        statusLabel.setAttribute('data-i18n', 'sidebar.status.running');
         statusLabel.innerText = t('sidebar.status.running');
         btnIconStart.style.display = 'none';
         btnIconStop.style.display = 'block';
+        btnLabelText.setAttribute('data-i18n', 'console.btn.stop');
         btnLabelText.innerText = t('console.btn.stop');
         gatewayToggleBtn.className = 'status-badge-container running';
 
         if (chatWelcomeText) {
+            chatWelcomeText.setAttribute('data-i18n', 'status.running_hint');
             chatWelcomeText.innerText = isEn ? 'I have successfully connected to your local OpenClaw gateway!' : '我已经与您本地的 OpenClaw ClawAI成功对接！';
             chatWelcomeText.style.color = '#00e676';
         }
@@ -4495,13 +4594,16 @@ function updateGatewayStatusUI(status) {
         }
     } else if (status === 'stopped') {
         statusLight.className = 'status-light-btn-container';
+        statusLabel.setAttribute('data-i18n', 'sidebar.status.stopped');
         statusLabel.innerText = t('sidebar.status.stopped');
         btnIconStart.style.display = 'block';
         btnIconStop.style.display = 'none';
+        btnLabelText.setAttribute('data-i18n', 'console.btn.start');
         btnLabelText.innerText = t('console.btn.start');
         gatewayToggleBtn.className = 'status-badge-container stopped';
 
         if (chatWelcomeText) {
+            chatWelcomeText.setAttribute('data-i18n', 'status.stopped');
             chatWelcomeText.innerText = t('status.stopped');
             chatWelcomeText.style.color = '#b388ff';
         }
@@ -4522,14 +4624,17 @@ function updateGatewayStatusUI(status) {
         }
     } else if (status === 'upgrading') {
         statusLight.className = 'status-light-btn-container starting';
-        statusLabel.innerText = '沙箱升级中';
+        statusLabel.setAttribute('data-i18n', 'sidebar.status.upgrading');
+        statusLabel.innerText = t('sidebar.status.upgrading');
         btnIconStart.style.display = 'block';
         btnIconStop.style.display = 'none';
-        btnLabelText.innerText = '沙箱升级中';
+        btnLabelText.setAttribute('data-i18n', 'sidebar.status.upgrading');
+        btnLabelText.innerText = t('sidebar.status.upgrading');
         gatewayToggleBtn.className = 'status-badge-container starting';
 
         if (chatWelcomeText) {
-            chatWelcomeText.innerText = '正在自动升级内置 Node.js 沙箱环境，请稍候...';
+            chatWelcomeText.setAttribute('data-i18n', 'status.upgrading_hint');
+            chatWelcomeText.innerText = t('正在自动升级内置 Node.js 沙箱环境，请稍候...', 'Automatically upgrading built-in Node.js sandbox, please wait...', '正在自動升級內置 Node.js 沙箱環境，請稍候...');
             chatWelcomeText.style.color = '#ffd54f';
         }
 
@@ -4542,9 +4647,11 @@ function updateGatewayStatusUI(status) {
         }
     } else if (status === 'starting') {
         statusLight.className = 'status-light-btn-container starting';
+        statusLabel.setAttribute('data-i18n', 'sidebar.status.starting');
         statusLabel.innerText = t('sidebar.status.starting');
         btnIconStart.style.display = 'block';
         btnIconStop.style.display = 'none';
+        btnLabelText.setAttribute('data-i18n', 'sidebar.status.starting');
         btnLabelText.innerText = t('sidebar.status.starting');
         gatewayToggleBtn.className = 'status-badge-container starting';
 
@@ -4555,36 +4662,30 @@ function updateGatewayStatusUI(status) {
         }
 
         if (chatWelcomeText) {
+            chatWelcomeText.setAttribute('data-i18n', 'status.starting_hint');
             chatWelcomeText.innerText = isEn ? 'Connecting to the local OpenClaw gateway, please wait...' : '正在连接本地的 OpenClaw ClawAI，请稍候...';
             chatWelcomeText.style.color = '#ffd54f';
         }
 
-        // 启动进度动画
+        // 假进度只爬到 80%，避免「97% 假死」观感；真正就绪靠端口探测 / listening 日志
         if (progressContainer) progressContainer.style.display = 'flex';
-        updateProgressUI(5, '正在拉起子进程环境...');
+        updateProgressUI(8, '正在拉起子进程环境...');
+        gatewayLogReadyTail = '';
+        startGatewayReadyProbe('user-start');
 
         if (progressInterval) clearInterval(progressInterval);
         progressInterval = setInterval(() => {
-            if (currentProgress < 99) {
-                let nextProgress = currentProgress;
-                if (currentProgress < 85) {
-                    nextProgress = currentProgress + (85 - currentProgress) * 0.04;
-                } else {
-                    // 85% ~ 99% 极慢速前行，保持进度条微动，绝不卡死
-                    nextProgress = currentProgress + (99 - currentProgress) * 0.015;
-                }
+            if (currentProgress >= 80 || gatewayFullyReady) return;
+            let nextProgress = Math.min(80, currentProgress + 3.5);
 
-                let currentText = '正在拉起子进程环境...';
-                if (nextProgress > 88) {
-                    currentText = '核心服务已开启，正在加载业务插件与长连接服务...';
-                } else if (nextProgress > 60) {
-                    currentText = '正在侦听ClawAI通信端口...';
-                } else if (nextProgress > 30) {
-                    currentText = '正在装载核心插件驱动...';
-                }
-                updateProgressUI(nextProgress, currentText);
+            let currentText = '正在拉起子进程环境...';
+            if (nextProgress > 65) {
+                currentText = '正在装载渠道插件与控制台…';
+            } else if (nextProgress > 35) {
+                currentText = '正在装载核心插件驱动...';
             }
-        }, 400);
+            updateProgressUI(nextProgress, currentText);
+        }, 200);
     }
 }
 
@@ -4628,15 +4729,15 @@ function setupTabSwitching() {
             }
             
 
-            // 限制ClawAI未完全就位时禁止点击内置面板Tab
+            // HTTP 已监听即可打开（setGatewayFullyReadyUI 会提前置位）
             if (tab.getAttribute('data-tab') === 'openclaw-panel-view') {
                 if (!gatewayFullyReady) {
                     e.preventDefault();
                     e.stopPropagation();
                     if (gatewayStatus === 'starting' || gatewayStatus === 'running') {
-                        showToast('ClawAI正在初始化插件，请等候控制台输出 [gateway] ready 后再访问哦！');
+                        showToast('ClawAI 正在启动，约十几秒后可打开 OpenClaw…');
                     } else {
-                        showToast('请先在左上角启动ClawAI服务，待服务就位后再访问面板哦！');
+                        showToast('请先在左上角启动 ClawAI 服务');
                     }
                     return;
                 }
@@ -5836,21 +5937,31 @@ function applyLanguage(lang) {
     if (statusTextEl) {
         const useBuiltIn = getUseBuiltIn();
         if (gatewayStatus === 'running' || gatewayFullyReady) {
+            statusTextEl.setAttribute('data-i18n', 'status.running');
             statusTextEl.innerText = t('status.running');
             statusTextEl.style.color = '#00e676';
         } else if (gatewayStatus === 'starting') {
+            statusTextEl.setAttribute('data-i18n', 'status.starting');
             statusTextEl.innerText = t('status.starting');
             statusTextEl.style.color = '#ffd54f';
         } else {
             // stopped
             if (useBuiltIn) {
+                statusTextEl.setAttribute('data-i18n', 'status.stopped');
                 statusTextEl.innerText = t('status.stopped');
                 statusTextEl.style.color = '#b388ff';
             } else {
+                statusTextEl.setAttribute('data-i18n', 'status.offline_hint');
                 statusTextEl.innerText = t('status.offline_hint');
                 statusTextEl.style.color = '#ff9800';
             }
         }
+    }
+
+    // 5b. 翻译侧边栏“正常 / Active”微型状态字样
+    const sidebarPercent = document.getElementById('sidebar-status-percentage');
+    if (sidebarPercent && (sidebarPercent.innerText === '正常' || sidebarPercent.innerText === 'Active')) {
+        sidebarPercent.innerText = t('正常', 'Active', '正常');
     }
 
     // 6. 重新执行动态生成的 UI 模块渲染
@@ -7908,7 +8019,11 @@ function initBuiltinTerminal() {
     }
     
     const container = document.getElementById('xterm-container');
-    if (!container || !window.Terminal) return;
+    if (!container) return;
+    if (!window.Terminal) {
+        container.innerHTML = '<div style="color:#f44336;padding:16px;font-family:Consolas,monospace;font-size:13px;">xterm 组件未加载（打包后资源缺失）。请重新安装完整包。</div>';
+        return;
+    }
     
     // 初始化 Terminal 实例
     builtinTerminal = new window.Terminal({
@@ -7958,14 +8073,22 @@ function initBuiltinTerminal() {
     
     // 请求主进程启动后端 node-pty
     const currentLang = localStorage.getItem('setting_language') || 'zh-CN';
-    window.api.startBuiltinTerminal(currentLang).then(() => {
-        // 启动后第一次手动调整尺寸以同步
+    window.api.startBuiltinTerminal(currentLang).then((res) => {
+        if (res && res.ok === false && builtinTerminal) {
+            builtinTerminal.writeln('');
+            builtinTerminal.writeln('\x1b[33m若内置终端无输出，已尝试打开外部沙箱窗口。\x1b[0m');
+        }
         setTimeout(() => {
             if (builtinTerminalFitAddon) builtinTerminalFitAddon.fit();
             if (builtinTerminal) {
                 window.api.resizeBuiltinTerminal(builtinTerminal.cols, builtinTerminal.rows);
             }
         }, 300);
+    }).catch((err) => {
+        if (builtinTerminal) {
+            builtinTerminal.writeln('');
+            builtinTerminal.writeln('\x1b[31m内置终端启动失败: ' + (err && err.message ? err.message : err) + '\x1b[0m');
+        }
     });
     
     isTerminalInitialized = true;

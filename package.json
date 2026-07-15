@@ -66,8 +66,8 @@
     "nodeGypRebuild": false,
     "forceCodeSigning": false,
     "asarUnpack": [
-      "**/*.node",
-      "**/node-pty/**"
+      "**/node_modules/node-pty/**",
+      "**/*.node"
     ],
     "icon": "config/icon.ico",
     "directories": {

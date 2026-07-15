@@ -2,6 +2,7 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, Notification, session, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const net = require('net');
 const { fork } = require('child_process');
 const {
     isTempLikePath,
@@ -414,11 +415,60 @@ async function checkAndHealSandboxNode() {
 let mainWindow = null;
 let tray = null;
 let gatewayProcess = null;
+let gatewayHttpReadyTimer = null;
+let gatewayHttpReadyNotified = false;
 let isQuitting = false;
 let isMaximizedState = false;
 let normalBounds = null;
 const appStartTime = Date.now();
 global.latestAcpDashboardUrl = '';
+
+function stopGatewayHttpReadyWatch() {
+    if (gatewayHttpReadyTimer) {
+        clearInterval(gatewayHttpReadyTimer);
+        gatewayHttpReadyTimer = null;
+    }
+}
+
+function notifyGatewayHttpReady(port) {
+    if (gatewayHttpReadyNotified) return;
+    gatewayHttpReadyNotified = true;
+    stopGatewayHttpReadyWatch();
+    try {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('gateway-http-ready', { port: port || 18789 });
+        }
+    } catch (e) {}
+}
+
+/** TCP 探测：端口可连即通知 UI 解锁（比等日志更稳） */
+function startGatewayHttpReadyWatch(port) {
+    stopGatewayHttpReadyWatch();
+    gatewayHttpReadyNotified = false;
+    const targetPort = Number(port) > 0 ? Number(port) : 18789;
+    let tries = 0;
+    gatewayHttpReadyTimer = setInterval(() => {
+        if (!gatewayProcess || gatewayHttpReadyNotified) {
+            stopGatewayHttpReadyWatch();
+            return;
+        }
+        tries += 1;
+        if (tries > 120) {
+            stopGatewayHttpReadyWatch();
+            return;
+        }
+        const socket = net.connect({ host: '127.0.0.1', port: targetPort }, () => {
+            try { socket.destroy(); } catch (e) {}
+            notifyGatewayHttpReady(targetPort);
+        });
+        socket.on('error', () => {
+            try { socket.destroy(); } catch (e) {}
+        });
+        socket.setTimeout(350, () => {
+            try { socket.destroy(); } catch (e) {}
+        });
+    }, 400);
+}
 
 // 与 open-external / 示例配置一致的桌面端默认网关令牌（仅本机 loopback）
 const CLAWAI_DEFAULT_GATEWAY_TOKEN = DEFAULT_GATEWAY_TOKEN;
@@ -614,11 +664,13 @@ function resolveWritableRuntimeDir() {
 /** 把补丁与截图脚本部署到可写运行时目录，返回正斜杠补丁路径供 --require 使用 */
 function deployRuntimeArtifacts() {
     const dir = resolveWritableRuntimeDir();
-    // openclaw-state / gateway-auth 必须与 patch 同目录部署，供沙箱子进程 require
+    // 优先拷贝应用内最新补丁（asar/工程），再回退 gateway-runtime（可能是旧解压）
     const names = ['patch_gateway.js', 'token-usage-parse.js', 'capture-desktop.ps1', 'openclaw-state.js', 'gateway-auth.js'];
     for (const name of names) {
-        const srcCandidates = [resolveAppFsPath(name), path.join(__dirname, name)];
-        const src = srcCandidates.find((p) => fs.existsSync(p));
+        const srcCandidates = [path.join(__dirname, name), resolveAppFsPath(name)];
+        const src = srcCandidates.find((p) => {
+            try { return p && fs.existsSync(p) && !String(p).includes(`${path.sep}app.asar${path.sep}`); } catch (e) { return false; }
+        }) || srcCandidates.find((p) => fs.existsSync(p));
         if (!src) continue;
         try {
             fs.copyFileSync(src, path.join(dir, name));
@@ -631,6 +683,89 @@ function deployRuntimeArtifacts() {
     process.env.CLAWAI_PATCH_PATH = patchPath;
     process.env.CLAWAI_RUNTIME_DIR = dir;
     return { runtimeDir: dir, patchPath, patchAbs };
+}
+
+/** 清掉 OpenClaw 已不存在的 plugins.entries（消除启动 Config warnings） */
+function pruneStalePluginConfigEntries(config) {
+    if (!config || !config.plugins || !config.plugins.entries) return { changed: false };
+    let changed = false;
+    const entries = config.plugins.entries;
+    const allow = Array.isArray(config.plugins.allow) ? config.plugins.allow : [];
+    const installs = config.plugins.installs || {};
+    const loadPaths = (config.plugins.load && Array.isArray(config.plugins.load.paths))
+        ? config.plugins.load.paths
+        : [];
+
+    const existsOnDisk = (id) => {
+        if (!id || id.startsWith('.') || id.includes('..')) return false;
+        try {
+            if (installs[id] && installs[id].installPath && fs.existsSync(installs[id].installPath)) return true;
+        } catch (e) {}
+        try {
+            const ext = path.join(CONFIG_DIR, 'extensions', id);
+            if (fs.existsSync(ext)) return true;
+        } catch (e) {}
+        for (const p of loadPaths) {
+            try {
+                if (typeof p === 'string' && p.toLowerCase().includes(String(id).toLowerCase()) && fs.existsSync(p)) return true;
+            } catch (e) {}
+        }
+        // 内置渠道 / 自定义清单里仍声明的保留
+        if (BUNDLED_CUSTOM_PLUGINS.includes(id)) return true;
+        if (BUNDLED_NPM_CHANNEL_PLUGINS.some((e) => e.id === id)) return true;
+        if (id === LONG_TERM_MEMORY_UI_ID) return true;
+        try {
+            if (LONG_TERM_MEMORY_STACK && LONG_TERM_MEMORY_STACK.includes(id)) return true;
+        } catch (e) {}
+        return false;
+    };
+
+    for (const id of Object.keys(entries)) {
+        // 安装残留 / 明显无效 id
+        if (id.startsWith('.') || id === 'key-rotator-proxy' || id === 'system-control') {
+            delete entries[id];
+            changed = true;
+            continue;
+        }
+        // UI 伞形 id 可留着给 ClawAI 面板，但不要进 OpenClaw allow（下面 allow 再滤）
+        if (id === LONG_TERM_MEMORY_UI_ID) continue;
+        if (!existsOnDisk(id)) {
+            // 仅删“确定不存在”的告警项；保留常见核心名以免误伤
+            const keepCore = new Set(['feishu', 'qqbot', 'telegram', 'slack', 'whatsapp', 'matrix', 'voice-call', 'webhooks', 'bonjour', 'ollama', 'openclaw-weixin']);
+            if (keepCore.has(id)) continue;
+            delete entries[id];
+            changed = true;
+        }
+    }
+
+    if (Array.isArray(config.plugins.allow)) {
+        const nextAllow = config.plugins.allow.filter((id) => {
+            if (id === LONG_TERM_MEMORY_UI_ID) return false;
+            if (id && id.startsWith('.')) return false;
+            if (!entries[id]) return false;
+            return true;
+        });
+        if (JSON.stringify(nextAllow) !== JSON.stringify(config.plugins.allow)) {
+            config.plugins.allow = nextAllow;
+            changed = true;
+        }
+    }
+
+    // load.paths 微信已指向 runtime 时，删掉 installs 里的第二份，避免 duplicate 警告
+    try {
+        const wxInstall = installs['openclaw-weixin'];
+        const wxBundled = resolveAppFsPath('node_modules', '@tencent-weixin', 'openclaw-weixin');
+        if (wxInstall && wxBundled && fs.existsSync(wxBundled)) {
+            const ip = wxInstall.installPath ? path.resolve(wxInstall.installPath) : '';
+            const want = path.resolve(wxBundled);
+            if (ip && ip !== want) {
+                delete config.plugins.installs['openclaw-weixin'];
+                changed = true;
+            }
+        }
+    } catch (e) {}
+
+    return { changed };
 }
 
 // 随应用打包、必须在别人电脑上默认可运行的自定义插件清单
@@ -1260,6 +1395,11 @@ function prepareChannelPluginsBeforeGateway() {
     if (!Array.isArray(config.plugins.load.paths)) { config.plugins.load.paths = []; needsSave = true; }
     if (!config.plugins.installs) { config.plugins.installs = {}; needsSave = true; }
 
+    try {
+        const pruned = pruneStalePluginConfigEntries(config);
+        if (pruned.changed) needsSave = true;
+    } catch (e) {}
+
     // 启动前：多机/多用户路径自愈（云电脑、换账号、从旧机拷配置都能用）
     try {
         const sanitized = applyMachinePluginPathSanitize(config);
@@ -1380,7 +1520,15 @@ function prepareChannelPluginsBeforeGateway() {
     }
 
     // 官方渠道：强制种到「当前用户」的 npm/projects，并纠正跨机 installPath
+    // viaLoadPaths=true（如微信）只走 load.paths，避免 installs + load.paths 双份 duplicate
     for (const entry of BUNDLED_NPM_CHANNEL_PLUGINS) {
+        if (entry.viaLoadPaths === true) {
+            if (config.plugins.installs && config.plugins.installs[entry.id]) {
+                delete config.plugins.installs[entry.id];
+                needsSave = true;
+            }
+            continue;
+        }
         const packageName = entry.packageName
             || (entry.id === 'openclaw-weixin' ? '@tencent-weixin/openclaw-weixin' : null);
         if (!packageName) continue;
@@ -1696,6 +1844,8 @@ async function stopGatewayProcess() {
             gatewayProcess.kill('SIGTERM');
         }
         gatewayProcess = null;
+        stopGatewayHttpReadyWatch();
+        gatewayHttpReadyNotified = false;
         if (mainWindow) {
             mainWindow.webContents.send('gateway-status', 'stopped');
             mainWindow.webContents.send('gateway-log', '\n[System] ClawAI服务已停止。\n');
@@ -1783,23 +1933,33 @@ async function startGatewayProcess() {
             mainWindow.webContents.send('gateway-log', '[System] 正在拉起内置 OpenClaw Gateway 核心...\n');
         }
         try {
-            // 仅清理当前状态目录下的 skills-prompts 缓存（禁止硬编码 Users\Yuan / admin）
-            const cleanupPaths = [
+            // 不再每次启动清空 skills-prompts：删除后启动期会海量 ENOENT + 日志洪水，Ready 极慢。
+            // 仅保证目录存在；损坏（同名非目录文件）时由 patch_gateway 清理。
+            const promptsDirs = [
                 path.join(CONFIG_DIR, 'agents', 'main', 'sessions', 'skills-prompts'),
                 process.env.OPENCLAW_STATE_DIR
                     ? path.join(process.env.OPENCLAW_STATE_DIR, 'agents', 'main', 'sessions', 'skills-prompts')
                     : null
             ].filter(Boolean);
-            cleanupPaths.forEach(p => {
+            promptsDirs.forEach((p) => {
                 try {
-                    if (fs.existsSync(p)) {
-                        fs.rmSync(p, { recursive: true, force: true });
-                        console.log(`[TokenGuard] Force cleaned prompts cache at: ${p}`);
+                    if (fs.existsSync(p) && !fs.statSync(p).isDirectory()) {
+                        fs.unlinkSync(p);
                     }
-                } catch(e) {
-                    console.error(`[TokenGuard] Failed to clean ${p}:`, e.message);
-                }
+                    fs.mkdirSync(p, { recursive: true });
+                } catch (e) {}
             });
+
+            // workspace 模板：缺 HEARTBEAT.md 会拖慢/报 Missing workspace template
+            try {
+                const ws = path.join(CONFIG_DIR, 'workspace');
+                fs.mkdirSync(ws, { recursive: true });
+                const hb = path.join(ws, 'HEARTBEAT.md');
+                if (!fs.existsSync(hb)) {
+                    fs.writeFileSync(hb, '# HEARTBEAT.md\n\n- 健康检查：保持简短\n- 无需对外发言时保持沉默\n', 'utf8');
+                }
+                seedDefaultMemoryFile(path.join(ws, 'MEMORY.md'));
+            } catch (e) {}
 
             // 部署内置自定义插件到用户状态目录, 确保打包后在别人电脑上插件也能被 openclaw 发现并加载
             seedBundledPlugins();
@@ -1902,6 +2062,16 @@ async function startGatewayProcess() {
             mainWindow.webContents.send('gateway-status', 'running');
             showNotification('ClawAI已成功启动', 'AI 本地ClawAI已在后台运行，开始监听 18789 端口。');
 
+            let watchPort = 18789;
+            try {
+                const cfgPath = path.join(CONFIG_DIR, 'openclaw.json');
+                if (fs.existsSync(cfgPath)) {
+                    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8').replace(/^\uFEFF/, ''));
+                    if (cfg && cfg.gateway && cfg.gateway.port) watchPort = Number(cfg.gateway.port) || 18789;
+                }
+            } catch (e) {}
+            startGatewayHttpReadyWatch(watchPort);
+
             // 提取日志及匹配登录二维码的公共处理函数
             let gatewayLogTail = '';
             const handleLogData = (data) => {
@@ -1925,6 +2095,11 @@ async function startGatewayProcess() {
 
                 if (mainWindow) {
                     mainWindow.webContents.send('gateway-log', text);
+
+                    // 日志就绪信号：立刻通知 UI（不依赖 TCP 探测时机）
+                    if (/http server listening/i.test(text) || text.includes('[gateway] ready')) {
+                        notifyGatewayHttpReady(watchPort);
+                    }
                     
                     // 拦截控制台免密登录 URL，并统一改写为当前配置令牌（避免日志旧 token 导致限流）
                     const acpMatch = text.match(/https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):\d+\/acp\/[^\s"'\n]+/);
@@ -1958,6 +2133,8 @@ async function startGatewayProcess() {
                 console.log(`Gateway exited with code ${code}`);
                 const wasIntentionallyStopped = gatewayProcess && gatewayProcess.isIntentionallyStopped;
                 gatewayProcess = null;
+                stopGatewayHttpReadyWatch();
+                gatewayHttpReadyNotified = false;
                 if (mainWindow) {
                     mainWindow.webContents.send('gateway-status', 'stopped');
                     if (!wasIntentionallyStopped) {
@@ -2015,7 +2192,7 @@ ipcMain.on('open-sandbox-terminal', () => {
     const cmdLine = `start powershell -NoExit -ExecutionPolicy Bypass -EncodedCommand ${encodedCmd}`;
 
     spawn('cmd.exe', ['/c', cmdLine], {
-        cwd: __dirname,
+        cwd: resolveBuiltinTerminalCwd(),
         detached: true,
         stdio: 'ignore'
     }).unref();
@@ -2023,64 +2200,130 @@ ipcMain.on('open-sandbox-terminal', () => {
 
 let ptyProcess = null;
 
+function resolveBuiltinTerminalCwd() {
+    const candidates = [
+        resolveAppFsPath('.node-sandbox'),
+        process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'ClawAI') : null,
+        CONFIG_DIR,
+        process.env.USERPROFILE || process.env.HOME || null
+    ].filter(Boolean);
+    for (const c of candidates) {
+        try {
+            if (c && fs.existsSync(c) && !String(c).includes('app.asar')) return c;
+        } catch (e) {}
+    }
+    try { return app.getPath('home'); } catch (e) { return process.cwd(); }
+}
+
 ipcMain.handle('builtin-terminal-start', (event, lang) => {
-    if (ptyProcess) return; // 已经存在则不重复创建
-    const sandboxDir = resolveAppFsPath('.node-sandbox');
-    const pty = require('node-pty');
-    
-    const isEn = lang === 'en-US';
-    const isTw = lang === 'zh-TW';
-    
-    const bannerTitle = isEn 
-        ? "         ClawAI Built-in Sandbox Terminal (node-pty)      " 
-        : (isTw ? "         ClawAI 內置沙箱開發終端 (node-pty)               " : "         ClawAI 内置沙箱开发终端 (node-pty)               ");
-        
-    const bannerCmds = isEn 
-        ? "  * You can execute the following commands directly here:" 
-        : (isTw ? "  * 您可以直接在此處執行以下命令：" : "  * 您可以直接在此处执行以下命令：");
-        
-    const cmdNode = isEn 
-        ? "      - node -v            (Show sandbox Node version)" 
-        : (isTw ? "      - node -v            (查看內置沙箱 Node 版本)" : "      - node -v            (查看内置沙箱 Node 版本)");
-        
-    const cmdNpm = isEn 
-        ? "      - npm -v             (Show sandbox npm version)" 
-        : (isTw ? "      - npm -v             (查看內置沙箱 npm 版本)" : "      - npm -v             (查看内置沙箱 npm 版本)");
-    
-    const initScript = [
-        `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`,
-        `$env:Path = "${sandboxDir.replace(/\\/g, '\\\\')};" + $env:Path`,
-        `Clear-Host`,
-        `Write-Host "==========================================================" -ForegroundColor Green`,
-        `Write-Host "${bannerTitle}" -ForegroundColor Green`,
-        `Write-Host "==========================================================" -ForegroundColor Green`,
-        `Write-Host "${bannerCmds}" -ForegroundColor Cyan`,
-        `Write-Host "${cmdNode}" -ForegroundColor White`,
-        `Write-Host "${cmdNpm}" -ForegroundColor White`,
-        `Write-Host "==========================================================" -ForegroundColor Green`,
-        `Write-Host ""`
-    ].join('\r\n');
-    
-    const encodedCmd = Buffer.from(initScript, 'utf16le').toString('base64');
-    
-    ptyProcess = pty.spawn('powershell.exe', ['-NoExit', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encodedCmd], {
-        name: 'xterm-256color',
-        cols: 80,
-        rows: 30,
-        cwd: __dirname,
-        env: process.env
-    });
-    
-    ptyProcess.on('data', function(data) {
-        if (mainWindow) {
-            mainWindow.webContents.send('builtin-terminal-data', data);
+    if (ptyProcess) return { ok: true, reused: true };
+
+    const pushTerm = (text) => {
+        try {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('builtin-terminal-data', text);
+            }
+        } catch (e) {}
+    };
+
+    try {
+        const sandboxDir = resolveAppFsPath('.node-sandbox');
+        let pty;
+        try {
+            pty = require('node-pty');
+        } catch (e) {
+            const msg = e && e.message ? e.message : String(e);
+            pushTerm(`\r\n\x1b[31m[内置终端] node-pty 加载失败（打包环境常见于未解包原生模块）\x1b[0m\r\n${msg}\r\n`);
+            pushTerm(`\x1b[33m正在打开外部 PowerShell 沙箱窗口作为后备…\x1b[0m\r\n`);
+            try { ipcMain.emit('open-sandbox-terminal'); } catch (e2) {}
+            return { ok: false, error: msg, fallback: 'external' };
         }
-    });
-    
-    ptyProcess.on('exit', () => {
-        ptyProcess = null;
-    });
-    return true;
+
+        const isEn = lang === 'en-US';
+        const isTw = lang === 'zh-TW';
+
+        const bannerTitle = isEn
+            ? "         ClawAI Built-in Sandbox Terminal (node-pty)      "
+            : (isTw ? "         ClawAI 內置沙箱開發終端 (node-pty)               " : "         ClawAI 内置沙箱开发终端 (node-pty)               ");
+
+        const bannerCmds = isEn
+            ? "  * You can execute the following commands directly here:"
+            : (isTw ? "  * 您可以直接在此處執行以下命令：" : "  * 您可以直接在此处执行以下命令：");
+
+        const cmdNode = isEn
+            ? "      - node -v            (Show sandbox Node version)"
+            : (isTw ? "      - node -v            (查看內置沙箱 Node 版本)" : "      - node -v            (查看内置沙箱 Node 版本)");
+
+        const cmdNpm = isEn
+            ? "      - npm -v             (Show sandbox npm version)"
+            : (isTw ? "      - npm -v             (查看內置沙箱 npm 版本)" : "      - npm -v             (查看内置沙箱 npm 版本)");
+
+        const sandboxPathForPs = String(sandboxDir || '').replace(/'/g, "''");
+        const initScript = [
+            `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`,
+            `if (Test-Path -LiteralPath '${sandboxPathForPs}') { $env:Path = '${sandboxPathForPs};' + $env:Path }`,
+            `Clear-Host`,
+            `Write-Host "==========================================================" -ForegroundColor Green`,
+            `Write-Host "${bannerTitle}" -ForegroundColor Green`,
+            `Write-Host "==========================================================" -ForegroundColor Green`,
+            `Write-Host "${bannerCmds}" -ForegroundColor Cyan`,
+            `Write-Host "${cmdNode}" -ForegroundColor White`,
+            `Write-Host "${cmdNpm}" -ForegroundColor White`,
+            `Write-Host "==========================================================" -ForegroundColor Green`,
+            `Write-Host ""`
+        ].join('\r\n');
+
+        const encodedCmd = Buffer.from(initScript, 'utf16le').toString('base64');
+        const termCwd = resolveBuiltinTerminalCwd();
+        const pathKey = process.platform === 'win32' ? 'Path' : 'PATH';
+        const childEnv = { ...process.env };
+        if (sandboxDir && fs.existsSync(sandboxDir)) {
+            childEnv[pathKey] = `${sandboxDir}${path.delimiter}${childEnv[pathKey] || ''}`;
+        }
+
+        ptyProcess = pty.spawn('powershell.exe', ['-NoExit', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encodedCmd], {
+            name: 'xterm-256color',
+            cols: 80,
+            rows: 30,
+            // 打包后 __dirname 在 app.asar 内，不能当 cwd，否则壳进程起不来、终端空白
+            cwd: termCwd,
+            env: childEnv,
+            useConpty: true
+        });
+
+        ptyProcess.on('data', function (data) {
+            pushTerm(data);
+        });
+
+        ptyProcess.on('exit', () => {
+            ptyProcess = null;
+            pushTerm('\r\n\x1b[33m[内置终端已退出]\x1b[0m\r\n');
+        });
+
+        return { ok: true, cwd: termCwd };
+    } catch (e) {
+        const msg = e && e.message ? e.message : String(e);
+        console.error('[BuiltinTerminal] start failed:', msg);
+        pushTerm(`\r\n\x1b[31m[内置终端启动失败]\x1b[0m\r\n${msg}\r\n`);
+        pushTerm(`\x1b[33m正在打开外部 PowerShell 沙箱窗口作为后备…\x1b[0m\r\n`);
+        try {
+            // 复用外部终端入口
+            const sandboxDir = resolveAppFsPath('.node-sandbox');
+            const { spawn } = require('child_process');
+            const initScript = [
+                `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`,
+                `$env:Path = "${String(sandboxDir).replace(/\\/g, '\\\\')};" + $env:Path`,
+                `Write-Host "ClawAI 外部沙箱终端（内置终端启动失败时的后备）" -ForegroundColor Yellow`
+            ].join('\r\n');
+            const encodedCmd = Buffer.from(initScript, 'utf16le').toString('base64');
+            spawn('cmd.exe', ['/c', `start powershell -NoExit -ExecutionPolicy Bypass -EncodedCommand ${encodedCmd}`], {
+                cwd: resolveBuiltinTerminalCwd(),
+                detached: true,
+                stdio: 'ignore'
+            }).unref();
+        } catch (e2) {}
+        return { ok: false, error: msg, fallback: 'external' };
+    }
 });
 
 ipcMain.on('builtin-terminal-write', (event, data) => {
@@ -2216,6 +2459,14 @@ function ensureOpenClawConfigInitialized() {
                 }
             }
         });
+
+        try {
+            const pruned = pruneStalePluginConfigEntries(config);
+            if (pruned.changed) {
+                needsSave = true;
+                console.log('[PluginSeed] Pruned stale plugins.entries / duplicate weixin install');
+            }
+        } catch (e) {}
 
         // 长期记忆开箱强保：即使用户旧配置关掉过，也强制写回真实插件栈
         try {
