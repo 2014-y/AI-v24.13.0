@@ -103,21 +103,14 @@
       "config/icon.png",
       "config/icon.ico",
       "plugins/**/*",
+      "extensions/**/*",
+      "node_modules/**/*",
+      "!node_modules/electron/**/*",
+      "!node_modules/electron-builder/**/*",
+      "!node_modules/electron-packager/**/*",
       ".node-sandbox/**/*",
       "!.node-sandbox/node_modules/**/*",
-      "extensions/**/*",
-      "!node_modules/**/*.map",
-      "!node_modules/**/*.ts",
-      "!node_modules/**/*.md",
-      "!node_modules/**/*.txt",
-      "!node_modules/**/*.yml",
-      "!node_modules/**/*.yaml",
-      "!node_modules/**/tests/**/*",
-      "!node_modules/**/test/**/*",
-      "!node_modules/**/examples/**/*",
-      "!node_modules/**/example/**/*",
-      "!node_modules/**/.github/**/*",
-      "!node_modules/**/.circleci/**/*"
+      "extensions/**/*"
     ],
     "extraFiles": [
       {
