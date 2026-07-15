@@ -29,7 +29,17 @@ const {
     LONG_TERM_MEMORY_STACK,
     ASYNC_CHANNEL_LOGIN
 } = require('./plugin-catalog');
-const { resolveOpenClawStateDir } = require('./openclaw-state');
+const {
+    resolveOpenClawStateDir,
+    listKnownOpenClawStateDirs
+} = require('./openclaw-state');
+const {
+    DEFAULT_GATEWAY_TOKEN,
+    normalizeGatewayAuthConfig,
+    buildControlUiUrl,
+    syncGatewayAuthToStateDirs,
+    buildGatewayChildEnv
+} = require('./gateway-auth');
 
 function safeMainErrorLogPath() {
     try {
@@ -385,26 +395,70 @@ const appStartTime = Date.now();
 global.latestAcpDashboardUrl = '';
 
 // 与 open-external / 示例配置一致的桌面端默认网关令牌（仅本机 loopback）
-const CLAWAI_DEFAULT_GATEWAY_TOKEN = 'openclaw-dev-token-998877';
+const CLAWAI_DEFAULT_GATEWAY_TOKEN = DEFAULT_GATEWAY_TOKEN;
 
 /** 从 openclaw.json 组装 Control UI 免密 URL（优先 #token=，并保留 ?token= 兼容旧版） */
 function buildGatewayDashboardUrl() {
     let port = 18789;
     let token = CLAWAI_DEFAULT_GATEWAY_TOKEN;
     try {
-        const configPath = path.join(CONFIG_DIR, 'openclaw.json');
+        const configPath = CONFIG_PATH || path.join(CONFIG_DIR, 'openclaw.json');
         if (fs.existsSync(configPath)) {
-            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-            if (config.gateway && Number(config.gateway.port) > 0) {
-                port = Number(config.gateway.port);
-            }
-            const t = config.gateway && config.gateway.auth && config.gateway.auth.token;
-            if (t && String(t).trim()) token = String(t).trim();
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf8').replace(/^\uFEFF/, ''));
+            const norm = normalizeGatewayAuthConfig(config, CLAWAI_DEFAULT_GATEWAY_TOKEN);
+            port = norm.port;
+            token = norm.token;
         }
     } catch (e) {}
-    const enc = encodeURIComponent(token);
-    // OpenClaw 文档：优先 URL fragment `#token=`；query 作旧版兜底
-    return `http://127.0.0.1:${port}/acp/?token=${enc}#token=${enc}`;
+    return buildControlUiUrl(port, token);
+}
+
+/**
+ * 网关启动前最终锁定：鉴权写入主配置 + 同步到历史双目录 + 返回 fork 应用的 home/token。
+ * 根除「主进程有 token、沙箱却 auth token was missing / runtime token」零环境故障。
+ */
+function lockGatewayAuthBeforeStart() {
+    ensureOpenClawConfigInitialized();
+    let token = CLAWAI_DEFAULT_GATEWAY_TOKEN;
+    let port = 18789;
+    try {
+        if (fs.existsSync(CONFIG_PATH)) {
+            const parsed = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8').replace(/^\uFEFF/, ''));
+            const norm = normalizeGatewayAuthConfig(parsed, CLAWAI_DEFAULT_GATEWAY_TOKEN);
+            token = norm.token;
+            port = norm.port;
+            if (norm.changed) {
+                fs.writeFileSync(CONFIG_PATH, JSON.stringify(norm.config, null, 2) + '\n', 'utf8');
+                console.log('[TokenGuard] Normalized gateway.auth before start');
+            }
+        }
+    } catch (e) {
+        console.warn('[TokenGuard] Primary config normalize failed:', e.message);
+        try {
+            const minimal = normalizeGatewayAuthConfig({}, CLAWAI_DEFAULT_GATEWAY_TOKEN).config;
+            fs.mkdirSync(CONFIG_DIR, { recursive: true });
+            fs.writeFileSync(CONFIG_PATH, JSON.stringify(minimal, null, 2) + '\n', 'utf8');
+            token = CLAWAI_DEFAULT_GATEWAY_TOKEN;
+        } catch (e2) {
+            console.error('[TokenGuard] Failed to write emergency auth config:', e2.message);
+        }
+    }
+
+    const homePath = process.env.OPENCLAW_HOME
+        || path.dirname(CONFIG_DIR)
+        || (process.env.USERPROFILE || process.env.HOME || '');
+    const altDirs = listKnownOpenClawStateDirs(process.env, CONFIG_DIR);
+    try {
+        const synced = syncGatewayAuthToStateDirs(altDirs, { token, mode: 'token', port });
+        if (synced.length) {
+            console.log('[TokenGuard] Synced gateway.auth to:', synced.join(' | '));
+        }
+    } catch (e) {
+        console.warn('[TokenGuard] Auth sync skipped:', e.message);
+    }
+
+    global.latestAcpDashboardUrl = buildControlUiUrl(port, token);
+    return { homePath, stateDir: CONFIG_DIR, token, port };
 }
 
 function rememberDashboardUrl(url) {
@@ -521,7 +575,8 @@ function resolveWritableRuntimeDir() {
 /** 把补丁与截图脚本部署到可写运行时目录，返回正斜杠补丁路径供 --require 使用 */
 function deployRuntimeArtifacts() {
     const dir = resolveWritableRuntimeDir();
-    const names = ['patch_gateway.js', 'token-usage-parse.js', 'capture-desktop.ps1', 'openclaw-state.js'];
+    // openclaw-state / gateway-auth 必须与 patch 同目录部署，供沙箱子进程 require
+    const names = ['patch_gateway.js', 'token-usage-parse.js', 'capture-desktop.ps1', 'openclaw-state.js', 'gateway-auth.js'];
     for (const name of names) {
         const src = path.join(__dirname, name);
         if (!fs.existsSync(src)) continue;
@@ -1143,7 +1198,7 @@ function seedBundledPlugins() {
 function prepareChannelPluginsBeforeGateway() {
     if (!fs.existsSync(CONFIG_PATH)) return;
     const raw = fs.readFileSync(CONFIG_PATH, 'utf8').replace(/^\uFEFF/, '');
-    const config = JSON.parse(raw);
+    let config = JSON.parse(raw);
     let needsSave = false;
 
     if (!config.plugins) { config.plugins = {}; needsSave = true; }
@@ -1361,15 +1416,9 @@ function prepareChannelPluginsBeforeGateway() {
 
     // 持久化 gateway auth token，避免每次启动临时 token + 控制台刷屏
     try {
-        if (!config.gateway) { config.gateway = {}; needsSave = true; }
-        if (!config.gateway.auth) { config.gateway.auth = {}; needsSave = true; }
-        if (config.gateway.auth.mode !== 'token') {
-            config.gateway.auth.mode = 'token';
-            needsSave = true;
-        }
-        if (!config.gateway.auth.token || String(config.gateway.auth.token).trim() === '') {
-            // 固定桌面端默认令牌，保证内置 Control UI 能稳定免密登入
-            config.gateway.auth.token = CLAWAI_DEFAULT_GATEWAY_TOKEN;
+        const norm = normalizeGatewayAuthConfig(config, CLAWAI_DEFAULT_GATEWAY_TOKEN);
+        config = norm.config;
+        if (norm.changed) {
             needsSave = true;
             console.log('[PluginSeed] Persisted default gateway.auth.token');
         }
@@ -1726,6 +1775,9 @@ async function startGatewayProcess() {
                 console.warn('[LatencyTune] pre-gateway skipped:', e.message);
             }
 
+            // 最终锁定鉴权（写主配置 + 同步历史双目录）；必须在 fork 之前
+            const lockedAuth = lockGatewayAuthBeforeStart();
+
             // 部署补丁/截图脚本到可写运行时目录（云电脑不用固定 Public）
             let patchPath = path.join(__dirname, 'patch_gateway.js').replace(/\\/g, '/');
             try {
@@ -1746,17 +1798,22 @@ async function startGatewayProcess() {
             
             // 优先使用打包内置的或系统全局符合版本要求的 Node 运行时
             const nodeExePath = getAvailableNodePath();
+            // 强制子进程继承与主进程完全一致的 OPENCLAW_* + OPENCLAW_GATEWAY_TOKEN，杜绝补丁重算家目录后丢 token
+            const childEnv = buildGatewayChildEnv(process.env, {
+                homePath: lockedAuth.homePath,
+                stateDir: lockedAuth.stateDir,
+                token: lockedAuth.token
+            });
+            childEnv.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+            childEnv.CLAWAI_PATCH_PATH = patchPath;
+            childEnv.NODE_OPTIONS = buildPatchedNodeOptions(patchPath);
+            childEnv.CLAWAI_RUNTIME_DIR = process.env.CLAWAI_RUNTIME_DIR || path.dirname(patchPath);
+
             const forkOptions = {
                 cwd: CONFIG_DIR,
                 stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
                 execArgv: ['--require', patchPath, '--no-warnings', '--dns-result-order=ipv4first'],
-                // NODE_OPTIONS 确保补丁被继承到 openclaw 派生的所有后代 node 进程 (修复子进程 EPERM 顽疾)
-                env: {
-                    ...process.env,
-                    NODE_TLS_REJECT_UNAUTHORIZED: '0',
-                    CLAWAI_PATCH_PATH: patchPath,
-                    NODE_OPTIONS: buildPatchedNodeOptions(patchPath)
-                }
+                env: childEnv
             };
             if (nodeExePath) {
                 forkOptions.execPath = nodeExePath;
@@ -1765,6 +1822,8 @@ async function startGatewayProcess() {
                 const originalPath = process.env[pathKey] || '';
                 forkOptions.env[pathKey] = `${sandboxDir}${path.delimiter}${originalPath}`;
             }
+
+            console.log(`[TokenGuard] Fork gateway home=${lockedAuth.homePath} state=${lockedAuth.stateDir} token_len=${String(lockedAuth.token).length}`);
 
             // 启动子进程运行ClawAI
             gatewayProcess = fork(openclawEntry, ['gateway', 'run', '--force', '--allow-unconfigured'], forkOptions);
@@ -1981,8 +2040,8 @@ function ensureOpenClawConfigInitialized() {
             }
         }
         let content = fs.readFileSync(CONFIG_PATH, 'utf8');
-        content = content.replace(/^﻿/, '');
-        const config = JSON.parse(content);
+        content = content.replace(/^\uFEFF/, '');
+        let config = JSON.parse(content);
         // 自动补全 ui.assistant 头像配置，以及 gateway.controlUi.basePath (修复面板侧边栏破图问题)
         let needsSave = false;
         if (!config.ui) { config.ui = {}; needsSave = true; }
@@ -1992,24 +2051,14 @@ function ensureOpenClawConfigInitialized() {
             config.ui.assistant.name = config.ui.assistant.name || 'ClawAI';
             needsSave = true;
         }
-        if (!config.gateway) { config.gateway = {}; needsSave = true; }
-        if (!config.gateway.controlUi) { config.gateway.controlUi = {}; needsSave = true; }
-        if (config.gateway.controlUi.basePath !== '/acp') {
-            config.gateway.controlUi.basePath = '/acp';
-            needsSave = true;
-        }
-        
-        // 确保网关有固定的 auth token，否则 Gateway 启动时会生成一个随机的 runtime token，
-        // 导致前台面板（Dashboard）由于不知道该随机 token 而无法连接 (WebSocket 401 Unauthorized)
-        if (!config.gateway.auth) { config.gateway.auth = {}; needsSave = true; }
-        if (config.gateway.auth.mode !== 'token') {
-            config.gateway.auth.mode = 'token';
-            needsSave = true;
-        }
-        if (!config.gateway.auth.token) {
-            config.gateway.auth.token = require('crypto').randomBytes(16).toString('hex');
-            needsSave = true;
-            console.log('[System] Generated initial gateway.auth.token to prevent dashboard lockout');
+        // 统一规范化 gateway.auth / controlUi / port（禁止 SecretRef/空值/随机令牌导致面板永登不上）
+        {
+            const norm = normalizeGatewayAuthConfig(config, CLAWAI_DEFAULT_GATEWAY_TOKEN);
+            config = norm.config;
+            if (norm.changed) {
+                needsSave = true;
+                console.log('[System] Persisted default gateway.auth.token for dashboard auto-login');
+            }
         }
         // 确保微信插件始终处于启用状态
         if (!config.plugins) { config.plugins = {}; needsSave = true; }
@@ -2306,7 +2355,7 @@ ipcMain.handle('config-read', async () => {
 
 ipcMain.handle('config-save', async (event, newConfig) => {
     try {
-        const cleanConfig = JSON.parse(JSON.stringify(newConfig));
+        let cleanConfig = JSON.parse(JSON.stringify(newConfig));
         delete cleanConfig.videoGenerator;
         delete cleanConfig.imageGenerator;
 
@@ -2325,6 +2374,11 @@ ipcMain.handle('config-save', async (event, newConfig) => {
             if (Array.isArray(cleanConfig.plugins.allow)) {
                 cleanConfig.plugins.allow = cleanConfig.plugins.allow.filter((x) => x !== LONG_TERM_MEMORY_UI_ID);
             }
+        } catch (e) {}
+
+        // 保存时禁止把 gateway.auth 抹掉（否则下次启动又会变成 runtime token）
+        try {
+            cleanConfig = normalizeGatewayAuthConfig(cleanConfig, CLAWAI_DEFAULT_GATEWAY_TOKEN).config;
         } catch (e) {}
         
         // 读取原本的文件尺寸
@@ -4264,6 +4318,11 @@ ipcMain.handle('update-openclaw-package', async (event, { targetVersion }) => {
 app.whenReady().then(() => {
     // 家目录矫正：优先真实用户目录；不可写时改走 AppData\ClawAI，禁止落到裸 Temp
     try {
+        // 保留改写前的真实用户目录，供鉴权双目录同步 / 排障
+        if (!process.env.CLAWAI_ORIGINAL_USERPROFILE) {
+            process.env.CLAWAI_ORIGINAL_USERPROFILE =
+                process.env.USERPROFILE || process.env.HOME || app.getPath('home') || '';
+        }
         let preferredHome = app.getPath('home');
         const desktopInfo = detectRestrictedDesktop(process.env);
         const preferredWritable = preferredHome ? probeOpenClawHomeWritable(preferredHome) : false;

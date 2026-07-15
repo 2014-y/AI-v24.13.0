@@ -1909,10 +1909,29 @@ async function loadAndRenderConfig() {
     // 填充并发数与主备模型
     if (configData.agents && configData.agents.defaults) {
         const defaults = configData.agents.defaults;
-        document.getElementById('max-concurrent').value = defaults.maxConcurrent || 4;
         if (defaults.model) {
-            document.getElementById('model-primary').value = defaults.model.primary || '';
-            document.getElementById('model-fallback').value = (defaults.model.fallbacks && defaults.model.fallbacks[0]) || '';
+            const primary = defaults.model.primary || '';
+            let primaryModelId = primary;
+            let primaryProvider = '';
+            if (primary.includes('/')) {
+                const parts = primary.split('/');
+                primaryProvider = parts[0];
+                primaryModelId = parts[1];
+            }
+            document.getElementById('model-primary').value = primaryModelId;
+
+            const fallback = (defaults.model.fallbacks && defaults.model.fallbacks[0]) || '';
+            let fallbackModelId = fallback;
+            let fallbackProvider = '';
+            if (fallback.includes('/')) {
+                const parts = fallback.split('/');
+                fallbackProvider = parts[0];
+                fallbackModelId = parts[1];
+            }
+            document.getElementById('model-fallback').value = fallbackModelId;
+            
+            // 进行一次供应商下拉框刷新并设置选中值
+            updateAssignedProviderSelects(primaryModelId, fallbackModelId, primaryProvider, fallbackProvider);
         }
         const storedImgModel = localStorage.getItem('client_pref_image_model');
         if (storedImgModel) {
@@ -2017,16 +2036,32 @@ function updateConfigJsonPreview() {
     const maxConcurrentEl = document.getElementById('max-concurrent');
     if (maxConcurrentEl) {
         configData.agents.defaults.maxConcurrent = parseInt(maxConcurrentEl.value, 10) || 4;
+    } else {
+        configData.agents.defaults.maxConcurrent = configData.agents.defaults.maxConcurrent || 4;
     }
     
     if (!configData.agents.defaults.model) configData.agents.defaults.model = {};
     const primaryModelEl = document.getElementById('model-primary');
+    const primaryProviderEl = document.getElementById('model-primary-provider');
     if (primaryModelEl) {
-        configData.agents.defaults.model.primary = primaryModelEl.value.trim();
+        const mVal = primaryModelEl.value.trim();
+        const pVal = primaryProviderEl ? primaryProviderEl.value : '';
+        if (pVal && mVal && !mVal.includes('/')) {
+            configData.agents.defaults.model.primary = `${pVal}/${mVal}`;
+        } else {
+            configData.agents.defaults.model.primary = mVal;
+        }
     }
     const fallbackModelEl = document.getElementById('model-fallback');
+    const fallbackProviderEl = document.getElementById('model-fallback-provider');
     if (fallbackModelEl) {
-        configData.agents.defaults.model.fallbacks = [fallbackModelEl.value.trim()];
+        const mVal = fallbackModelEl.value.trim();
+        const pVal = fallbackProviderEl ? fallbackProviderEl.value : '';
+        let finalFallback = mVal;
+        if (pVal && mVal && !mVal.includes('/')) {
+            finalFallback = `${pVal}/${mVal}`;
+        }
+        configData.agents.defaults.model.fallbacks = [finalFallback];
     }
 
     if (!configData.agents.defaults.imageGenerationModel) configData.agents.defaults.imageGenerationModel = {};
@@ -2084,13 +2119,36 @@ function syncJsonToFormFields(parsed) {
         }
         if (defaults.model) {
             const primaryEl = document.getElementById('model-primary');
+            let primaryModelId = '';
+            let primaryProvider = '';
             if (primaryEl && defaults.model.primary !== undefined) {
-                primaryEl.value = defaults.model.primary;
+                const primary = defaults.model.primary || '';
+                if (primary.includes('/')) {
+                    const parts = primary.split('/');
+                    primaryProvider = parts[0];
+                    primaryModelId = parts[1];
+                } else {
+                    primaryModelId = primary;
+                }
+                primaryEl.value = primaryModelId;
             }
+
             const fallbackEl = document.getElementById('model-fallback');
+            let fallbackModelId = '';
+            let fallbackProvider = '';
             if (fallbackEl && defaults.model.fallbacks && defaults.model.fallbacks[0] !== undefined) {
-                fallbackEl.value = defaults.model.fallbacks[0];
+                const fallback = defaults.model.fallbacks[0] || '';
+                if (fallback.includes('/')) {
+                    const parts = fallback.split('/');
+                    fallbackProvider = parts[0];
+                    fallbackModelId = parts[1];
+                } else {
+                    fallbackModelId = fallback;
+                }
+                fallbackEl.value = fallbackModelId;
             }
+
+            updateAssignedProviderSelects(primaryModelId, fallbackModelId, primaryProvider, fallbackProvider);
         }
         if (defaults.imageGenerationModel) {
             const imageModelEl = document.getElementById('model-image');
@@ -2986,7 +3044,139 @@ function updateModelsDatalist() {
             datalist.appendChild(option);
         });
     }
+
+    updateAssignedProviderSelects();
 }
+
+// 动态刷新主备模型供应商下拉选择框
+function updateAssignedProviderSelects(primaryModelId, fallbackModelId, selectedPrimaryProvider, selectedFallbackProvider) {
+    const primaryInput = document.getElementById('model-primary');
+    const fallbackInput = document.getElementById('model-fallback');
+    const primarySelect = document.getElementById('model-primary-provider');
+    const fallbackSelect = document.getElementById('model-fallback-provider');
+
+    if (!primarySelect || !fallbackSelect) return;
+
+    const pmId = (primaryModelId !== undefined) ? primaryModelId : (primaryInput ? primaryInput.value.trim() : '');
+    const fmId = (fallbackModelId !== undefined) ? fallbackModelId : (fallbackInput ? fallbackInput.value.trim() : '');
+
+    const pSelVal = (selectedPrimaryProvider !== undefined) ? selectedPrimaryProvider : primarySelect.value;
+    const fSelVal = (selectedFallbackProvider !== undefined) ? selectedFallbackProvider : fallbackSelect.value;
+
+    const allProviderKeys = Object.keys(localProviders);
+
+    // 1. 处理主用模型供应商
+    let matchedPrimary = [];
+    if (pmId) {
+        matchedPrimary = allProviderKeys.filter(key => {
+            const provider = localProviders[key];
+            const models = provider.models || [];
+            return models.some(m => m.id === pmId);
+        });
+    }
+    
+    primarySelect.innerHTML = '<option value="">-- 自动检测供应商 --</option>';
+    const primaryOptions = matchedPrimary.length > 0 ? matchedPrimary : allProviderKeys;
+    primaryOptions.forEach(key => {
+        const option = document.createElement('option');
+        option.value = key;
+        option.innerText = key;
+        primarySelect.appendChild(option);
+    });
+
+    if (pSelVal && primaryOptions.includes(pSelVal)) {
+        primarySelect.value = pSelVal;
+    } else if (matchedPrimary.length === 1) {
+        primarySelect.value = matchedPrimary[0];
+    } else {
+        primarySelect.value = '';
+    }
+
+    // 2. 处理备用模型供应商
+    let matchedFallback = [];
+    if (fmId) {
+        matchedFallback = allProviderKeys.filter(key => {
+            const provider = localProviders[key];
+            const models = provider.models || [];
+            return models.some(m => m.id === fmId);
+        });
+    }
+
+    fallbackSelect.innerHTML = '<option value="">-- 自动检测供应商 --</option>';
+    const fallbackOptions = matchedFallback.length > 0 ? matchedFallback : allProviderKeys;
+    fallbackOptions.forEach(key => {
+        const option = document.createElement('option');
+        option.value = key;
+        option.innerText = key;
+        fallbackSelect.appendChild(option);
+    });
+
+    if (fSelVal && fallbackOptions.includes(fSelVal)) {
+        fallbackSelect.value = fSelVal;
+    } else if (matchedFallback.length === 1) {
+        fallbackSelect.value = matchedFallback[0];
+    } else {
+        fallbackSelect.value = '';
+    }
+}
+
+// 主模型输入框变动事件处理器
+function handlePrimaryInput() {
+    const input = document.getElementById('model-primary');
+    if (!input) return;
+    let val = input.value.trim();
+    let provider = '';
+    if (val.includes('/')) {
+        const parts = val.split('/');
+        provider = parts[0];
+        val = parts[1];
+        input.value = val;
+    }
+    updateAssignedProviderSelects(val, undefined, provider, undefined);
+    updateConfigJsonPreview();
+}
+
+// 备模型输入框变动事件处理器
+function handleFallbackInput() {
+    const input = document.getElementById('model-fallback');
+    if (!input) return;
+    let val = input.value.trim();
+    let provider = '';
+    if (val.includes('/')) {
+        const parts = val.split('/');
+        provider = parts[0];
+        val = parts[1];
+        input.value = val;
+    }
+    updateAssignedProviderSelects(undefined, val, undefined, provider);
+    updateConfigJsonPreview();
+}
+
+// 供应商下拉框发生改变
+function handleProviderChange() {
+    updateConfigJsonPreview();
+}
+
+// 绑定事件
+window.addEventListener('DOMContentLoaded', () => {
+    const primaryInput = document.getElementById('model-primary');
+    const fallbackInput = document.getElementById('model-fallback');
+    const primarySelect = document.getElementById('model-primary-provider');
+    const fallbackSelect = document.getElementById('model-fallback-provider');
+    
+    if (primaryInput) {
+        primaryInput.addEventListener('input', handlePrimaryInput);
+    }
+    if (fallbackInput) {
+        fallbackInput.addEventListener('input', handleFallbackInput);
+    }
+    if (primarySelect) {
+        primarySelect.addEventListener('change', handleProviderChange);
+    }
+    if (fallbackSelect) {
+        fallbackSelect.addEventListener('change', handleProviderChange);
+    }
+});
 
 // 添加厂家模态弹窗交互
 const addProviderModal = document.getElementById('add-provider-modal');
@@ -3122,11 +3312,26 @@ const handleSaveConfigAction = async () => {
     // 3. 同步并发选项及默认主备模型选择
     if (!configData.agents) configData.agents = {};
     if (!configData.agents.defaults) configData.agents.defaults = {};
-    configData.agents.defaults.maxConcurrent = parseInt(document.getElementById('max-concurrent').value, 10);
+    
+    const maxConcurrentEl = document.getElementById('max-concurrent');
+    configData.agents.defaults.maxConcurrent = maxConcurrentEl ? parseInt(maxConcurrentEl.value, 10) : (configData.agents.defaults.maxConcurrent || 4);
     
     if (!configData.agents.defaults.model) configData.agents.defaults.model = {};
-    configData.agents.defaults.model.primary = document.getElementById('model-primary').value.trim();
-    configData.agents.defaults.model.fallbacks = [document.getElementById('model-fallback').value.trim()];
+    const primaryModelVal = document.getElementById('model-primary').value.trim();
+    const primaryProviderVal = document.getElementById('model-primary-provider').value;
+    if (primaryProviderVal && primaryModelVal && !primaryModelVal.includes('/')) {
+        configData.agents.defaults.model.primary = `${primaryProviderVal}/${primaryModelVal}`;
+    } else {
+        configData.agents.defaults.model.primary = primaryModelVal;
+    }
+
+    const fallbackModelVal = document.getElementById('model-fallback').value.trim();
+    const fallbackProviderVal = document.getElementById('model-fallback-provider').value;
+    let finalFallback = fallbackModelVal;
+    if (fallbackProviderVal && fallbackModelVal && !fallbackModelVal.includes('/')) {
+        finalFallback = `${fallbackProviderVal}/${fallbackModelVal}`;
+    }
+    configData.agents.defaults.model.fallbacks = [finalFallback];
 
     // 双模型教学：老师/学生模型写回插件配置
     if (!configData.plugins) configData.plugins = {};

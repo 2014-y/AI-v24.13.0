@@ -322,6 +322,9 @@
     "auth": {
       "mode": "token",
       "token": "openclaw-dev-token-998877"
+    },
+    "controlUi": {
+      "basePath": "/acp"
     }
   },
   "tools": {

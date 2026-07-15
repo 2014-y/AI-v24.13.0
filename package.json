@@ -86,6 +86,7 @@
       "home-resolve.js",
       "plugin-adapt.js",
       "openclaw-state.js",
+      "gateway-auth.js",
       "latency-tune.js",
       "token-usage-parse.js",
       "plugin-catalog.js",

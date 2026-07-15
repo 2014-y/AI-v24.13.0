@@ -267,87 +267,42 @@ const child_process = require('child_process');
 const os = require('os');
 
 // ─── 终极 homedir 矫正劫持 ───
-// 兼容家用电脑 + 无影云电脑/RDS：禁止落到 Temp\1；优先 LocalAppData\ClawAI / D:\ClawAI-data。
+// 兼容家用电脑 + 无影云电脑/RDS：家目录锁定逻辑与主进程共用（openclaw-state.js），
+// 禁止子进程把普通 %TEMP% 误判成云桌面后改写 OPENCLAW_*，导致 token/配置分叉。
 const originalHomedir = os.homedir;
-function isTempLikeHomePath(p) {
-    const n = String(p || '').toLowerCase().replace(/\//g, '\\');
-    return n.includes('\\temp\\') || n.includes('\\tmp\\') || n.includes('\\appdata\\local\\temp') || /\\temp\\\d+(\\|$)/.test(n);
-}
-function canWriteOpenClawHome(base) {
+const {
+    isTempLikePath: isTempLikeHomePath,
+    resolveLockedOpenClawHome
+} = (() => {
     try {
-        const sessionsDir = path.join(base, '.openclaw', 'agents', 'main', 'sessions');
-        fs.mkdirSync(sessionsDir, { recursive: true });
-        const tmp = path.join(sessionsDir, `.home-probe-${process.pid}.tmp`);
-        const dst = path.join(sessionsDir, `.home-probe-${process.pid}.json`);
-        fs.writeFileSync(tmp, '{"ok":1}');
-        try { if (fs.existsSync(dst)) fs.unlinkSync(dst); } catch (e) {}
-        fs.renameSync(tmp, dst);
-        fs.unlinkSync(dst);
-        return true;
+        return require('./openclaw-state');
     } catch (e) {
-        return false;
-    }
-}
-function pickStableHome() {
-    const env = process.env;
-    const candidates = [];
-    const push = (p) => {
-        if (!p) return;
-        const r = path.resolve(String(p));
-        if (!candidates.includes(r)) candidates.push(r);
-    };
-
-    // 云桌面优先稳路径
-    const cloudish =
-        isTempLikeHomePath(env.REAL_USER_HOME) ||
-        isTempLikeHomePath(env.USERPROFILE) ||
-        isTempLikeHomePath(env.TEMP) ||
-        /^rdp-/i.test(String(env.SESSIONNAME || '')) ||
-        Boolean(env.CLIENTNAME);
-
-    if (cloudish) {
-        if (env.LOCALAPPDATA) push(path.join(env.LOCALAPPDATA, 'ClawAI'));
-        if (env.APPDATA) push(path.join(env.APPDATA, 'ClawAI'));
-        try { if (fs.existsSync('D:\\')) push('D:\\ClawAI-data'); } catch (e) {}
-        try { if (fs.existsSync('E:\\')) push('E:\\ClawAI-data'); } catch (e) {}
-        // 极端兜底：安装目录 data / ProgramData / Public
         try {
-            const exeDir = path.dirname(process.execPath || '');
-            if (exeDir && !exeDir.toLowerCase().includes('system32')) push(path.join(exeDir, 'data'));
-        } catch (e) {}
-        if (env.ProgramData && env.USERNAME) push(path.join(env.ProgramData, 'ClawAI', String(env.USERNAME)));
-        push(path.join('C:\\Users\\Public', 'ClawAI', String(env.USERNAME || 'user')));
-        push(env.REAL_USER_HOME);
-        push(env.USERPROFILE);
-        push(env.HOME);
-        try { push(originalHomedir()); } catch (e) {}
-    } else {
-        push(env.REAL_USER_HOME);
-        push(env.USERPROFILE);
-        push(env.HOME);
-        try { push(originalHomedir()); } catch (e) {}
-        if (env.LOCALAPPDATA) push(path.join(env.LOCALAPPDATA, 'ClawAI'));
-        if (env.APPDATA) push(path.join(env.APPDATA, 'ClawAI'));
-        try { if (fs.existsSync('D:\\')) push('D:\\ClawAI-data'); } catch (e) {}
-        try {
-            const exeDir = path.dirname(process.execPath || '');
-            if (exeDir && !exeDir.toLowerCase().includes('system32')) push(path.join(exeDir, 'data'));
-        } catch (e) {}
-        if (env.ProgramData && env.USERNAME) push(path.join(env.ProgramData, 'ClawAI', String(env.USERNAME)));
-        push(path.join('C:\\Users\\Public', 'ClawAI', String(env.USERNAME || 'user')));
+            const alt = process.env.CLAWAI_RUNTIME_DIR
+                ? path.join(process.env.CLAWAI_RUNTIME_DIR, 'openclaw-state.js')
+                : '';
+            if (alt && fs.existsSync(alt)) return require(alt);
+        } catch (e2) {}
+        // 极端兜底：保持旧行为安全子集（只认 OPENCLAW_HOME，绝不信普通 TEMP）
+        return {
+            isTempLikePath: (p) => {
+                const n = String(p || '').toLowerCase().replace(/\//g, '\\');
+                return n.includes('\\temp\\') || n.includes('\\tmp\\') || n.includes('\\appdata\\local\\temp');
+            },
+            resolveLockedOpenClawHome: (env) => {
+                const preset = (env.OPENCLAW_HOME || env.REAL_USER_HOME || env.USERPROFILE || '').trim();
+                if (preset) return path.resolve(preset);
+                try { return originalHomedir(); } catch (e3) { return process.cwd(); }
+            }
+        };
     }
-    push(path.join(os.tmpdir(), 'ClawAI-home'));
+})();
 
-    for (const c of candidates) {
-        if (isTempLikeHomePath(c) && !String(c).toLowerCase().includes('clawai-home')) continue;
-        if (canWriteOpenClawHome(c)) return c;
+const realHome = resolveLockedOpenClawHome(process.env, {
+    originalHomedir: () => {
+        try { return originalHomedir(); } catch (e) { return ''; }
     }
-    for (const c of candidates) {
-        if (canWriteOpenClawHome(c)) return c;
-    }
-    return env.REAL_USER_HOME || originalHomedir();
-}
-const realHome = pickStableHome();
+});
 if (isTempLikeHomePath(process.env.REAL_USER_HOME || '') && !isTempLikeHomePath(realHome)) {
     console.warn(`[System] Corrected Temp OpenClaw home -> ${realHome}`);
 }

@@ -21,6 +21,12 @@ function isTempLikePath(p) {
     );
 }
 
+/** 仅会话 Temp（\Temp\1）；标准 %LOCALAPPDATA%\Temp 不算 */
+function isSessionTempPath(p) {
+    const n = String(p || '').toLowerCase().replace(/\//g, '\\');
+    return /\\temp\\\d+(\\|$)/.test(n);
+}
+
 function safeUsername(env = process.env) {
     const raw = String(env.USERNAME || env.USER || env.LOGNAME || 'user').trim() || 'user';
     return raw.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 64);
@@ -37,7 +43,7 @@ function detectRestrictedDesktop(env = process.env) {
     // 不应触发 restricted，否则会导致 HOME 被错误重定向到 AppData\Local\ClawAI，
     // 进而引发 token 不同步、EPERM、渠道插件全不加载等连锁故障。
     const tempVal = String(env.TEMP || env.TMP || '').toLowerCase().replace(/\//g, '\\');
-    if (/\\temp\\\d+(\\|$)/.test(tempVal)) hints.push('session-temp');
+    if (isSessionTempPath(tempVal)) hints.push('session-temp');
 
     const user = String(env.USERNAME || env.USER || '').toLowerCase();
     // 无影/云电脑常见默认用户名 + 会话特征
@@ -60,7 +66,7 @@ function detectRestrictedDesktop(env = process.env) {
     // 真正的受限云桌面通常带有强烈的多会话/专有变量特征。
     // 如果只是普通用户用 Windows 自带的 Remote Desktop (RDP) 连接家用电脑，
     // 不应直接判定为受限环境，否则会导致正常 RDP 用户的目录被强行重定向到 AppData 从而引发 EPERM。
-    const isSessionTemp = /\\temp\\\d+(\\|$)/.test(tempVal);
+    const isSessionTemp = isSessionTempPath(tempVal);
     const restricted = hasExplicitCloudEnv || isSessionTemp;
 
     // D 盘存在仅作为辅助信号
@@ -343,6 +349,7 @@ function writeHomeHealthMarker(stateDir, health, extra = {}) {
 
 module.exports = {
     isTempLikePath,
+    isSessionTempPath,
     safeUsername,
     detectRestrictedDesktop,
     isForeignUserPath,

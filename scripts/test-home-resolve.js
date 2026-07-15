@@ -22,13 +22,30 @@ function assert(cond, msg) {
 assert(isTempLikePath('C:\\Users\\admin\\AppData\\Local\\Temp\\1') === true, 'Temp\\1 detected');
 assert(isTempLikePath('C:\\Users\\admin') === false, 'real home not temp');
 
+const homeNormal = detectRestrictedDesktop({
+  SESSIONNAME: 'Console',
+  TEMP: 'C:\\Users\\Yuan\\AppData\\Local\\Temp',
+  TMP: 'C:\\Users\\Yuan\\AppData\\Local\\Temp',
+  USERPROFILE: 'C:\\Users\\Yuan',
+  LOCALAPPDATA: 'C:\\Users\\Yuan\\AppData\\Local'
+});
+assert(homeNormal.restricted === false, 'normal Windows TEMP is NOT restricted');
+
+const rdpOnly = detectRestrictedDesktop({
+  SESSIONNAME: 'RDP-Tcp#3',
+  CLIENTNAME: 'OFFICE-PC',
+  TEMP: 'C:\\Users\\Yuan\\AppData\\Local\\Temp',
+  USERPROFILE: 'C:\\Users\\Yuan'
+});
+assert(rdpOnly.restricted === false, 'plain RDP alone is NOT restricted');
+
 const cloud = detectRestrictedDesktop({
   SESSIONNAME: 'RDP-Tcp#3',
   CLIENTNAME: 'WUYING',
   TEMP: 'C:\\Users\\admin\\AppData\\Local\\Temp\\1',
   LOCALAPPDATA: 'C:\\Users\\admin\\AppData\\Local'
 });
-assert(cloud.restricted === true, 'cloud desktop detected');
+assert(cloud.restricted === true, 'session Temp\\1 detected as restricted');
 
 const extreme = buildExtremeFallbacks(
   { USERNAME: 'admin', ProgramData: 'C:\\ProgramData', PUBLIC: 'C:\\Users\\Public' },
