@@ -244,8 +244,8 @@ body.maximized .app-container {
 }
 
 .status-badge-container {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   padding: 14px 16px;
   display: flex;
@@ -255,12 +255,11 @@ body.maximized .app-container {
   overflow: hidden;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .status-badge-container:hover {
   transform: translateY(-2px);
-  background: rgba(255, 255, 255, 0.05);
 }
 
 .status-badge-container:active {
@@ -269,30 +268,53 @@ body.maximized .app-container {
 
 /* State Styling: Stopped (Ready to Start) */
 .status-badge-container.stopped {
-  border-color: var(--border-color);
+  background: rgba(var(--accent-rgb), 0.08);
+  border-color: rgba(var(--accent-rgb), 0.45);
+  box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.05), inset 0 0 8px rgba(var(--accent-rgb), 0.05);
+  animation: borderPulse 2.5s infinite ease-in-out;
 }
 .status-badge-container.stopped:hover {
-  border-color: var(--border-color);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  background: rgba(var(--accent-rgb), 0.15);
+  border-color: var(--accent-color);
+  box-shadow: 0 6px 20px rgba(var(--accent-rgb), 0.35);
 }
 
 /* State Styling: Running (Active) */
 .status-badge-container.running {
-  border-color: var(--border-color);
+  background: rgba(255, 95, 86, 0.03);
+  border-color: rgba(255, 95, 86, 0.2);
 }
 .status-badge-container.running:hover {
-  border-color: var(--border-color);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  background: rgba(255, 95, 86, 0.08);
+  border-color: rgba(255, 95, 86, 0.5);
+  box-shadow: 0 6px 20px rgba(255, 95, 86, 0.2);
 }
 
 /* State Styling: Starting (Working) */
 .status-badge-container.starting {
-  border-color: var(--border-color);
+  background: rgba(255, 189, 46, 0.03);
+  border-color: rgba(255, 189, 46, 0.3);
   cursor: wait;
 }
 .status-badge-container.starting:hover {
-  border-color: var(--border-color);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  background: rgba(255, 189, 46, 0.08);
+  border-color: rgba(255, 189, 46, 0.6);
+  box-shadow: 0 6px 20px rgba(255, 189, 46, 0.2);
+}
+
+@keyframes borderPulse {
+  0% {
+    box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.05), inset 0 0 8px rgba(var(--accent-rgb), 0.05);
+    border-color: rgba(var(--accent-rgb), 0.35);
+  }
+  50% {
+    box-shadow: 0 4px 20px rgba(var(--accent-rgb), 0.25), inset 0 0 12px rgba(var(--accent-rgb), 0.2);
+    border-color: rgba(var(--accent-rgb), 0.85);
+  }
+  100% {
+    box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.05), inset 0 0 8px rgba(var(--accent-rgb), 0.05);
+    border-color: rgba(var(--accent-rgb), 0.35);
+  }
 }
 
 /* 侧边栏网关开关状态对应图标颜色 */
@@ -338,7 +360,8 @@ body.maximized .app-container {
 
 .status-text-zone h4 {
   font-size: 13px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
+  font-weight: bold;
 }
 
 .status-text-zone p {
