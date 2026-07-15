@@ -1516,6 +1516,16 @@ async function init() {
     if (window.api && window.api.gatewayAction) {
         window.api.gatewayAction('query-status');
     }
+
+    // 隐藏全局初始化遮罩层，平滑淡出
+    const appLoadingScreen = document.getElementById('app-loading-screen');
+    if (appLoadingScreen) {
+        appLoadingScreen.style.opacity = '0';
+        appLoadingScreen.style.visibility = 'hidden';
+        setTimeout(() => {
+            appLoadingScreen.style.display = 'none';
+        }, 400);
+    }
 }
 
 // 4. IPC 消息监听与分发
