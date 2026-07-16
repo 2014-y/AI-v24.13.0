@@ -1,13 +1,11 @@
 'use strict';
 /**
- * 回复延迟收紧：纠正会把每轮对话拖慢的默认值。
- * 特别针对：
- * - 微信 inbound.debounceMs 过大（用户感觉“发了很久没动静”）
- * - Ollama contextWindow / num_ctx 过大（本机模型首 token 极慢）
- * - bootstrap 注入过大（每次请求塞几十 KB 人设/记忆）
- * - 本地 maxTokens 过大（生成拖尾很长）
+ * 回复延迟收紧 + 小上下文模型压缩安全：
+ * - 微信 debounce / bootstrap 过大
+ * - Ollama contextWindow / num_ctx 过大
+ * - 本地小模型：reserveTokensFloor=20000 会远超 8k 窗口，导致
+ *   「Auto-compaction could not recover this turn」——必须按窗口自适应
  */
-
 const DEFAULTS = {
   weixinDebounceMs: 500,
   ollamaContextWindow: 8192,
@@ -15,13 +13,71 @@ const DEFAULTS = {
   ollamaMaxTokens: 1024,
   bootstrapMaxChars: 8000,
   bootstrapTotalMaxChars: 24000,
+  /** 本地/小窗口专用：避免 AGENTS.md+记忆把 8k 窗口塞爆 */
+  smallBootstrapMaxChars: 1800,
+  smallBootstrapTotalMaxChars: 4500,
   cloudContextWindowCap: 131072,
-  // OpenClaw auto-compaction：低于此值易触发 “could not recover this turn”
-  reserveTokensFloor: 20000
+  /** 云端默认压缩预留（OpenClaw 官方默认也是 2e4） */
+  reserveTokensFloor: 20000,
+  /** 小于等于此窗口视为「小上下文」 */
+  smallContextThreshold: 16384
 };
 
 function isObject(v) {
   return v && typeof v === 'object' && !Array.isArray(v);
+}
+
+/** 从配置推断有效上下文窗口（优先主模型，其次 ollama 最小值） */
+function resolveEffectiveContextWindow(cfg) {
+  const providers = cfg && cfg.models && cfg.models.providers;
+  if (!isObject(providers)) return null;
+
+  let primaryCtx = null;
+  const primaryRaw = cfg.agents && cfg.agents.defaults && cfg.agents.defaults.model
+    && (typeof cfg.agents.defaults.model === 'string'
+      ? cfg.agents.defaults.model
+      : cfg.agents.defaults.model.primary);
+  if (typeof primaryRaw === 'string' && primaryRaw.includes('/')) {
+    const slash = primaryRaw.indexOf('/');
+    const provId = primaryRaw.slice(0, slash);
+    const modelId = primaryRaw.slice(slash + 1);
+    const prov = providers[provId];
+    if (isObject(prov) && Array.isArray(prov.models)) {
+      const hit = prov.models.find((m) => m && (m.id === modelId || m.name === modelId));
+      if (hit && Number.isFinite(Number(hit.contextWindow))) {
+        primaryCtx = Number(hit.contextWindow);
+      }
+    }
+  }
+
+  let ollamaMin = null;
+  if (isObject(providers.ollama) && Array.isArray(providers.ollama.models)) {
+    for (const model of providers.ollama.models) {
+      if (!isObject(model)) continue;
+      const w = Number(model.contextWindow);
+      if (Number.isFinite(w) && w > 0) {
+        ollamaMin = ollamaMin == null ? w : Math.min(ollamaMin, w);
+      }
+    }
+  }
+
+  if (primaryCtx != null) return primaryCtx;
+  if (ollamaMin != null) return ollamaMin;
+  return null;
+}
+
+/**
+ * 按上下文窗口算安全的 reserveTokensFloor。
+ * 规则：约 20% 窗口，且不超过 窗口 - 2048（给提示词留空间），云端大窗仍可用 20000。
+ */
+function computeSafeReserveTokensFloor(contextWindow) {
+  const ctx = Number(contextWindow);
+  if (!Number.isFinite(ctx) || ctx <= 0) return DEFAULTS.reserveTokensFloor;
+  if (ctx >= 100000) return DEFAULTS.reserveTokensFloor;
+  // 小窗口：floor 绝不能接近或超过整个窗口
+  const byRatio = Math.floor(ctx * 0.2);
+  const byHeadroom = Math.max(512, ctx - 2048);
+  return Math.max(512, Math.min(byRatio, byHeadroom, 4096));
 }
 
 function ensureLatencySafeConfig(config, opts = {}) {
@@ -32,7 +88,7 @@ function ensureLatencySafeConfig(config, opts = {}) {
   const ollamaNumCtx = Number(opts.ollamaNumCtx) || DEFAULTS.ollamaNumCtx;
   const ollamaMaxTokens = Number(opts.ollamaMaxTokens) || DEFAULTS.ollamaMaxTokens;
 
-  // 1) 微信防抖：默认 2000ms 体感很慢，收到消息先干等 2 秒
+  // 1) 微信防抖
   if (!cfg.channels) cfg.channels = {};
   if (!cfg.channels['openclaw-weixin']) cfg.channels['openclaw-weixin'] = {};
   const wx = cfg.channels['openclaw-weixin'];
@@ -44,46 +100,17 @@ function ensureLatencySafeConfig(config, opts = {}) {
     changes.push(`weixin.debounceMs: ${prev ?? 'unset'} -> ${DEFAULTS.weixinDebounceMs}`);
   }
 
-  // 2) agents bootstrap 注入裁剪
+  // 2) agents defaults
   if (!cfg.agents) cfg.agents = {};
   if (!cfg.agents.defaults) cfg.agents.defaults = {};
   const ad = cfg.agents.defaults;
-  if (!Number.isFinite(Number(ad.bootstrapMaxChars)) || Number(ad.bootstrapMaxChars) > DEFAULTS.bootstrapMaxChars) {
-    const prev = ad.bootstrapMaxChars;
-    ad.bootstrapMaxChars = DEFAULTS.bootstrapMaxChars;
-    changes.push(`bootstrapMaxChars: ${prev ?? 'unset'} -> ${DEFAULTS.bootstrapMaxChars}`);
-  }
-  if (!Number.isFinite(Number(ad.bootstrapTotalMaxChars)) || Number(ad.bootstrapTotalMaxChars) > DEFAULTS.bootstrapTotalMaxChars) {
-    const prev = ad.bootstrapTotalMaxChars;
-    ad.bootstrapTotalMaxChars = DEFAULTS.bootstrapTotalMaxChars;
-    changes.push(`bootstrapTotalMaxChars: ${prev ?? 'unset'} -> ${DEFAULTS.bootstrapTotalMaxChars}`);
-  }
 
-  // 压缩预留 token：缺省或过小会导致 Auto-compaction could not recover this turn
-  if (!ad.compaction || typeof ad.compaction !== 'object') ad.compaction = {};
-  const floor = Number(ad.compaction.reserveTokensFloor);
-  if (!Number.isFinite(floor) || floor < DEFAULTS.reserveTokensFloor) {
-    const prev = ad.compaction.reserveTokensFloor;
-    ad.compaction.reserveTokensFloor = DEFAULTS.reserveTokensFloor;
-    changes.push(`compaction.reserveTokensFloor: ${prev ?? 'unset'} -> ${DEFAULTS.reserveTokensFloor}`);
-  }
-
-  // 关闭人工延迟（如果被打开会感觉「一句话都要等一下」）
-  if (ad.humanDelay && ad.humanDelay.enabled) {
-    ad.humanDelay.enabled = false;
-    changes.push('humanDelay.enabled: true -> false');
-  }
-
-  // 3) Ollama / 本地模型：硬砍夸张 contextWindow，并强制 num_ctx + 关闭 thinking
+  // 3) 先收紧 ollama 窗口（后面按有效窗口算 compaction）
   if (!cfg.models) cfg.models = {};
   if (!cfg.models.providers) cfg.models.providers = {};
   const providers = cfg.models.providers;
 
   if (isObject(providers.ollama) && Array.isArray(providers.ollama.models)) {
-    // OpenAI-compat 路径会用 contextWindow 注入 options.num_ctx；过大就会卡死首 token
-    if (providers.ollama.api !== 'ollama' && providers.ollama.baseUrl && String(providers.ollama.baseUrl).includes('11434')) {
-      // keep as-is, but still cap models
-    }
     for (const model of providers.ollama.models) {
       if (!isObject(model)) continue;
       const id = model.id || model.name || 'unknown';
@@ -115,7 +142,6 @@ function ensureLatencySafeConfig(config, opts = {}) {
     }
   }
 
-  // 4) 云端模型：只降 OpenClaw 侧预算上限，避免一次塞百万级上下文
   for (const [provId, prov] of Object.entries(providers)) {
     if (provId === 'ollama' || !isObject(prov) || !Array.isArray(prov.models)) continue;
     for (const model of prov.models) {
@@ -128,7 +154,86 @@ function ensureLatencySafeConfig(config, opts = {}) {
     }
   }
 
-  // 5) 工具：本地 provider 强制轻量
+  const effectiveCtx = resolveEffectiveContextWindow(cfg) || ollamaCtx;
+  const smallCtx = effectiveCtx <= DEFAULTS.smallContextThreshold;
+
+  // bootstrap：小窗口必须砍，否则 AGENTS.md 一注入就超窗
+  const bootMax = smallCtx ? DEFAULTS.smallBootstrapMaxChars : DEFAULTS.bootstrapMaxChars;
+  const bootTotal = smallCtx ? DEFAULTS.smallBootstrapTotalMaxChars : DEFAULTS.bootstrapTotalMaxChars;
+  if (!Number.isFinite(Number(ad.bootstrapMaxChars)) || Number(ad.bootstrapMaxChars) > bootMax) {
+    const prev = ad.bootstrapMaxChars;
+    ad.bootstrapMaxChars = bootMax;
+    changes.push(`bootstrapMaxChars: ${prev ?? 'unset'} -> ${bootMax}${smallCtx ? ' (small-ctx)' : ''}`);
+  }
+  if (!Number.isFinite(Number(ad.bootstrapTotalMaxChars)) || Number(ad.bootstrapTotalMaxChars) > bootTotal) {
+    const prev = ad.bootstrapTotalMaxChars;
+    ad.bootstrapTotalMaxChars = bootTotal;
+    changes.push(`bootstrapTotalMaxChars: ${prev ?? 'unset'} -> ${bootTotal}${smallCtx ? ' (small-ctx)' : ''}`);
+  }
+
+  // 压缩预留：按窗口自适应（绝不能对 8k 模型写 20000）
+  if (!ad.compaction || typeof ad.compaction !== 'object') ad.compaction = {};
+  const safeFloor = computeSafeReserveTokensFloor(effectiveCtx);
+  const floor = Number(ad.compaction.reserveTokensFloor);
+  // 过小或过大（相对窗口）都纠正
+  const tooSmall = !Number.isFinite(floor) || floor < Math.min(512, safeFloor);
+  const tooLargeForWindow = Number.isFinite(floor) && floor > safeFloor && smallCtx;
+  // 云端：仍保证至少 20000；小窗：强制落到 safeFloor
+  if (smallCtx) {
+    if (!Number.isFinite(floor) || floor !== safeFloor) {
+      const prev = ad.compaction.reserveTokensFloor;
+      ad.compaction.reserveTokensFloor = safeFloor;
+      changes.push(`compaction.reserveTokensFloor: ${prev ?? 'unset'} -> ${safeFloor} (ctx=${effectiveCtx})`);
+    }
+    if (ad.compaction.maxHistoryShare == null || Number(ad.compaction.maxHistoryShare) > 0.45) {
+      const prev = ad.compaction.maxHistoryShare;
+      ad.compaction.maxHistoryShare = 0.4;
+      changes.push(`compaction.maxHistoryShare: ${prev ?? 'unset'} -> 0.4`);
+    }
+    if (ad.compaction.mode !== 'safeguard') {
+      ad.compaction.mode = 'safeguard';
+      changes.push('compaction.mode: -> safeguard');
+    }
+    if (!isObject(ad.compaction.qualityGuard)) ad.compaction.qualityGuard = {};
+    if (ad.compaction.qualityGuard.enabled !== true) {
+      ad.compaction.qualityGuard.enabled = true;
+      changes.push('compaction.qualityGuard.enabled: -> true');
+    }
+    const retries = Number(ad.compaction.qualityGuard.maxRetries);
+    if (!Number.isFinite(retries) || retries < 1) {
+      ad.compaction.qualityGuard.maxRetries = 2;
+      changes.push('compaction.qualityGuard.maxRetries: -> 2');
+    }
+  } else if (tooSmall || !Number.isFinite(floor) || floor < DEFAULTS.reserveTokensFloor) {
+    const prev = ad.compaction.reserveTokensFloor;
+    ad.compaction.reserveTokensFloor = DEFAULTS.reserveTokensFloor;
+    changes.push(`compaction.reserveTokensFloor: ${prev ?? 'unset'} -> ${DEFAULTS.reserveTokensFloor}`);
+  } else if (tooLargeForWindow) {
+    // unreachable when !smallCtx, kept for clarity
+  }
+
+  // contextPruning：小窗口强制软裁剪工具输出
+  if (smallCtx) {
+    if (!ad.contextPruning || typeof ad.contextPruning !== 'object') ad.contextPruning = {};
+    if (!isObject(ad.contextPruning.softTrim)) ad.contextPruning.softTrim = {};
+    const st = ad.contextPruning.softTrim;
+    if (!Number.isFinite(Number(st.maxChars)) || Number(st.maxChars) > 4000) {
+      st.maxChars = 3000;
+      changes.push('contextPruning.softTrim.maxChars: -> 3000');
+    }
+    if (!isObject(ad.contextPruning.hardClear)) ad.contextPruning.hardClear = {};
+    if (ad.contextPruning.hardClear.enabled !== true) {
+      ad.contextPruning.hardClear.enabled = true;
+      changes.push('contextPruning.hardClear.enabled: -> true');
+    }
+  }
+
+  if (ad.humanDelay && ad.humanDelay.enabled) {
+    ad.humanDelay.enabled = false;
+    changes.push('humanDelay.enabled: true -> false');
+  }
+
+  // 工具：本地 provider 强制轻量
   if (!cfg.tools) cfg.tools = {};
   if (!cfg.tools.byProvider) cfg.tools.byProvider = {};
   if (!isObject(cfg.tools.byProvider.ollama)) cfg.tools.byProvider.ollama = {};
@@ -142,7 +247,7 @@ function ensureLatencySafeConfig(config, opts = {}) {
     changes.push('tools.deny += tts');
   }
 
-  // 6) 双模型教学默认不打断主链路；teach-learn / 未显式配置时都落到 collect-only
+  // 双模型教学默认不打断主链路
   if (!cfg.plugins) cfg.plugins = {};
   if (!cfg.plugins.entries) cfg.plugins.entries = {};
   if (!isObject(cfg.plugins.entries['dual-model-trainer'])) {
@@ -150,7 +255,6 @@ function ensureLatencySafeConfig(config, opts = {}) {
   }
   const dmt = cfg.plugins.entries['dual-model-trainer'];
   if (!isObject(dmt.config)) dmt.config = {};
-  // teach-learn 会额外打老师/学生，抢 GPU；改成 collect-only，不阻塞回复
   if (!dmt.config.mode || dmt.config.mode === 'teach-learn') {
     const prev = dmt.config.mode;
     dmt.config.mode = 'collect-only';
@@ -170,5 +274,7 @@ function ensureLatencySafeConfig(config, opts = {}) {
 
 module.exports = {
   DEFAULTS,
-  ensureLatencySafeConfig
+  ensureLatencySafeConfig,
+  resolveEffectiveContextWindow,
+  computeSafeReserveTokensFloor
 };

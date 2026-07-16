@@ -1,5 +1,5 @@
 'use strict';
-const { ensureLatencySafeConfig, DEFAULTS } = require('../latency-tune');
+const { ensureLatencySafeConfig, DEFAULTS, computeSafeReserveTokensFloor } = require('../latency-tune');
 
 let passed = 0;
 function assert(cond, msg) {
@@ -17,9 +17,11 @@ const slow = {
   },
   agents: {
     defaults: {
+      model: { primary: 'ollama/local-test' },
       bootstrapMaxChars: 20000,
       bootstrapTotalMaxChars: 60000,
-      humanDelay: { enabled: true }
+      humanDelay: { enabled: true },
+      compaction: { reserveTokensFloor: 20000 }
     }
   },
   models: {
@@ -52,9 +54,11 @@ const slow = {
 const { config, changed, changes } = ensureLatencySafeConfig(slow);
 assert(changed === true, 'slow config marked changed');
 assert(config.channels['openclaw-weixin'].inbound.debounceMs === DEFAULTS.weixinDebounceMs, 'weixin debounce capped');
-assert(config.agents.defaults.bootstrapMaxChars === DEFAULTS.bootstrapMaxChars, 'bootstrapMaxChars capped');
-assert(config.agents.defaults.bootstrapTotalMaxChars === DEFAULTS.bootstrapTotalMaxChars, 'bootstrapTotalMaxChars capped');
-assert(config.agents.defaults.compaction.reserveTokensFloor === DEFAULTS.reserveTokensFloor, 'reserveTokensFloor raised to 20000');
+assert(config.agents.defaults.bootstrapMaxChars === DEFAULTS.smallBootstrapMaxChars, 'bootstrapMaxChars small-ctx');
+assert(config.agents.defaults.bootstrapTotalMaxChars === DEFAULTS.smallBootstrapTotalMaxChars, 'bootstrapTotalMaxChars small-ctx');
+const expectedFloor = computeSafeReserveTokensFloor(DEFAULTS.ollamaContextWindow);
+assert(config.agents.defaults.compaction.reserveTokensFloor === expectedFloor, `reserveTokensFloor adaptive ${expectedFloor} not 20000`);
+assert(config.agents.defaults.compaction.mode === 'safeguard', 'compaction mode safeguard');
 assert(config.agents.defaults.humanDelay.enabled === false, 'humanDelay disabled');
 assert(config.models.providers.ollama.models[0].contextWindow === DEFAULTS.ollamaContextWindow, 'ollama contextWindow capped');
 assert(config.models.providers.ollama.models[0].maxTokens === DEFAULTS.ollamaMaxTokens, 'ollama maxTokens capped');
@@ -71,5 +75,17 @@ assert(changes.length >= 8, `logged ${changes.length} changes`);
 
 const again = ensureLatencySafeConfig(config);
 assert(again.changed === false, 'idempotent on already-tuned config');
+
+// 云端主模型仍用 20000 floor
+const cloud = ensureLatencySafeConfig({
+  agents: { defaults: { model: { primary: 'agnes-ai/agnes-2.0-flash' } } },
+  models: {
+    providers: {
+      'agnes-ai': { models: [{ id: 'agnes-2.0-flash', contextWindow: 131072 }] }
+    }
+  }
+});
+assert(cloud.config.agents.defaults.compaction.reserveTokensFloor === DEFAULTS.reserveTokensFloor, 'cloud keeps 20000 floor');
+assert(cloud.config.agents.defaults.bootstrapMaxChars === DEFAULTS.bootstrapMaxChars, 'cloud bootstrap full');
 
 console.log(`\n${passed} passed`);
