@@ -102,6 +102,7 @@
     ],
     "files": [
       "main.js",
+      "acceleration.js",
       "gateway-runtime.js",
       "home-resolve.js",
       "plugin-adapt.js",

@@ -11,7 +11,7 @@ window.LOCALES = {
     'nav.settings': '系统设置',
     'nav.about': '关于 Nexora Agent',
     'nav.update': '检查更新',
-    'nav.acceleration_channel': '加速通道',
+    'nav.acceleration_channel': 'Nexora Clash',
     'nav.openclaw_panel': 'OpenClaw',
     'nav.communication': '通讯管理',
     'nav.terminal': '内置终端',
@@ -67,10 +67,15 @@ window.LOCALES = {
     'console.wechat_label.protocol': '通道协议: ',
     'console.app_uptime': '应用运行时间',
 
-    // 专属网络加速通道
-    'settings.acc.title': '⚡ 专属网络加速通道',
-    'settings.acc.desc': '优化Nexora Agent在海外模型网络下的连通性能，大幅度缩短启动插件与请求模型的握手延迟。',
+    // 通道加速
+    'settings.acc.title': '⚡ Nexora Clash',
+    'settings.acc.desc': '开启后启用内置 Nexora Clash（mihomo 核心），优化Nexora Agent在海外模型网络下的连通性能。',
     'settings.acc.btn': '打开',
+    'settings.terminal.title': '⌨️ 内置终端',
+    'settings.terminal.desc': '在当前页面直接管理底层沙箱、网关运行时与本地命令，无需跳转。',
+    'settings.terminal.btn': '打开终端',
+    'acc.title': 'Nexora Clash',
+    'acc.desc': '内置 mihomo（ClashMeta）核心，支持订阅导入、节点选择、规则/全局/直连与系统代理。',
 
     // 模型会话 (Chat Room)
     'chat.title': '模型对话',
@@ -540,10 +545,15 @@ window.LOCALES = {
     'console.wechat_label.protocol': 'Protocol: ',
     'console.app_uptime': 'App Running Uptime',
 
-    // 专属网络加速通道
-    'settings.acc.title': '⚡ Exclusive Network Acceleration Channel',
-    'settings.acc.desc': 'Optimize the gateway connectivity performance under overseas model networks, significantly reducing handshake latency for starting plugins and requesting models.',
+    // Acceleration channel
+    'settings.acc.title': '⚡ Acceleration Channel',
+    'settings.acc.desc': 'Enable the built-in acceleration channel (mihomo core) to optimize connectivity to overseas model networks.',
     'settings.acc.btn': 'Open',
+    'settings.terminal.title': '⌨️ Built-in Terminal',
+    'settings.terminal.desc': 'Manage the sandbox, gateway runtime, and local commands directly on this page.',
+    'settings.terminal.btn': 'Open Terminal',
+    'acc.title': 'Acceleration Channel',
+    'acc.desc': 'Built-in mihomo (ClashMeta) core with subscription import, node selection, rule/global/direct modes, and system proxy.',
 
     // Chat Room
     'chat.title': 'Model Chat',
@@ -957,7 +967,7 @@ window.LOCALES = {
     'nav.settings': '系統設定',
     'nav.about': '關於 Nexora Agent',
     'nav.update': '檢查更新',
-    'nav.acceleration_channel': '加速通道',
+    'nav.acceleration_channel': 'Nexora Clash',
     'nav.openclaw_panel': 'OpenClaw',
     'nav.communication': '通訊管理',
     'nav.terminal': '內置終端',
@@ -1013,10 +1023,15 @@ window.LOCALES = {
     'console.wechat_label.protocol': '通道協定: ',
     'console.app_uptime': '應用運行時間',
 
-    // 专属网络加速通道
-    'settings.acc.title': '⚡ 專屬網路加速通道',
-    'settings.acc.desc': '優化Nexora Agent在海外模型網絡下的連通性能，大幅度縮短啟動插件與請求模型的握手延遲。',
+    // 通道加速
+    'settings.acc.title': '⚡ Nexora Clash',
+    'settings.acc.desc': '開啟後啟用內建 Nexora Clash（mihomo 核心），優化Nexora Agent在海外模型網絡下的連通性能。',
     'settings.acc.btn': '打開',
+    'settings.terminal.title': '⌨️ 內建終端',
+    'settings.terminal.desc': '在當前頁面直接管理底層沙箱、網關運行時與本地命令，無需跳轉。',
+    'settings.terminal.btn': '打開終端',
+    'acc.title': 'Nexora Clash',
+    'acc.desc': '內建 mihomo（ClashMeta）核心，支持訂閱導入、節點選擇、規則/全局/直連與系統代理。',
 
     // 模型會話 (Chat Room)
     'chat.title': '模型對話',

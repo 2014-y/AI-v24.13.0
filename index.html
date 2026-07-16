@@ -84,9 +84,9 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg>
               <span data-i18n="nav.plugins">内置插件</span>
             </div>
-            <div class="nav-item" data-tab="terminal-view" id="tour-nav-terminal">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-              <span data-i18n="nav.terminal">内置终端</span>
+            <div class="nav-item" data-tab="acceleration-view" id="tour-nav-acceleration">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z"/></svg>
+              <span data-i18n="nav.acceleration_channel">加速通道</span>
             </div>
             <div class="nav-item" data-tab="openclaw-panel-view" id="btn-nav-openclaw-web">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -980,17 +980,25 @@
               </div>
             </div>
 
-            <!-- 专属网络加速通道 -->
+            <!-- 通道加速总开关 -->
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 12px;">
               <div>
-                <div style="font-size: 13px; font-weight: bold; color: var(--text-primary);" data-i18n="settings.acc.title">⚡ 专属网络加速通道</div>
+                <div style="font-size: 13px; font-weight: bold; color: var(--text-primary);" data-i18n="settings.acc.title">⚡ 通道加速</div>
                 <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;" data-i18n="settings.acc.desc">优化网关在海外模型网络下的连通性能，大幅度缩短启动插件与请求模型的握手延迟。</div>
               </div>
+              <label class="switch-slider-btn" for="setting-acceleration-toggle">
+                <input type="checkbox" id="setting-acceleration-toggle">
+                <span class="slider-knob"></span>
+              </label>
+            </div>
+
+            <!-- 内置终端：直接嵌入系统设置，不再跳转页面 -->
+            <div class="settings-terminal-card">
               <div>
-                <button type="button" id="btn-open-acceleration" data-i18n="settings.acc.btn" style="background: linear-gradient(135deg, var(--accent-color), #4f46e5); border: none; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px; box-shadow: 0 2px 6px rgba(99, 102, 241, 0.2); transition: all 0.2s;">
-                  打开
-                </button>
+                <div style="font-size: 13px; font-weight: bold; color: var(--text-primary);" data-i18n="settings.terminal.title">⌨️ 内置终端</div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;" data-i18n="settings.terminal.desc">在当前页面直接管理底层沙箱、网关运行时与本地命令。</div>
               </div>
+              <div id="xterm-container" class="settings-terminal-container"></div>
             </div>
           </div>
 
@@ -1121,22 +1129,264 @@
           </div>
         </section>
 
+        <!-- Tab: 加速通道 -->
+        <section class="tab-pane" id="acceleration-view">
+          <div class="view-header acc-header">
+            <div>
+              <h2 style="margin: 0;" data-i18n="acc.title">加速通道</h2>
+              <p style="margin: 4px 0 0 0;" data-i18n="acc.desc">内置 mihomo（ClashMeta）核心，按步骤添加配置、选择节点并启用加速。</p>
+            </div>
+            <div class="acc-header-actions">
+              <span id="acc-status-pill" class="acc-status-pill">未启用</span>
+              <div class="acc-mini-enable" title="启用加速通道">
+                <span>启用</span>
+                <label class="switch-slider-btn" for="acc-page-enabled-toggle">
+                  <input type="checkbox" id="acc-page-enabled-toggle">
+                  <span class="slider-knob"></span>
+                </label>
+              </div>
+              <button type="button" class="btn-secondary" id="acc-refresh-btn">刷新</button>
+            </div>
+          </div>
+
+          <div class="acc-subtabs" role="tablist">
+            <button type="button" class="acc-subtab active" data-acc-panel="profiles">配置</button>
+            <button type="button" class="acc-subtab" data-acc-panel="proxies">代理</button>
+            <button type="button" class="acc-subtab" data-acc-panel="connections">连接</button>
+            <button type="button" class="acc-subtab" data-acc-panel="controls">控制</button>
+          </div>
+
+          <!-- 配置页：添加厂商 + 已有配置列表 -->
+          <div class="acc-panel active" id="acc-panel-profiles">
+            <div class="acc-card">
+              <div class="acc-card-title">添加加速厂商</div>
+              <div class="acc-import-grid">
+                <button type="button" class="acc-import-item" id="acc-add-qr-btn" data-import-mode="qr">
+                  <span class="acc-import-icon">▦</span>
+                  <span><strong>二维码</strong><small>粘贴扫码结果或订阅链接</small></span>
+                </button>
+                <button type="button" class="acc-import-item" id="acc-add-file-btn" data-import-mode="file">
+                  <span class="acc-import-icon">⇧</span>
+                  <span><strong>文件</strong><small>上传 Clash/Mihomo 配置</small></span>
+                </button>
+                <button type="button" class="acc-import-item active" id="acc-add-url-btn" data-import-mode="url">
+                  <span class="acc-import-icon">☁</span>
+                  <span><strong>URL</strong><small>通过订阅地址获取</small></span>
+                </button>
+              </div>
+
+              <div class="acc-inline-import" id="acc-inline-import">
+                <div class="acc-inline-import-head">
+                  <strong id="acc-import-title">通过 URL 添加配置</strong>
+                  <span id="acc-import-help">填写加速厂商提供的 Clash/Mihomo 订阅地址。</span>
+                </div>
+                <div class="acc-import-fields" id="acc-url-fields">
+                  <input id="acc-import-name" class="acc-input" type="text" placeholder="配置名称（例如：我的加速服务）">
+                  <input id="acc-import-url" class="acc-input acc-input-grow" type="url" placeholder="https://example.com/clash/subscription">
+                  <button type="button" id="acc-import-url-submit" class="btn-primary acc-action-btn">添加配置</button>
+                </div>
+                <div class="acc-import-fields-column" id="acc-qr-fields" hidden>
+                  <input id="acc-qr-name" class="acc-input" type="text" placeholder="配置名称（可选）" style="width: 100%;">
+                  <textarea id="acc-qr-content" class="acc-input" rows="3" placeholder="选择图片识别或粘贴二维码解析出的订阅链接/YAML配置" style="width: 100%; min-height: 80px;"></textarea>
+                  <div style="display: flex; justify-content: flex-end; gap: 8px; width: 100%;">
+                    <button type="button" id="acc-qr-upload-btn" class="btn-secondary acc-action-btn">识别图片</button>
+                    <input type="file" id="acc-qr-file-input" accept="image/*" style="display: none;">
+                    <button type="button" id="acc-qr-image-btn" class="btn-secondary acc-action-btn">粘贴剪贴板</button>
+                    <button type="button" id="acc-import-qr-submit" class="btn-primary acc-action-btn">添加配置</button>
+                  </div>
+                </div>
+                <div class="acc-import-fields" id="acc-file-fields" hidden>
+                  <div class="acc-file-hint">支持 .yaml / .yml / .txt / .conf，导入后可到「代理」页选择节点。</div>
+                  <button type="button" id="acc-import-file-submit" class="btn-primary acc-action-btn">选择配置文件</button>
+                </div>
+                <div id="acc-import-feedback" class="acc-import-feedback" aria-live="polite"></div>
+              </div>
+            </div>
+
+            <div class="acc-card">
+              <div class="acc-card-head">
+                <div>
+                  <div class="acc-card-title" style="margin-bottom: 2px;">已添加配置</div>
+                  <div id="acc-profile-summary" class="acc-muted">请先添加加速厂商配置</div>
+                </div>
+                <div class="acc-card-actions">
+                  <select id="acc-profile-select" class="acc-select"></select>
+                  <button type="button" id="acc-profile-rename-btn" class="btn-secondary">修改备注</button>
+                  <button type="button" id="acc-profile-update-btn" class="btn-secondary">更新订阅</button>
+                  <button type="button" id="acc-profile-delete-btn" class="btn-secondary acc-danger-btn">删除</button>
+                </div>
+              </div>
+              <div id="acc-profile-list" class="acc-profile-list">
+                <div class="acc-empty">暂无配置。请用上方二维码、文件或 URL 添加。</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 代理页：节点选择 -->
+          <div class="acc-panel" id="acc-panel-proxies" hidden>
+            <div class="acc-card acc-panel-fill" style="display: flex; flex-direction: column;">
+              <div class="acc-card-head" style="flex-shrink: 0;">
+                <div>
+                  <div class="acc-card-title" style="margin-bottom: 2px;">代理选择</div>
+                  <div id="acc-proxy-active-label" class="acc-muted">选择节点或策略组后将用于 Nexora Clash 出站</div>
+                </div>
+                <div style="display: flex; gap: 12px; align-items: center;">
+                  <button type="button" id="acc-delay-btn" class="btn-secondary" style="height: 28px; padding: 0 12px; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; margin: 0;">延迟测试</button>
+                  <button type="button" id="acc-auto-select-enable-btn" class="acc-country-pill" style="height: 28px; padding: 0 12px; border-radius: 6px; font-size: 11px; font-weight: 500; display: inline-flex; align-items: center; justify-content: center;">
+                    自动选择最低延迟
+                  </button>
+                  <div id="acc-auto-select-interval-container" style="display: none; align-items: center;">
+                    <select id="acc-auto-select-interval" class="acc-select" style="min-width: auto; width: 110px; height: 28px; padding: 0 8px; font-size: 11px; border-radius: 6px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: var(--text-primary); outline: none; cursor: pointer;">
+                      <option value="5">5 秒/次</option>
+                      <option value="10">10 秒/次</option>
+                      <option value="15">15 秒/次</option>
+                      <option value="20">20 秒/次</option>
+                      <option value="25">25 秒/次</option>
+                      <option value="30">30 秒/次</option>
+                      <option value="35">35 秒/次</option>
+                      <option value="40">40 秒/次</option>
+                      <option value="45">45 秒/次</option>
+                      <option value="50">50 秒/次</option>
+                      <option value="55">55 秒/次</option>
+                      <option value="60" selected>60 秒/次</option>
+                      <option value="120">120 秒/次</option>
+                      <option value="300">300 秒/次</option>
+                      <option value="600">600 秒/次</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div class="acc-view-tabs" style="margin-bottom: 12px; display: flex; gap: 8px; flex-shrink: 0; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
+                <button type="button" id="acc-view-tab-nodes" class="acc-subtab active" style="margin: 0; padding: 5px 12px; font-size: 12px; height: auto;">所有节点</button>
+                <button type="button" id="acc-view-tab-groups" class="acc-subtab" style="margin: 0; padding: 5px 12px; font-size: 12px; height: auto;">策略分流</button>
+              </div>
+              <div id="acc-node-toolbar" class="acc-node-toolbar" style="flex-shrink: 0;">
+                <input id="acc-node-search" class="acc-input acc-input-grow" type="search" placeholder="搜索节点名称、地区或协议">
+                <select id="acc-node-protocol-filter" class="acc-select">
+                  <option value="">全部协议</option>
+                </select>
+                <select id="acc-node-sort" class="acc-select">
+                  <option value="default">默认排序</option>
+                  <option value="latency" selected>延迟从低到高</option>
+                  <option value="name">按名称排序</option>
+                </select>
+                <span id="acc-node-count" class="acc-muted">0 个节点</span>
+              </div>
+              <div id="acc-node-country-filters" class="acc-country-filters" style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; flex-shrink: 0; padding: 0 4px;">
+                <button type="button" class="acc-country-pill active" data-country="all">全部</button>
+                <button type="button" class="acc-country-pill" data-country="hk">🇭🇰 香港</button>
+                <button type="button" class="acc-country-pill" data-country="jp">🇯🇵 日本</button>
+                <button type="button" class="acc-country-pill" data-country="sg">🇸🇬 新加坡</button>
+                <button type="button" class="acc-country-pill" data-country="us">🇺🇸 美国</button>
+                <button type="button" class="acc-country-pill" data-country="tw">🇹🇼 台湾</button>
+                <button type="button" class="acc-country-pill" data-country="other">其他</button>
+              </div>
+              <div id="acc-node-grid" class="acc-node-grid">
+                <div class="acc-empty">暂无节点。请先到「配置」页添加加速厂商。</div>
+              </div>
+              <div id="acc-groups-container" class="acc-groups-container" style="display: none; flex: 1; overflow-y: auto;">
+                <div class="acc-empty">暂无策略组。请先到「配置」页添加加速厂商并启用通道。</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 控制页：开关与模式 -->
+          <div class="acc-panel" id="acc-panel-controls" hidden>
+            <div class="acc-controls-grid">
+              <div class="acc-card">
+                <div class="acc-card-title">通道控制</div>
+                <div class="acc-control-row">
+                  <div>
+                    <div>启用加速通道</div>
+                    <div class="acc-muted">开启后网关与客户端请求走本地加速代理</div>
+                  </div>
+                  <label class="switch-slider-btn" for="acc-controls-enabled-toggle">
+                    <input type="checkbox" id="acc-controls-enabled-toggle">
+                    <span class="slider-knob"></span>
+                  </label>
+                </div>
+                <div class="acc-control-row">
+                  <div>
+                    <div>系统代理</div>
+                    <div class="acc-muted">写入 Windows 系统代理设置</div>
+                  </div>
+                  <label class="switch-slider-btn" for="acc-system-proxy-toggle">
+                    <input type="checkbox" id="acc-system-proxy-toggle">
+                    <span class="slider-knob"></span>
+                  </label>
+                </div>
+                <div class="acc-control-row">
+                  <div>
+                    <div>虚拟网卡 TUN</div>
+                    <div class="acc-muted">捕获更多系统流量（可能需要管理员权限）</div>
+                  </div>
+                  <label class="switch-slider-btn" for="acc-tun-toggle">
+                    <input type="checkbox" id="acc-tun-toggle">
+                    <span class="slider-knob"></span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="acc-card">
+                <div class="acc-card-title">出站模式</div>
+                <label class="acc-radio-row"><input type="radio" name="acc-mode" value="rule" checked><span>规则 · 按订阅规则分流</span></label>
+                <label class="acc-radio-row"><input type="radio" name="acc-mode" value="global"><span>全局 · 全部走代理</span></label>
+                <label class="acc-radio-row"><input type="radio" name="acc-mode" value="direct"><span>直连 · 不走代理</span></label>
+              </div>
+
+              <div class="acc-card">
+                <div class="acc-card-title">运行信息</div>
+                <div class="acc-info-line"><span>本地代理</span><strong id="acc-mixed-port">--</strong></div>
+                <div class="acc-info-line"><span>控制端口</span><strong id="acc-controller">--</strong></div>
+                <div class="acc-info-line"><span>当前节点</span><strong id="acc-current-proxy">--</strong></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 连接页：实时活跃连接监控 -->
+          <div class="acc-panel" id="acc-panel-connections" hidden>
+            <div class="acc-card acc-panel-fill" style="display: flex; flex-direction: column;">
+              <div class="acc-card-head" style="flex-shrink: 0;">
+                <div>
+                  <div class="acc-card-title" style="margin-bottom: 2px;">活跃连接</div>
+                  <div class="acc-muted">监控当前所有活动的网络连接，支持手动断开特定连接。</div>
+                </div>
+                <div class="acc-card-actions">
+                  <button type="button" id="acc-connections-close-all-btn" class="btn-secondary acc-danger-btn">断开全部</button>
+                </div>
+              </div>
+              <div class="acc-node-toolbar" style="flex-shrink: 0;">
+                <input id="acc-conn-search" class="acc-input acc-input-grow" type="search" placeholder="搜索目标主机、IP 或规则">
+                <span id="acc-conn-count" class="acc-muted">活跃连接: 0 个 · 上传: 0 B/s · 下载: 0 B/s</span>
+              </div>
+              <div class="acc-connections-table-container" style="flex: 1; overflow-y: auto; margin-top: 10px; border: 1px solid rgba(255,255,255,0.05); border-radius: 8px;">
+                <table class="acc-connections-table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 12px;">
+                  <thead>
+                    <tr style="background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05);">
+                      <th style="padding: 10px;">源地址</th>
+                      <th style="padding: 10px;">目标地址</th>
+                      <th style="padding: 10px;">网络类型</th>
+                      <th style="padding: 10px;">分流规则</th>
+                      <th style="padding: 10px;">出站节点</th>
+                      <th style="padding: 10px;">流量 (↑/↓)</th>
+                      <th style="padding: 10px;">时长</th>
+                      <th style="padding: 10px; text-align: center;">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="acc-connections-tbody">
+                    <tr>
+                      <td colspan="8" class="acc-empty" style="text-align: center; padding: 20px; color: var(--text-secondary);">暂无活跃连接。</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- Tab 7: 内置 OpenClaw 面板 -->
         <section class="tab-pane" id="openclaw-panel-view" style="width: 100%; height: 100%; padding: 0; margin: 0; overflow: hidden; background: #0b0b14;">
           <webview id="openclaw-iframe" partition="persist:nexora-agent-openclaw-panel" style="width: 100%; height: 100%; border: none; background: #0b0b14;" src=""></webview>
-        </section>
-
-        <!-- Tab 8: 内置终端 -->
-        <section class="tab-pane" id="terminal-view">
-          <div style="display: flex; flex-direction: column; height: 100%;">
-            <div class="view-header" style="margin-bottom: 0; padding-bottom: 0; border-bottom: none;">
-              <div style="display: flex; align-items: center; gap: 16px;">
-                <h2 style="margin: 0;" data-i18n="terminal.title">内置沙箱终端</h2>
-              </div>
-              <p style="margin: 4px 0 0 0;" data-i18n="terminal.desc">直接管理底层环境依赖与网关运行时的命令行沙盒环境</p>
-            </div>
-            <div id="xterm-container" style="flex: 1; padding: 10px; background-color: #0c0c0c; border-radius: 8px; margin-top: 15px; margin-bottom: 20px; overflow: hidden; box-shadow: inset 0 0 10px rgba(0,0,0,0.5);"></div>
-          </div>
         </section>
 
       </main>
@@ -1262,6 +1512,7 @@
 
   <script src="node_modules/xterm/lib/xterm.js"></script>
   <script src="node_modules/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+  <script src="jsQR.js"></script>
   <script src="locales.js"></script>
   <script src="renderer.js"></script>
 </body>

@@ -46,6 +46,7 @@ const {
     getGatewayRuntimeRoot,
     ensureGatewayRuntime
 } = require('./gateway-runtime');
+const acceleration = require('./acceleration');
 
 let hardenGatewayBootAgainstPluginNpm = () => ({ notes: ['harden-unavailable'], configChanged: false });
 let softenOpenClawStartupMigrationGuard = () => ({ ok: false, reason: 'harden-unavailable' });
@@ -2145,6 +2146,7 @@ function createTray() {
             label: '退出应用', 
             click: () => {
                 isQuitting = true;
+                try { acceleration.stopCore(); } catch (e) {}
                 stopGatewayProcess();
                 app.quit();
             } 
@@ -2478,6 +2480,8 @@ async function startGatewayProcess() {
                 stateDir: lockedAuth.stateDir,
                 token: lockedAuth.token
             });
+            // 加速通道开启时为网关注入本地 mihomo 代理；关闭时剥离继承的系统代理
+            try { acceleration.applyProxyToEnvObject(childEnv); } catch (e) {}
             childEnv.NODE_TLS_REJECT_UNAUTHORIZED = '0';
             childEnv.NEXORA_AGENT_PATCH_PATH = patchPath;
             childEnv.NODE_OPTIONS = buildPatchedNodeOptions(patchPath);
@@ -4480,6 +4484,182 @@ ipcMain.handle('autostart-set', async (event, enabled) => {
     return true;
 });
 
+// ─── 加速通道（mihomo）───────────────────────────────────────────
+async function applyElectronSessionProxy(enabled) {
+    try {
+        const ses = session.defaultSession;
+        if (!ses || !ses.setProxy) return;
+        if (enabled) {
+            const port = acceleration.MIXED_PORT || 17890;
+            await ses.setProxy({
+                proxyRules: `http=127.0.0.1:${port};https=127.0.0.1:${port}`,
+                proxyBypassRules: 'localhost,127.0.0.1,<local>,*.weixin.qq.com,*.qq.com,*.feishu.cn,*.larksuite.com'
+            });
+        } else {
+            await ses.setProxy({ mode: 'direct' });
+        }
+    } catch (e) {
+        console.warn('[Acceleration] setProxy failed:', e.message);
+    }
+}
+
+ipcMain.handle('acceleration-status', async () => {
+    try { return { success: true, ...(await acceleration.getDashboardData()) }; }
+    catch (e) { return { success: false, error: e.message || String(e) }; }
+});
+
+ipcMain.handle('acceleration-get-connections', async () => {
+    try { return { success: true, ...(await acceleration.getConnections()) }; }
+    catch (e) { return { success: false, error: e.message || String(e) }; }
+});
+
+ipcMain.handle('acceleration-close-connection', async (event, id) => {
+    try { return await acceleration.closeConnection(id); }
+    catch (e) { return { success: false, error: e.message || String(e) }; }
+});
+
+ipcMain.handle('acceleration-set-enabled', async (event, enabled, profileId) => {
+    try {
+        const status = await acceleration.setEnabled(!!enabled, profileId || null);
+        await applyElectronSessionProxy(!!status.enabled);
+        return { success: true, ...status };
+    } catch (e) {
+        return { success: false, error: e.message || String(e) };
+    }
+});
+
+ipcMain.handle('acceleration-ensure-core', async () => {
+    try {
+        const result = await acceleration.ensureCore((p) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('acceleration-core-progress', p);
+            }
+        });
+        return result;
+    } catch (e) {
+        return { success: false, error: e.message || String(e) };
+    }
+});
+
+ipcMain.handle('acceleration-add-url', async (event, url, name) => {
+    try {
+        const profile = await acceleration.addProfileFromUrl(url, name);
+        return { success: true, profile, ...(await acceleration.getDashboardData(profile.id)) };
+    } catch (e) {
+        return { success: false, error: e.message || String(e) };
+    }
+});
+
+ipcMain.handle('acceleration-add-file', async (event, filePath, name) => {
+    try {
+        const profile = acceleration.addProfileFromFile(filePath, name);
+        return { success: true, profile, ...(await acceleration.getDashboardData(profile.id)) };
+    } catch (e) {
+        return { success: false, error: e.message || String(e) };
+    }
+});
+
+ipcMain.handle('acceleration-add-content', async (event, content, name) => {
+    try {
+        const profile = acceleration.addProfileFromContent(content, name, { source: 'qr' });
+        return { success: true, profile, ...(await acceleration.getDashboardData(profile.id)) };
+    } catch (e) {
+        return { success: false, error: e.message || String(e) };
+    }
+});
+
+ipcMain.handle('acceleration-pick-file', async () => {
+    try {
+        const result = await dialog.showOpenDialog(mainWindow || undefined, {
+            title: '选择加速配置文件',
+            filters: [
+                { name: 'Clash / Mihomo', extensions: ['yaml', 'yml', 'txt', 'conf'] },
+                { name: 'All', extensions: ['*'] }
+            ],
+            properties: ['openFile']
+        });
+        if (result.canceled || !result.filePaths || !result.filePaths[0]) {
+            return { success: false, canceled: true };
+        }
+        const profile = acceleration.addProfileFromFile(result.filePaths[0]);
+        return { success: true, profile, ...(await acceleration.getDashboardData(profile.id)) };
+    } catch (e) {
+        return { success: false, error: e.message || String(e) };
+    }
+});
+
+ipcMain.handle('acceleration-remove-profile', async (event, id) => {
+    try {
+        acceleration.removeProfile(id);
+        return { success: true, ...(await acceleration.getDashboardData()) };
+    } catch (e) {
+        return { success: false, error: e.message || String(e) };
+    }
+});
+
+ipcMain.handle('acceleration-rename-profile', async (event, id, name) => {
+    try {
+        const profile = acceleration.renameProfile(id, name);
+        return { success: true, profile, ...(await acceleration.getDashboardData()) };
+    } catch (e) {
+        return { success: false, error: e.message || String(e) };
+    }
+});
+
+ipcMain.handle('acceleration-update-profile', async (event, id) => {
+    try {
+        const profile = await acceleration.updateProfileFromUrl(id);
+        return { success: true, profile, ...(await acceleration.getDashboardData(id)) };
+    } catch (e) {
+        return { success: false, error: e.message || String(e) };
+    }
+});
+
+ipcMain.handle('acceleration-select-proxy', async (event, payload) => {
+    try {
+        const name = typeof payload === 'string' ? payload : (payload && payload.name);
+        const group = typeof payload === 'object' && payload ? payload.group : 'GLOBAL';
+        if (!name) return { success: false, error: '未指定节点' };
+        await acceleration.selectProxy(group || 'GLOBAL', name);
+        return { success: true, ...(await acceleration.getDashboardData()) };
+    } catch (e) {
+        return { success: false, error: e.message || String(e) };
+    }
+});
+
+ipcMain.handle('acceleration-delay-test', async (event, names) => {
+    try {
+        const results = await acceleration.delayTest(names);
+        return { success: true, results, ...(await acceleration.getDashboardData()) };
+    } catch (e) {
+        return { success: false, error: e.message || String(e) };
+    }
+});
+
+ipcMain.handle('acceleration-set-options', async (event, options) => {
+    try {
+        const status = await acceleration.setOptions(options || {});
+        await applyElectronSessionProxy(!!status.enabled);
+        return { success: true, ...(await acceleration.getDashboardData()) };
+    } catch (e) {
+        return { success: false, error: e.message || String(e) };
+    }
+});
+
+ipcMain.handle('acceleration-set-active-profile', async (event, id) => {
+    try {
+        acceleration.setActiveProfileId(id);
+        const st = acceleration.getStatus();
+        if (st.enabled) {
+            await acceleration.setEnabled(true, id);
+            await applyElectronSessionProxy(true);
+        }
+        return { success: true, ...(await acceleration.getDashboardData(id)) };
+    } catch (e) {
+        return { success: false, error: e.message || String(e) };
+    }
+});
+
 // 读取本地真实大模型调用统计 (使用纯原生 Node.js 实现，彻底剔除外部 Python 脚本依赖，实现 100% 开箱即用)
 ipcMain.handle('stats-get', async () => {
     try {
@@ -5268,6 +5448,19 @@ ipcMain.handle('update-openclaw-package', async (event, { targetVersion }) => {
 
 // 初始化应用
 app.whenReady().then(async () => {
+    // 初始化加速通道目录与状态
+    try {
+        acceleration.init(app);
+        const st = acceleration.getStatus();
+        if (st.enabled && st.activeProfileId) {
+            acceleration.setEnabled(true, st.activeProfileId)
+                .then((s) => applyElectronSessionProxy(!!s.enabled))
+                .catch((e) => console.warn('[Acceleration] restore failed:', e.message));
+        }
+    } catch (e) {
+        console.warn('[Acceleration] init failed:', e.message);
+    }
+
     // 家目录矫正：优先真实用户目录；不可写时改走 AppData\NexoraAgent，禁止落到裸 Temp
     try {
         // 保留改写前的真实用户目录，供鉴权双目录同步 / 排障

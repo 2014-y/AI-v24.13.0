@@ -1,3 +1,24 @@
+
+function escapeHtml(unsafe) {
+    if (typeof unsafe !== 'string') return String(unsafe);
+    return unsafe
+         .replace(/&/g, '&amp;')
+         .replace(/</g, '&lt;')
+         .replace(/>/g, '&gt;')
+         .replace(/"/g, '&quot;')
+         .replace(/'/g, '&#039;');
+}
+
+function renderFlag(flag) {
+    if (!flag) return '🌐';
+    const cleanFlag = String(flag).trim().toLowerCase();
+    if (cleanFlag.length === 2 && /^[a-z]+$/.test(cleanFlag)) {
+        return `<img src="https://cdn.jsdelivr.net/gh/lipis/flag-icons/flags/4x3/${cleanFlag}.svg" class="acc-flag-icon" alt="${cleanFlag}" onerror="this.outerHTML='🌐'">`;
+    }
+    if (cleanFlag === 'globe') return '🌐';
+    return flag;
+}
+
 // renderer.js - 渲染进程交互逻辑
 window.addEventListener('error', (event) => {
     const logEl = document.getElementById('log-terminal') || document.querySelector('.log-terminal');
@@ -341,7 +362,7 @@ window.confirm = function (message, title = '操作确认') {
 };
 
 /** 插件凭证等多字段表单弹窗，fields: [{ key, label, placeholder, type? }] */
-window.promptFields = function (title, fields) {
+window.promptFields = function (title, fields, desc, okText) {
     return new Promise(resolve => {
         const overlay = document.createElement('div');
         overlay.style.cssText = `
@@ -362,13 +383,17 @@ window.promptFields = function (title, fields) {
             <input id="pf-input-${i}" type="${f.type || 'text'}" placeholder="${f.placeholder || ''}" value="${f.value || ''}"
               style="width:100%; box-sizing:border-box; padding:8px 10px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-input); color:var(--text-primary); font-size:13px;" />
         `).join('');
+        
+        const description = desc || '填写后将写入本地配置并尝试加载插件。凭证仅保存在本机。';
+        const okLabel = okText || '保存并启用';
+
         modal.innerHTML = `
             <h3 style="margin:0 0 8px; font-size:16px; color: var(--accent-color);">${title}</h3>
-            <p style="margin:0 0 8px; font-size:12px; color: var(--text-secondary); line-height:1.5;">填写后将写入本地配置并尝试加载插件。凭证仅保存在本机。</p>
+            <p style="margin:0 0 8px; font-size:12px; color: var(--text-secondary); line-height:1.5;">${description}</p>
             ${inputsHtml}
             <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:20px;">
                 <button id="pf-cancel" style="background:var(--bg-input); border:1px solid var(--border-color); color:var(--text-secondary); padding:8px 20px; border-radius:8px; cursor:pointer;">取消</button>
-                <button id="pf-ok" style="background:linear-gradient(135deg, var(--accent-color), rgba(var(--accent-rgb),0.7)); border:none; color:#fff; padding:8px 24px; border-radius:8px; font-weight:600; cursor:pointer;">保存并启用</button>
+                <button id="pf-ok" style="background:linear-gradient(135deg, var(--accent-color), rgba(var(--accent-rgb),0.7)); border:none; color:#fff; padding:8px 24px; border-radius:8px; font-weight:600; cursor:pointer;">${okLabel}</button>
             </div>
         `;
         overlay.appendChild(modal);
@@ -1227,6 +1252,7 @@ async function init() {
 
     // 监听主进程的消息推送
     setupIpcListeners();
+    initAccelerationChannel();
 
     // 初始化更新模块
     setupUpdateModal();
@@ -5453,7 +5479,7 @@ function setupTabSwitching() {
             }
 
             // 离开终端：停光标闪烁，降低后台 GPU 占用
-            if (prevTab === 'terminal-view' && builtinTerminal) {
+            if (prevTab === 'settings-view' && builtinTerminal) {
                 try { builtinTerminal.blur(); } catch (err) {}
                 try { builtinTerminal.options.cursorBlink = false; } catch (err) {}
             }
@@ -5492,7 +5518,7 @@ function setupTabSwitching() {
                     } catch (err) {}
                 }
 
-                if (currentTab === 'terminal-view' && typeof initBuiltinTerminal === 'function') {
+                if (currentTab === 'settings-view' && typeof initBuiltinTerminal === 'function') {
                     initBuiltinTerminal();
                 }
 
@@ -8457,6 +8483,7 @@ async function loadOpenclawControlUi(forceReload = false) {
         }
         __openclawPanelLastUrl = url;
         webview.src = url;
+        
         injectWebviewUpdateInterceptor(webview);
     } catch (err) {
         const fallback = 'http://127.0.0.1:18789/acp/#token=' + encodeURIComponent('openclaw-dev-token-998877');
@@ -8733,6 +8760,982 @@ function setupUpdateModal() {
     });
 }
 
+let accelerationState = null;
+let accelerationBusy = false;
+let accelerationUi = {
+    panel: 'profiles',
+    importMode: 'url',
+    search: '',
+    protocol: '',
+    sort: 'latency',
+    viewMode: 'nodes',
+    countryFilter: 'all'
+};
+let expandedGroups = new Set();
+let connPollInterval = null;
+let connSearchText = '';
+
+function setAccelerationBusy(busy, message) {
+    accelerationBusy = !!busy;
+    const pill = document.getElementById('acc-status-pill');
+    if (pill && message) pill.textContent = message;
+}
+
+function setAccelerationPanel(panel) {
+    accelerationUi.panel = panel || 'profiles';
+    document.querySelectorAll('.acc-subtab[data-acc-panel]').forEach((btn) => {
+        btn.classList.toggle('active', btn.getAttribute('data-acc-panel') === accelerationUi.panel);
+    });
+    document.querySelectorAll('.acc-panel').forEach((el) => {
+        const match = el.id === `acc-panel-${accelerationUi.panel}`;
+        el.classList.toggle('active', match);
+        el.hidden = !match;
+    });
+
+    if (accelerationUi.panel === 'connections') {
+        startConnectionPolling();
+    } else {
+        stopConnectionPolling();
+    }
+}
+
+function setAccelerationImportFeedback(text, type) {
+    const el = document.getElementById('acc-import-feedback');
+    if (!el) return;
+    el.textContent = text || '';
+    el.classList.remove('error', 'success');
+    if (type) el.classList.add(type);
+}
+
+function startConnectionPolling() {
+    stopConnectionPolling();
+    refreshConnections();
+    connPollInterval = setInterval(refreshConnections, 1500);
+}
+
+function stopConnectionPolling() {
+    if (connPollInterval) {
+        clearInterval(connPollInterval);
+        connPollInterval = null;
+    }
+}
+
+async function refreshConnections() {
+    if (!window.api || !window.api.getAccelerationConnections) return;
+    try {
+        const data = await window.api.getAccelerationConnections();
+        if (data && data.success) {
+            renderConnections(data);
+        }
+    } catch (e) {
+        console.error('[Connections] refresh failed:', e);
+    }
+}
+
+function formatBytes(b) {
+    if (!b) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const k = 1024;
+    const i = Math.floor(Math.log(b) / Math.log(k));
+    return parseFloat((b / Math.pow(k, i)).toFixed(2)) + ' ' + units[i];
+}
+
+function formatSpeed(b) {
+    return formatBytes(b) + '/s';
+}
+
+function renderConnections(data) {
+    const list = Array.isArray(data.connections) ? data.connections : [];
+    const tbody = document.getElementById('acc-connections-tbody');
+    const countEl = document.getElementById('acc-conn-count');
+    
+    if (!window._lastConnStats) {
+        window._lastConnStats = { time: Date.now(), up: data.uploadTotal || 0, down: data.downloadTotal || 0 };
+    }
+    const now = Date.now();
+    const dt = (now - window._lastConnStats.time) / 1000;
+    let upSpeed = 0;
+    let downSpeed = 0;
+    if (dt > 0.5) {
+        upSpeed = Math.max(0, ((data.uploadTotal || 0) - window._lastConnStats.up) / dt);
+        downSpeed = Math.max(0, ((data.downloadTotal || 0) - window._lastConnStats.down) / dt);
+    }
+    window._lastConnStats = { time: now, up: data.uploadTotal || 0, down: data.downloadTotal || 0 };
+
+    if (countEl) {
+        countEl.textContent = `活跃连接: ${list.length} 个 · 实时上传: ${formatSpeed(upSpeed)} · 实时下载: ${formatSpeed(downSpeed)}`;
+    }
+
+    if (!tbody) return;
+    
+    const query = String(connSearchText || '').trim().toLowerCase();
+    const filtered = list.filter(c => {
+        if (!query) return true;
+
+        return String(meta.host || '').toLowerCase().includes(query) ||
+               String(meta.destinationIP || '').toLowerCase().includes(query) ||
+               String(meta.sourceIP || '').toLowerCase().includes(query) ||
+               String(c.rule || '').toLowerCase().includes(query) ||
+               (Array.isArray(c.chains) && c.chains.join(' > ').toLowerCase().includes(query));
+    });
+
+    if (!filtered.length) {
+        tbody.innerHTML = `<tr><td colspan="8" class="acc-empty" style="text-align: center; padding: 20px; color: var(--text-secondary);">没有匹配筛选条件的活跃连接。</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(c => {
+        const meta = c.metadata || {};
+        const dest = meta.host ? `${meta.host}:${meta.destinationPort}` : `${meta.destinationIP}:${meta.destinationPort}`;
+        const source = `${meta.sourceIP}:${meta.sourcePort}`;
+        const proto = `${String(meta.network || '').toUpperCase()} (${meta.type || 'RAW'})`;
+        const rule = c.rule ? `${c.rule}${c.rulePayload ? ` [${c.rulePayload}]` : ''}` : '--';
+        
+        let chainStr = '--';
+        if (Array.isArray(c.chains) && c.chains.length) {
+            chainStr = c.chains.join(' ➔ ');
+        }
+
+        const durationMs = Date.now() - new Date(c.start).getTime();
+        const durationSec = Math.max(0, Math.floor(durationMs / 1000));
+        let durationStr = `${durationSec}s`;
+        if (durationSec > 60) {
+            const min = Math.floor(durationSec / 60);
+            const sec = durationSec % 60;
+            durationStr = `${min}m${sec}s`;
+        }
+
+        const trafficStr = `↑ ${formatBytes(c.upload)} / ↓ ${formatBytes(c.download)}`;
+
+        return `
+            <tr style="border-bottom: 1px solid rgba(255,255,255,0.03); background: transparent;">
+                <td style="padding: 10px; color: var(--text-secondary); font-family: var(--font-mono);">${escapeHtml(source)}</td>
+                <td style="padding: 10px; font-weight: 500; font-family: var(--font-mono); word-break: break-all; max-width: 250px;">${escapeHtml(dest)}</td>
+                <td style="padding: 10px; color: var(--text-secondary);">${escapeHtml(proto)}</td>
+                <td style="padding: 10px;"><span style="background: rgba(147, 51, 234, 0.15); color: #c084fc; padding: 2px 6px; border-radius: 4px; font-size: 10px;">${escapeHtml(rule)}</span></td>
+                <td style="padding: 10px; color: #a78bfa; font-weight: 500;">${escapeHtml(chainStr)}</td>
+                <td style="padding: 10px; font-family: var(--font-mono); color: var(--text-secondary); white-space: nowrap;">${trafficStr}</td>
+                <td style="padding: 10px; font-family: var(--font-mono); color: var(--text-secondary);">${durationStr}</td>
+                <td style="padding: 10px; text-align: center;">
+                    <button type="button" class="btn-secondary acc-danger-btn" style="padding: 3px 8px; font-size: 10px;" onclick="closeSingleConnection('${c.id}')">断开</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+window.closeSingleConnection = async function(id) {
+    if (!window.api || !window.api.closeAccelerationConnection) return;
+    const res = await window.api.closeAccelerationConnection(id);
+    if (res && res.success) {
+        showToast('已断开网络连接');
+        refreshConnections();
+    } else {
+        showToast('断开连接失败: ' + (res.error || '未知错误'));
+    }
+};
+
+function setAccelerationImportMode(mode) {
+    accelerationUi.importMode = mode || 'url';
+    document.querySelectorAll('.acc-import-item').forEach((btn) => {
+        btn.classList.toggle('active', btn.getAttribute('data-import-mode') === accelerationUi.importMode);
+    });
+    const title = document.getElementById('acc-import-title');
+    const help = document.getElementById('acc-import-help');
+    const urlFields = document.getElementById('acc-url-fields');
+    const qrFields = document.getElementById('acc-qr-fields');
+    const fileFields = document.getElementById('acc-file-fields');
+    if (urlFields) urlFields.hidden = accelerationUi.importMode !== 'url';
+    if (qrFields) qrFields.hidden = accelerationUi.importMode !== 'qr';
+    if (fileFields) fileFields.hidden = accelerationUi.importMode !== 'file';
+    if (accelerationUi.importMode === 'qr') {
+        if (title) title.textContent = '通过二维码添加配置';
+        if (help) help.textContent = '粘贴扫码结果（订阅链接或 YAML）。';
+    } else if (accelerationUi.importMode === 'file') {
+        if (title) title.textContent = '通过文件添加配置';
+        if (help) help.textContent = '选择本地 Clash/Mihomo 配置文件。';
+    } else {
+        if (title) title.textContent = '通过 URL 添加配置';
+        if (help) help.textContent = '填写加速厂商提供的 Clash/Mihomo 订阅地址。';
+    }
+}
+
+function getFilteredAccelerationNodes(data) {
+    const nodes = Array.isArray(data && data.nodes) ? data.nodes.slice() : [];
+    const search = String(accelerationUi.search || '').trim().toLowerCase();
+    const protocol = String(accelerationUi.protocol || '').trim().toLowerCase();
+    let list = nodes.filter((node) => {
+        const name = String(node.name || '').toLowerCase();
+        const type = String(node.type || '').toLowerCase();
+        const flag = String(node.flag || '').toLowerCase();
+        if (protocol && type !== protocol) return false;
+        if (!search) return true;
+        return name.includes(search) || type.includes(search) || flag.includes(search);
+    });
+    if (accelerationUi.countryFilter && accelerationUi.countryFilter !== 'all') {
+        if (accelerationUi.countryFilter === 'other') {
+            const knownCountries = ['hk', 'tw', 'jp', 'sg', 'us', 'kr', 'gb', 'de', 'fr', 'ca', 'au', 'ru', 'tr', 'my', 'th', 'vn', 'ph', 'in', 'ar', 'br', 'nl'];
+            list = list.filter(n => !knownCountries.includes(n.flag));
+        } else {
+            list = list.filter(n => n.flag === accelerationUi.countryFilter);
+        }
+    }
+    if (accelerationUi.sort === 'latency') {
+        list.sort((a, b) => {
+            const la = typeof a.latency === 'number' ? a.latency : Number.MAX_SAFE_INTEGER;
+            const lb = typeof b.latency === 'number' ? b.latency : Number.MAX_SAFE_INTEGER;
+            return la - lb;
+        });
+    } else if (accelerationUi.sort === 'name') {
+        list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN'));
+    }
+    return list;
+}
+
+function sourceLabel(profile) {
+    if (!profile) return '';
+    if (profile.url) return 'URL 订阅';
+    if (profile.source === 'file') return '本地文件';
+    if (profile.source === 'qr') return '二维码导入';
+    return '手动导入';
+}
+
+async function refreshAccelerationChannel() {
+    if (!window.api || !window.api.getAccelerationStatus) return;
+    try {
+        const data = await window.api.getAccelerationStatus();
+        if (data && data.success) {
+            accelerationState = data;
+            renderAccelerationChannel(data);
+        } else if (data && data.error) {
+            showToast('Nexora Clash 状态读取失败: ' + data.error);
+        }
+    } catch (err) {
+        console.warn('[Acceleration] refresh failed:', err);
+    }
+}
+
+function renderAccelerationChannel(data) {
+    const enabled = !!(data && data.enabled);
+    const settingToggle = document.getElementById('setting-acceleration-toggle');
+    const pageToggle = document.getElementById('acc-page-enabled-toggle');
+    const controlsToggle = document.getElementById('acc-controls-enabled-toggle');
+    const systemProxyToggle = document.getElementById('acc-system-proxy-toggle');
+    const tunToggle = document.getElementById('acc-tun-toggle');
+    if (settingToggle) settingToggle.checked = enabled;
+    if (pageToggle) pageToggle.checked = enabled;
+    if (controlsToggle) controlsToggle.checked = enabled;
+    if (systemProxyToggle) systemProxyToggle.checked = !!data.systemProxy;
+    if (tunToggle) tunToggle.checked = !!data.virtualNic;
+
+    const pill = document.getElementById('acc-status-pill');
+    if (pill) {
+        pill.textContent = enabled ? '已启用' : '未启用';
+        pill.classList.toggle('enabled', enabled);
+    }
+    const mixed = document.getElementById('acc-mixed-port');
+    if (mixed) mixed.textContent = data.mixedPort ? `127.0.0.1:${data.mixedPort}` : '--';
+    const controller = document.getElementById('acc-controller');
+    if (controller) controller.textContent = data.controller || '--';
+    const current = document.getElementById('acc-current-proxy');
+    if (current) {
+        if (data.selectedProxy) {
+            const matchedNode = (data.nodes || []).find(n => n.name === data.selectedProxy);
+            const flagHtml = matchedNode ? renderFlag(matchedNode.flag) : '🌐';
+            current.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px;">${flagHtml} <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(data.selectedProxy)}</span></span>`;
+        } else {
+            current.textContent = '--';
+        }
+    }
+
+    document.querySelectorAll('input[name="acc-mode"]').forEach((input) => {
+        input.checked = input.value === (data.mode || 'rule');
+    });
+
+    const select = document.getElementById('acc-profile-select');
+    const profiles = Array.isArray(data.profiles) ? data.profiles : [];
+    if (select) {
+        select.innerHTML = profiles.length
+            ? profiles.map((p) => `<option value="${escapeHtml(p.id)}"${p.id === data.activeProfileId ? ' selected' : ''}>${escapeHtml(p.name || p.id)}</option>`).join('')
+            : '<option value="">暂无配置</option>';
+        select.disabled = profiles.length === 0;
+    }
+
+    const active = profiles.find((p) => p.id === data.activeProfileId);
+    const summary = document.getElementById('acc-profile-summary');
+    if (summary) {
+        if (!active) summary.textContent = '请先添加加速厂商配置';
+        else summary.textContent = `当前：${active.name || active.id} · ${sourceLabel(active)}`;
+    }
+    const proxyLabel = document.getElementById('acc-proxy-active-label');
+    if (proxyLabel) {
+        if (!active) proxyLabel.textContent = '请先到「配置」页添加加速厂商';
+        else if (data.selectedProxy) {
+            const matchedNode = (data.nodes || []).find(n => n.name === data.selectedProxy);
+            const flagHtml = matchedNode ? renderFlag(matchedNode.flag) : '🌐';
+            proxyLabel.innerHTML = `当前节点：<span style="display: inline-flex; align-items: center; gap: 4px; vertical-align: middle;">${flagHtml} <span>${escapeHtml(data.selectedProxy)}</span></span>`;
+        }
+        else proxyLabel.textContent = `配置「${active.name || active.id}」· 点击节点或策略组即可选用`;
+    }
+
+    const renameBtn = document.getElementById('acc-profile-rename-btn');
+    if (renameBtn) renameBtn.disabled = !active;
+    const updateBtn = document.getElementById('acc-profile-update-btn');
+    if (updateBtn) updateBtn.disabled = !(active && active.url);
+    const deleteBtn = document.getElementById('acc-profile-delete-btn');
+    if (deleteBtn) deleteBtn.disabled = !active;
+
+    const list = document.getElementById('acc-profile-list');
+    if (list) {
+        if (!profiles.length) {
+            list.innerHTML = '<div class="acc-empty">暂无配置。请用上方二维码、文件或 URL 添加。</div>';
+        } else {
+            list.innerHTML = profiles.map((p) => `
+                <div class="acc-profile-item ${p.id === data.activeProfileId ? 'active' : ''}" data-profile-id="${escapeHtml(p.id)}">
+                    <div>
+                        <strong>${escapeHtml(p.name || p.id)}</strong>
+                        <small>${escapeHtml(sourceLabel(p))}${p.url ? ' · ' + escapeHtml(p.url) : ''}</small>
+                    </div>
+                    <span class="acc-muted">${p.id === data.activeProfileId ? '使用中' : '点击选用'}</span>
+                </div>
+            `).join('');
+        }
+    }
+
+    const protocolFilter = document.getElementById('acc-node-protocol-filter');
+    if (protocolFilter) {
+        const types = Array.from(new Set((data.nodes || []).map((n) => String(n.type || '').toLowerCase()).filter(Boolean))).sort();
+        const prev = accelerationUi.protocol;
+        protocolFilter.innerHTML = '<option value="">全部协议</option>' + types.map((t) => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+        protocolFilter.value = types.includes(prev) ? prev : '';
+        accelerationUi.protocol = protocolFilter.value;
+    }
+
+    const filtered = getFilteredAccelerationNodes(data);
+    const count = document.getElementById('acc-node-count');
+    if (count) count.textContent = `${filtered.length}/${(data.nodes || []).length} 个节点`;
+
+    const grid = document.getElementById('acc-node-grid');
+    if (grid) {
+        if (!(data.nodes || []).length) {
+            grid.innerHTML = '<div class="acc-empty">暂无节点。请先到「配置」页添加加速厂商。</div>';
+        } else if (!filtered.length) {
+            grid.innerHTML = '<div class="acc-empty">没有匹配当前筛选条件的节点。</div>';
+        } else {
+            grid.innerHTML = filtered.map((node) => {
+                let latencyClass = 'latency-none';
+                let latencyText = '-- ms';
+                if (node.latency) {
+                    latencyText = `${node.latency} ms`;
+                    if (node.latency < 100) latencyClass = 'latency-good';
+                    else if (node.latency < 300) latencyClass = 'latency-medium';
+                    else latencyClass = 'latency-bad';
+                }
+                return `
+                    <div class="acc-node-card ${node.selected ? 'selected' : ''}" data-proxy-name="${escapeHtml(node.name)}">
+                        ${node.selected ? '<span class="acc-node-check">✓</span>' : ''}
+                        <div class="acc-node-name">${renderFlag(node.flag)} ${escapeHtml(node.name)}</div>
+                        <div class="acc-node-type">${escapeHtml(node.type || 'proxy')}</div>
+                        <div class="acc-node-delay ${latencyClass}">${latencyText}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+    }
+
+    // 渲染策略组分流列表
+    const groupsContainer = document.getElementById('acc-groups-container');
+    if (groupsContainer) {
+        const groups = Array.isArray(data.groups) ? data.groups : [];
+        if (!groups.length) {
+            groupsContainer.innerHTML = '<div class="acc-empty">暂无策略组。请先到「配置」页添加配置并启用通道。</div>';
+        } else {
+            groupsContainer.innerHTML = groups.map((g) => {
+                const isExpanded = expandedGroups.has(g.name);
+                let flag = '⚙️';
+                const matchedNode = (data.nodes || []).find(n => n.name === g.now);
+                if (matchedNode) flag = matchedNode.flag || '🌐';
+                else if (g.now === 'DIRECT') flag = '🎯';
+                else if (g.now === 'REJECT') flag = '🚫';
+
+                const itemsHtml = isExpanded ? `
+                    <div class="acc-group-nodes-list" style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.03);">
+                        ${(() => {
+                            let groupNodes = (g.all || []).map(nodeName => {
+                                return (data.nodes || []).find(n => n.name === nodeName) || { name: nodeName };
+                            });
+
+                            const search = String(accelerationUi.search || '').trim().toLowerCase();
+                            const protocol = String(accelerationUi.protocol || '').trim().toLowerCase();
+                            
+                            groupNodes = groupNodes.filter(node => {
+                                const name = String(node.name || '').toLowerCase();
+                                const type = String(node.type || '').toLowerCase();
+                                const flag = String(node.flag || '').toLowerCase();
+                                if (protocol && type && type !== protocol) return false;
+                                if (!search) return true;
+                                return name.includes(search) || type.includes(search) || flag.includes(search);
+                            });
+
+                            if (accelerationUi.sort === 'latency') {
+                                groupNodes.sort((a, b) => {
+                                    const la = typeof a.latency === 'number' ? a.latency : Number.MAX_SAFE_INTEGER;
+                                    const lb = typeof b.latency === 'number' ? b.latency : Number.MAX_SAFE_INTEGER;
+                                    return la - lb;
+                                });
+                            } else if (accelerationUi.sort === 'name') {
+                                groupNodes.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN'));
+                            }
+
+                            return groupNodes.map(nodeObj => {
+                                const nodeName = nodeObj.name;
+                                const isSelected = g.now === nodeName;
+                                const nodeFlag = nodeObj.flag || (nodeName === 'DIRECT' ? '🎯' : (nodeName === 'REJECT' ? '🚫' : '⚙️'));
+
+                                let nodeDelayStr = '';
+                                let latencyClass = 'latency-none';
+                                if (nodeObj.latency) {
+                                    nodeDelayStr = ` (${nodeObj.latency}ms)`;
+                                    if (nodeObj.latency < 100) latencyClass = 'latency-good';
+                                    else if (nodeObj.latency < 300) latencyClass = 'latency-medium';
+                                    else latencyClass = 'latency-bad';
+                                }
+
+                                return `
+                                    <button type="button" class="acc-group-node-chip ${isSelected ? 'active' : ''}" 
+                                        style="background: ${isSelected ? 'rgba(147, 51, 234, 0.2)' : 'rgba(255,255,255,0.02)'}; 
+                                               border: 1px solid ${isSelected ? 'var(--accent-color)' : 'rgba(255,255,255,0.05)'}; 
+                                               color: ${isSelected ? '#e9d5ff' : 'var(--text-primary)'}; 
+                                               padding: 4px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all 0.15s ease;"
+                                        onclick="selectGroupProxy('${escapeHtml(g.name)}', '${escapeHtml(nodeName)}')">
+                                        <span style="display: inline-flex; align-items: center;">${renderFlag(nodeFlag)}</span>
+                                        <span>${escapeHtml(nodeName)}</span>
+                                        <span class="${latencyClass}" style="font-size: 9px; font-family: var(--font-mono);">${nodeDelayStr}</span>
+                                    </button>
+                                `;
+                            }).join('');
+                        })()}
+                    </div>
+                ` : '';
+
+                return `
+                    <div class="acc-group-card" style="background: rgba(255,255,255,0.015); border: 1px solid rgba(255,255,255,0.04); border-radius: 12px; padding: 14px; margin-bottom: 10px; transition: border-color 0.2s;">
+                        <div class="acc-group-card-header" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="toggleGroupExpand('${escapeHtml(g.name)}')">
+                           <div>
+                               <div style="font-weight: 600; font-size: 13px; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+                                   <span>🧩</span>
+                                   <span>${escapeHtml(g.name)}</span>
+                                   <span style="font-size: 10px; color: var(--text-secondary); background: rgba(255,255,255,0.05); padding: 1px 4px; border-radius: 4px; text-transform: uppercase;">${escapeHtml(g.type)}</span>
+                               </div>
+                               <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px; display: flex; align-items: center; gap: 4px;">
+                                   <span>当前：</span>
+                                   <strong style="color: #c084fc; display: inline-flex; align-items: center; gap: 4px;">${renderFlag(flag)} ${escapeHtml(g.now)}</strong>
+                               </div>
+                           </div>
+                           <div style="color: var(--text-secondary); font-size: 11px; display: flex; align-items: center; gap: 4px;">
+                               <span>${(g.all || []).length} 个成员</span>
+                               <span style="transform: rotate(${isExpanded ? '90deg' : '0deg'}); transition: transform 0.2s; font-size: 12px; display: inline-block;">➔</span>
+                           </div>
+                        </div>
+                        ${itemsHtml}
+                    </div>
+                `;
+            }).join('');
+        }
+    }
+}
+
+window.toggleGroupExpand = function(groupName) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+async function setAccelerationEnabledFromUi(enabled) {
+    if (accelerationBusy || !window.api || !window.api.setAccelerationEnabled) return;
+    try {
+        setAccelerationBusy(true, enabled ? '启动中...' : '关闭中...');
+        const res = await window.api.setAccelerationEnabled(!!enabled, accelerationState && accelerationState.activeProfileId);
+        if (!res || !res.success) {
+            showToast((enabled ? '开启' : '关闭') + ' Nexora Clash 失败: ' + ((res && res.error) || '未知错误'));
+            await refreshAccelerationChannel();
+            return;
+        }
+        accelerationState = res;
+        renderAccelerationChannel(res);
+        showToast(enabled ? 'Nexora Clash 已开启' : 'Nexora Clash 已关闭');
+    } catch (err) {
+        showToast('Nexora Clash 操作失败: ' + err.message);
+        await refreshAccelerationChannel();
+    } finally {
+        setAccelerationBusy(false);
+    }
+}
+
+async function handleAccelerationResult(promise, successText) {
+    try {
+        setAccelerationBusy(true, '处理中...');
+        const res = await promise;
+        if (!res || !res.success) {
+            if (!(res && res.canceled)) {
+                let msg = (res && res.error) || '未知错误';
+                if (msg.includes('429')) {
+                    msg = '接口请求过于频繁 (HTTP 429)，请稍后再试';
+                }
+                setAccelerationImportFeedback(msg, 'error');
+                showToast('Nexora Clash 操作失败: ' + msg);
+            }
+            return null;
+        }
+        accelerationState = res;
+        renderAccelerationChannel(res);
+        if (successText) {
+            setAccelerationImportFeedback(successText, 'success');
+            showToast(successText);
+        }
+        return res;
+    } catch (err) {
+        setAccelerationImportFeedback(err.message || String(err), 'error');
+        showToast('Nexora Clash 操作失败: ' + err.message);
+        return null;
+    } finally {
+        setAccelerationBusy(false);
+        if (typeof accelerationState !== 'undefined' && accelerationState) {
+            renderAccelerationChannel(accelerationState);
+        }
+    }
+}
+
+let autoSelectTimer = null;
+
+async function runBackgroundAutoSelect() {
+    try {
+        const res = await window.api.delayTestAcceleration();
+        if (res && res.success && Array.isArray(res.nodes)) {
+            accelerationState = res;
+            renderAccelerationChannel(res);
+
+            const validNodes = res.nodes.filter(n => typeof n.latency === 'number' && n.latency > 0);
+            if (validNodes.length) {
+                validNodes.sort((a, b) => a.latency - b.latency);
+                const bestNode = validNodes[0];
+
+                if (accelerationState.selectedProxy !== bestNode.name) {
+                    const selectRes = await window.api.selectAccelerationProxy({ name: bestNode.name, group: 'GLOBAL' });
+                    if (selectRes && selectRes.success) {
+                        accelerationState = selectRes;
+                        renderAccelerationChannel(selectRes);
+                        showToast(`已自动切换至最低延迟节点 [${bestNode.latency}ms]: ${bestNode.name}`);
+                    }
+                }
+            }
+        }
+    } catch (err) {
+        console.error("Auto select background run failed:", err);
+    }
+}
+
+function setupAutoSelectTimer() {
+    if (autoSelectTimer) {
+        clearInterval(autoSelectTimer);
+        autoSelectTimer = null;
+    }
+
+    const enabled = localStorage.getItem('acc_auto_select_enabled') === 'true';
+    const intervalSec = parseInt(localStorage.getItem('acc_auto_select_interval') || '60', 10);
+
+    const enableBtn = document.getElementById('acc-auto-select-enable-btn');
+    const intervalContainer = document.getElementById('acc-auto-select-interval-container');
+    const intervalInput = document.getElementById('acc-auto-select-interval');
+
+    if (enableBtn) enableBtn.classList.toggle('active', enabled);
+    if (intervalInput) intervalInput.value = intervalSec;
+    if (intervalContainer) intervalContainer.style.display = enabled ? 'flex' : 'none';
+
+    if (enabled && intervalSec > 0) {
+        autoSelectTimer = setInterval(async () => {
+            if (accelerationBusy) return;
+            await runBackgroundAutoSelect();
+        }, intervalSec * 1000);
+    }
+}
+
+function initAccelerationChannel() {
+    setAccelerationPanel('profiles');
+    setAccelerationImportMode('url');
+
+    document.querySelectorAll('.acc-subtab[data-acc-panel]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            setAccelerationPanel(btn.getAttribute('data-acc-panel'));
+        });
+    });
+
+    const settingToggle = document.getElementById('setting-acceleration-toggle');
+    const pageToggle = document.getElementById('acc-page-enabled-toggle');
+    const controlsToggle = document.getElementById('acc-controls-enabled-toggle');
+    const syncEnable = (e) => setAccelerationEnabledFromUi(e.target.checked);
+    if (settingToggle) settingToggle.addEventListener('change', syncEnable);
+    if (pageToggle) pageToggle.addEventListener('change', syncEnable);
+    if (controlsToggle) controlsToggle.addEventListener('change', syncEnable);
+
+    document.querySelectorAll('.acc-import-item').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            setAccelerationImportMode(btn.getAttribute('data-import-mode') || 'url');
+            setAccelerationImportFeedback('');
+        });
+    });
+
+    const urlSubmit = document.getElementById('acc-import-url-submit');
+    if (urlSubmit) {
+        urlSubmit.addEventListener('click', async () => {
+            const url = (document.getElementById('acc-import-url') || {}).value || '';
+            const name = (document.getElementById('acc-import-name') || {}).value || '';
+            if (!String(url).trim()) {
+                setAccelerationImportFeedback('请先填写订阅 URL', 'error');
+                return;
+            }
+            const res = await handleAccelerationResult(window.api.addAccelerationUrl(String(url).trim(), String(name).trim()), '已添加加速配置');
+            if (res && res.success) {
+                const urlInput = document.getElementById('acc-import-url');
+                if (urlInput) urlInput.value = '';
+                setAccelerationPanel('proxies');
+            }
+        });
+    }
+
+    const fileSubmit = document.getElementById('acc-import-file-submit');
+    if (fileSubmit) {
+        fileSubmit.addEventListener('click', async () => {
+            const res = await handleAccelerationResult(window.api.pickAccelerationFile(), '已导入配置文件');
+            if (res && res.success) setAccelerationPanel('proxies');
+        });
+    }
+
+    const qrSubmit = document.getElementById('acc-import-qr-submit');
+    if (qrSubmit) {
+        qrSubmit.addEventListener('click', async () => {
+            const content = String((document.getElementById('acc-qr-content') || {}).value || '').trim();
+            const name = String((document.getElementById('acc-qr-name') || {}).value || '').trim() || '二维码配置';
+            if (!content) {
+                setAccelerationImportFeedback('请粘贴二维码解析结果或订阅内容', 'error');
+                return;
+            }
+            let res = null;
+            if (/^https?:\/\//i.test(content)) {
+                res = await handleAccelerationResult(window.api.addAccelerationUrl(content, name), '已添加二维码订阅');
+            } else {
+                res = await handleAccelerationResult(window.api.addAccelerationContent(content, name), '已添加二维码配置');
+            }
+            if (res && res.success) {
+                const box = document.getElementById('acc-qr-content');
+                if (box) box.value = '';
+                setAccelerationPanel('proxies');
+            }
+        });
+    }
+
+    const qrPasteBtn = document.getElementById('acc-qr-image-btn');
+    if (qrPasteBtn) {
+        qrPasteBtn.addEventListener('click', async () => {
+            try {
+                const text = await navigator.clipboard.readText();
+                const box = document.getElementById('acc-qr-content');
+                if (box) box.value = text || '';
+                setAccelerationImportFeedback(text ? '已从剪贴板粘贴内容，点击“添加配置”即可' : '剪贴板为空', text ? 'success' : 'error');
+            } catch (err) {
+                setAccelerationImportFeedback('无法读取剪贴板，请手动粘贴', 'error');
+            }
+        });
+    }
+
+    const qrUploadBtn = document.getElementById('acc-qr-upload-btn');
+    const qrFileInput = document.getElementById('acc-qr-file-input');
+    if (qrUploadBtn && qrFileInput) {
+        qrUploadBtn.addEventListener('click', () => {
+            qrFileInput.click();
+        });
+        qrFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    
+                    try {
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const code = jsQR(imageData.data, imageData.width, imageData.height);
+                        if (code) {
+                            const box = document.getElementById('acc-qr-content');
+                            if (box) box.value = code.data;
+                            
+                            const nameBox = document.getElementById('acc-qr-name');
+                            if (nameBox && !nameBox.value.trim()) {
+                                try {
+                                    const urlObj = new URL(code.data);
+                                    const remark = urlObj.hash ? decodeURIComponent(urlObj.hash.substring(1)) : '';
+                                    if (remark) nameBox.value = remark;
+                                } catch(ex) {}
+                            }
+                            
+                            setAccelerationImportFeedback('图片二维码识别成功！点击“添加配置”即可导入', 'success');
+                        } else {
+                            setAccelerationImportFeedback('未在图片中检测到有效的二维码，请确保图片清晰且为二维码', 'error');
+                        }
+                    } catch (ex) {
+                        setAccelerationImportFeedback('图片解码失败，可能是跨域或格式不支持', 'error');
+                    }
+                    qrFileInput.value = '';
+                };
+                img.onerror = () => {
+                    setAccelerationImportFeedback('图片加载失败，请确保文件格式正确', 'error');
+                    qrFileInput.value = '';
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    const refreshBtn = document.getElementById('acc-refresh-btn');
+    if (refreshBtn) refreshBtn.addEventListener('click', refreshAccelerationChannel);
+
+    const profileSelect = document.getElementById('acc-profile-select');
+    if (profileSelect) {
+        profileSelect.addEventListener('change', async (e) => {
+            if (!e.target.value) return;
+            await handleAccelerationResult(window.api.setAccelerationActiveProfile(e.target.value), '已切换配置');
+        });
+    }
+
+    const profileList = document.getElementById('acc-profile-list');
+    if (profileList) {
+        profileList.addEventListener('click', async (e) => {
+            const item = e.target.closest('.acc-profile-item');
+            if (!item) return;
+            const id = item.getAttribute('data-profile-id');
+            if (!id) return;
+            await handleAccelerationResult(window.api.setAccelerationActiveProfile(id), '已切换配置');
+        });
+    }
+
+    const renameBtn = document.getElementById('acc-profile-rename-btn');
+    if (renameBtn) {
+        renameBtn.addEventListener('click', async () => {
+            const id = accelerationState && accelerationState.activeProfileId;
+            if (!id) return;
+            const activeProfile = (accelerationState.profiles || []).find((p) => p.id === id);
+            const currentName = activeProfile ? (activeProfile.name || activeProfile.id) : '';
+            const fields = [
+                { key: 'name', label: '配置备注名称', value: currentName, placeholder: '请输入备注名称' }
+            ];
+            const values = await window.promptFields('修改配置备注', fields, '修改此配置在本地显示的备注名称。', '确认修改');
+            if (!values) return;
+            const name = String(values.name || '').trim();
+            if (!name) {
+                alert('备注名称不能为空');
+                return;
+            }
+            await handleAccelerationResult(window.api.renameAccelerationProfile(id, name), '备注已更新');
+        });
+    }
+
+    const updateBtn = document.getElementById('acc-profile-update-btn');
+    if (updateBtn) {
+        updateBtn.addEventListener('click', async () => {
+            const id = accelerationState && accelerationState.activeProfileId;
+            if (!id) return;
+            await handleAccelerationResult(window.api.updateAccelerationProfile(id), '订阅已更新');
+        });
+    }
+
+    const deleteBtn = document.getElementById('acc-profile-delete-btn');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', async () => {
+            const id = accelerationState && accelerationState.activeProfileId;
+            if (!id) return;
+            const ok = await confirm('确定删除当前加速配置吗？');
+            if (!ok) return;
+            await handleAccelerationResult(window.api.removeAccelerationProfile(id), '已删除配置');
+        });
+    }
+
+    const searchInput = document.getElementById('acc-node-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            accelerationUi.search = e.target.value || '';
+            if (accelerationState) renderAccelerationChannel(accelerationState);
+        });
+    }
+    const protocolFilter = document.getElementById('acc-node-protocol-filter');
+    if (protocolFilter) {
+        protocolFilter.addEventListener('change', (e) => {
+            accelerationUi.protocol = e.target.value || '';
+            if (accelerationState) renderAccelerationChannel(accelerationState);
+        });
+    }
+    const sortSelect = document.getElementById('acc-node-sort');
+    if (sortSelect) {
+        sortSelect.addEventListener('change', (e) => {
+            accelerationUi.sort = e.target.value || 'default';
+            if (accelerationState) renderAccelerationChannel(accelerationState);
+        });
+    }
+
+    const grid = document.getElementById('acc-node-grid');
+    if (grid) {
+        grid.addEventListener('click', async (e) => {
+            const card = e.target.closest('.acc-node-card');
+            if (!card) return;
+            const name = card.getAttribute('data-proxy-name');
+            if (!name) return;
+            await handleAccelerationResult(window.api.selectAccelerationProxy({ name, group: 'GLOBAL' }), '已切换代理节点');
+        });
+    }
+
+    const delayBtn = document.getElementById('acc-delay-btn');
+    if (delayBtn) {
+        delayBtn.addEventListener('click', async () => {
+            await handleAccelerationResult(window.api.delayTestAcceleration(), '延迟测试完成');
+        });
+    }
+
+    const autoSelectEnableBtn = document.getElementById('acc-auto-select-enable-btn');
+    if (autoSelectEnableBtn) {
+        autoSelectEnableBtn.addEventListener('click', () => {
+            const enabled = localStorage.getItem('acc_auto_select_enabled') === 'true';
+            const nextState = !enabled;
+            localStorage.setItem('acc_auto_select_enabled', nextState ? 'true' : 'false');
+            setupAutoSelectTimer();
+            if (nextState) {
+                runBackgroundAutoSelect();
+            }
+        });
+    }
+
+    const autoSelectInterval = document.getElementById('acc-auto-select-interval');
+    if (autoSelectInterval) {
+        autoSelectInterval.addEventListener('change', (e) => {
+            let val = parseInt(e.target.value, 10);
+            if (isNaN(val) || val < 5) val = 5;
+            e.target.value = val;
+            localStorage.setItem('acc_auto_select_interval', String(val));
+            setupAutoSelectTimer();
+        });
+    }
+
+    setupAutoSelectTimer();
+
+    const countryContainer = document.getElementById('acc-node-country-filters');
+    if (countryContainer) {
+        countryContainer.addEventListener('click', (e) => {
+            const pill = e.target.closest('.acc-country-pill');
+            if (!pill) return;
+            const country = pill.getAttribute('data-country') || 'all';
+            countryContainer.querySelectorAll('.acc-country-pill').forEach(btn => {
+                btn.classList.toggle('active', btn === pill);
+            });
+            accelerationUi.countryFilter = country;
+            if (accelerationState) renderAccelerationChannel(accelerationState);
+        });
+    }
+
+    const systemProxyToggle = document.getElementById('acc-system-proxy-toggle');
+    if (systemProxyToggle) {
+        systemProxyToggle.addEventListener('change', async (e) => {
+            await handleAccelerationResult(window.api.setAccelerationOptions({ systemProxy: e.target.checked }), '系统代理设置已更新');
+        });
+    }
+
+    const tunToggle = document.getElementById('acc-tun-toggle');
+    if (tunToggle) {
+        tunToggle.addEventListener('change', async (e) => {
+            await handleAccelerationResult(window.api.setAccelerationOptions({ virtualNic: e.target.checked }), '虚拟网卡设置已更新');
+        });
+    }
+
+    document.querySelectorAll('input[name="acc-mode"]').forEach((input) => {
+        input.addEventListener('change', async (e) => {
+            if (!e.target.checked) return;
+            await handleAccelerationResult(window.api.setAccelerationOptions({ mode: e.target.value }), '出站模式已更新');
+        });
+    });
+
+    if (window.api && window.api.onAccelerationCoreProgress) {
+        window.api.onAccelerationCoreProgress((p) => {
+            if (!p) return;
+            const label = p.stage === 'download' ? '下载代理内核...' : p.stage === 'extract' ? '解压代理内核...' : '准备代理内核...';
+            setAccelerationBusy(true, label);
+        });
+    }
+
+    // 代理页面：所有节点 vs 策略组 视图切换绑定
+    const tabNodes = document.getElementById('acc-view-tab-nodes');
+    const tabGroups = document.getElementById('acc-view-tab-groups');
+    const nodeToolbar = document.getElementById('acc-node-toolbar');
+    const nodeGrid = document.getElementById('acc-node-grid');
+    const groupsContainer = document.getElementById('acc-groups-container');
+
+    const setViewMode = (mode) => {
+        accelerationUi.viewMode = mode;
+        if (tabNodes) tabNodes.classList.toggle('active', mode === 'nodes');
+        if (tabGroups) tabGroups.classList.toggle('active', mode === 'groups');
+        
+        const countryFilters = document.getElementById('acc-node-country-filters');
+        if (nodeToolbar) nodeToolbar.style.display = '';
+        if (mode === 'nodes') {
+            if (nodeGrid) nodeGrid.style.display = '';
+            if (groupsContainer) groupsContainer.style.display = 'none';
+            if (countryFilters) countryFilters.style.display = 'flex';
+        } else {
+            if (nodeGrid) nodeGrid.style.display = 'none';
+            if (groupsContainer) groupsContainer.style.display = '';
+            if (countryFilters) countryFilters.style.display = 'none';
+        }
+        if (accelerationState) renderAccelerationChannel(accelerationState);
+    };
+
+    if (tabNodes) tabNodes.addEventListener('click', () => setViewMode('nodes'));
+    if (tabGroups) tabGroups.addEventListener('click', () => setViewMode('groups'));
+
+    // 连接管理页面事件绑定
+    const connSearch = document.getElementById('acc-conn-search');
+    if (connSearch) {
+        connSearch.addEventListener('input', (e) => {
+            connSearchText = e.target.value || '';
+            refreshConnections();
+        });
+    }
+
+    const closeAllConnsBtn = document.getElementById('acc-connections-close-all-btn');
+    if (closeAllConnsBtn) {
+        closeAllConnsBtn.addEventListener('click', async () => {
+            const ok = await confirm('确定断开当前所有网络连接吗？这可能会使正在进行的文件下载或API会话暂时中断。');
+            if (!ok) return;
+            if (window.api && window.api.closeAccelerationConnection) {
+                const res = await window.api.closeAccelerationConnection(null);
+                if (res && res.success) {
+                    showToast('已断开所有网络连接');
+                    refreshConnections();
+                } else {
+                    showToast('断开连接失败: ' + (res.error || '未知错误'));
+                }
+            }
+        });
+    }
+
+    refreshAccelerationChannel();
+}
+
 // --- 内置终端逻辑 ---
 let builtinTerminal = null;
 let builtinTerminalFitAddon = null;
@@ -8748,7 +9751,7 @@ function scheduleBuiltinTerminalFit(forceResizePty) {
     terminalFitScheduled = true;
     requestAnimationFrame(() => {
         terminalFitScheduled = false;
-        if (currentTab !== 'terminal-view' || !builtinTerminalFitAddon || !builtinTerminal) return;
+        if (currentTab !== 'settings-view' || !builtinTerminalFitAddon || !builtinTerminal) return;
         const prevCols = builtinTerminal.cols;
         const prevRows = builtinTerminal.rows;
         try { builtinTerminalFitAddon.fit(); } catch (e) {}
@@ -8762,14 +9765,14 @@ function scheduleBuiltinTerminalFit(forceResizePty) {
 }
 
 function initBuiltinTerminal() {
-    const pane = document.getElementById('terminal-view');
+    const pane = document.getElementById('settings-view');
     if (pane) pane.classList.add('terminal-keeplive');
 
     if (isTerminalInitialized && builtinTerminal) {
         // 再次切入：不 fit、不强刷，只恢复光标并延后聚焦
         try { builtinTerminal.options.cursorBlink = true; } catch (e) {}
         setTimeout(() => {
-            if (currentTab === 'terminal-view' && builtinTerminal) {
+            if (currentTab === 'settings-view' && builtinTerminal) {
                 try { builtinTerminal.focus(); } catch (e) {}
                 if (terminalNeedsFit) scheduleBuiltinTerminalFit(false);
             }
@@ -8827,7 +9830,7 @@ function initBuiltinTerminal() {
             
             window.addEventListener('resize', () => {
                 terminalNeedsFit = true;
-                if (currentTab === 'terminal-view') scheduleBuiltinTerminalFit(true);
+                if (currentTab === 'settings-view') scheduleBuiltinTerminalFit(true);
             });
             
             window.api.onBuiltinTerminalData((data) => {
