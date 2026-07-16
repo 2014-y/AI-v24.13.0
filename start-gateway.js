@@ -12,6 +12,8 @@ const {
   detectRestrictedDesktop,
   probeOpenClawHomeWritable
 } = require('./home-resolve');
+const { ensureLatencySafeConfig } = require('./latency-tune');
+const { hardenGatewayBootAgainstPluginNpm } = require('./gateway-boot-harden');
 
 const preferredHome = process.env.HOME || process.env.USERPROFILE || os.homedir();
 const desktopInfo = detectRestrictedDesktop(process.env);
@@ -72,6 +74,31 @@ function checkPrerequisites() {
       console.log(`✓ 已从模板创建配置: ${CONFIG_PATH}`);
       console.log('  请编辑配置文件，填入你的 API Key\n');
     }
+  }
+
+  // 与 Electron 启动路径对齐：修配置 + soft-skip Doctor + 种 npm
+  try {
+    if (fs.existsSync(CONFIG_PATH)) {
+      const raw = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8').replace(/^\uFEFF/, ''));
+      const tuned = ensureLatencySafeConfig(raw);
+      const hard = hardenGatewayBootAgainstPluginNpm({
+        runtimeRoot: __dirname,
+        projectRoot: __dirname,
+        config: tuned.config,
+        templateSources: [
+          path.join(__dirname, 'config', 'openclaw-templates'),
+          path.join(__dirname, 'node_modules', 'openclaw', 'docs', 'reference', 'templates'),
+          path.join(__dirname, 'node_modules', 'openclaw', 'src', 'agents', 'templates')
+        ]
+      });
+      if (tuned.changed || (hard && hard.configChanged)) {
+        fs.writeFileSync(CONFIG_PATH, JSON.stringify(tuned.config, null, 2), 'utf8');
+        console.log('✓ 已应用 latency/插件启动硬化');
+      }
+      if (hard && hard.notes) console.log('✓ gateway harden:', hard.notes.join(', '));
+    }
+  } catch (e) {
+    console.warn('⚠ 启动硬化跳过:', e.message);
   }
   
   console.log('\n========================================');

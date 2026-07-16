@@ -3244,7 +3244,7 @@ function bindProviderEvents() {
                     if (apiType === 'ollama' && data.models) {
                         fetchedModels = data.models.map(m => ({
                             id: m.name || m.model,
-                            contextWindow: 8192
+                            contextWindow: 16384
                         }));
                     } else if (data.data && Array.isArray(data.data)) {
                         fetchedModels = data.data.map(m => ({
