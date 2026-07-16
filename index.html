@@ -992,13 +992,16 @@
               </label>
             </div>
 
-            <!-- 内置终端：直接嵌入系统设置，不再跳转页面 -->
+            <!-- 内置终端：直接嵌入系统设置，展开/折叠 -->
             <div class="settings-terminal-card">
-              <div>
-                <div style="font-size: 13px; font-weight: bold; color: var(--text-primary);" data-i18n="settings.terminal.title">⌨️ 内置终端</div>
-                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;" data-i18n="settings.terminal.desc">在当前页面直接管理底层沙箱、网关运行时与本地命令。</div>
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
+                <div>
+                  <div style="font-size: 13px; font-weight: bold; color: var(--text-primary);" data-i18n="settings.terminal.title">⌨️ 内置终端</div>
+                  <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;" data-i18n="settings.terminal.desc">在当前页面直接管理底层沙箱、网关运行时与本地命令。</div>
+                </div>
+                <button type="button" id="btn-toggle-terminal" class="btn-secondary" style="height: 28px; padding: 0 12px; font-size: 11px; font-weight: bold; border-radius: 6px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; flex-shrink: 0; margin-left: 12px; margin-top: 2px;">展开</button>
               </div>
-              <div id="xterm-container" class="settings-terminal-container"></div>
+              <div id="xterm-container" class="settings-terminal-container" style="display: none;"></div>
             </div>
           </div>
 

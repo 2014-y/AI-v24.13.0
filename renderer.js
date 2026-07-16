@@ -9751,7 +9751,8 @@ function scheduleBuiltinTerminalFit(forceResizePty) {
     terminalFitScheduled = true;
     requestAnimationFrame(() => {
         terminalFitScheduled = false;
-        if (currentTab !== 'settings-view' || !builtinTerminalFitAddon || !builtinTerminal) return;
+        const container = document.getElementById('xterm-container');
+        if (currentTab !== 'settings-view' || !builtinTerminalFitAddon || !builtinTerminal || !container || container.style.display === 'none') return;
         const prevCols = builtinTerminal.cols;
         const prevRows = builtinTerminal.rows;
         try { builtinTerminalFitAddon.fit(); } catch (e) {}
@@ -9768,11 +9769,34 @@ function initBuiltinTerminal() {
     const pane = document.getElementById('settings-view');
     if (pane) pane.classList.add('terminal-keeplive');
 
+    const container = document.getElementById('xterm-container');
+    const btnToggle = document.getElementById('btn-toggle-terminal');
+    
+    if (btnToggle && container && !btnToggle.dataset.hasListener) {
+        btnToggle.dataset.hasListener = 'true';
+        btnToggle.addEventListener('click', () => {
+            const isHidden = container.style.display === 'none';
+            if (isHidden) {
+                container.style.display = 'block';
+                btnToggle.textContent = '折叠';
+                terminalNeedsFit = true;
+                scheduleBuiltinTerminalFit(true);
+                setTimeout(() => {
+                    try { builtinTerminal.focus(); } catch (e) {}
+                }, 50);
+            } else {
+                container.style.display = 'none';
+                btnToggle.textContent = '展开';
+                try { builtinTerminal.blur(); } catch (e) {}
+            }
+        });
+    }
+
     if (isTerminalInitialized && builtinTerminal) {
         // 再次切入：不 fit、不强刷，只恢复光标并延后聚焦
         try { builtinTerminal.options.cursorBlink = true; } catch (e) {}
         setTimeout(() => {
-            if (currentTab === 'settings-view' && builtinTerminal) {
+            if (currentTab === 'settings-view' && builtinTerminal && container && container.style.display !== 'none') {
                 try { builtinTerminal.focus(); } catch (e) {}
                 if (terminalNeedsFit) scheduleBuiltinTerminalFit(false);
             }
@@ -9782,7 +9806,6 @@ function initBuiltinTerminal() {
 
     if (isTerminalInitializing) return;
     
-    const container = document.getElementById('xterm-container');
     if (!container) return;
     if (!window.Terminal) {
         container.innerHTML = '<div style="color:#f44336;padding:16px;font-family:Consolas,monospace;font-size:13px;">xterm 组件未加载（打包后资源缺失）。请重新安装完整包。</div>';
@@ -9794,7 +9817,9 @@ function initBuiltinTerminal() {
         if (builtinTerminal) {
             isTerminalInitializing = false;
             isTerminalInitialized = true;
-            scheduleBuiltinTerminalFit(true);
+            if (container.style.display !== 'none') {
+                scheduleBuiltinTerminalFit(true);
+            }
             return;
         }
         try {
@@ -9822,7 +9847,9 @@ function initBuiltinTerminal() {
             isTerminalInitialized = true;
             isTerminalInitializing = false;
             terminalNeedsFit = true;
-            scheduleBuiltinTerminalFit(true);
+            if (container.style.display !== 'none') {
+                scheduleBuiltinTerminalFit(true);
+            }
             
             builtinTerminal.onData(data => {
                 window.api.writeBuiltinTerminal(data);
@@ -9830,7 +9857,7 @@ function initBuiltinTerminal() {
             
             window.addEventListener('resize', () => {
                 terminalNeedsFit = true;
-                if (currentTab === 'settings-view') scheduleBuiltinTerminalFit(true);
+                if (currentTab === 'settings-view' && container && container.style.display !== 'none') scheduleBuiltinTerminalFit(true);
             });
             
             window.api.onBuiltinTerminalData((data) => {
