@@ -958,14 +958,14 @@
               </label>
             </div>
 
-            <!-- 语言首选项 -->
-            <div id="setting-language-row" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 12px;">
-              <div>
-                <div style="font-size: 13px; font-weight: bold; color: var(--text-primary);" data-i18n="settings.lang.title">🌐 界面语言首选项 (Language)</div>
-                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;" data-i18n="settings.lang.desc">切换客户端和面板展示的系统语言语系。</div>
+            <!-- 语言模块 -->
+            <div id="setting-language-row" class="settings-language-module" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 12px;">
+              <div style="min-width: 0; padding-right: 16px;">
+                <div style="font-size: 13px; font-weight: bold; color: var(--text-primary);" data-i18n="settings.lang.title">🌐 界面语言</div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;" data-i18n="settings.lang.desc">切换客户端界面语言（含 Nexora Clash 等菜单），立即生效。</div>
               </div>
-              <div>
-                <select id="setting-language-select" style="background: var(--bg-input) !important; color: var(--text-primary) !important; border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 8px; font-size: 12px; outline: none; height: 30px;">
+              <div style="flex-shrink: 0;">
+                <select id="setting-language-select" aria-label="Interface language" style="background: var(--bg-input) !important; color: var(--text-primary) !important; border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 10px; font-size: 12px; outline: none; height: 32px; min-width: 128px; cursor: pointer;">
                   <option value="zh-CN" data-i18n="settings.lang.zh_CN">简体中文</option>
                   <option value="zh-TW" data-i18n="settings.lang.zh_TW">繁體中文</option>
                   <option value="en-US" data-i18n="settings.lang.en_US">English</option>
@@ -992,7 +992,7 @@
                   <div style="font-size: 13px; font-weight: bold; color: var(--text-primary);" data-i18n="settings.terminal.title">⌨️ 内置终端</div>
                   <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;" data-i18n="settings.terminal.desc">在当前页面直接管理底层沙箱、网关运行时与本地命令。</div>
                 </div>
-                <button type="button" id="btn-toggle-terminal" class="btn-secondary" style="height: 28px; padding: 0 12px; font-size: 11px; font-weight: bold; border-radius: 6px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; flex-shrink: 0; margin-left: 12px; margin-top: 2px;">展开</button>
+                <button type="button" id="btn-toggle-terminal" class="btn-secondary" style="height: 28px; padding: 0 12px; font-size: 11px; font-weight: bold; border-radius: 6px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; flex-shrink: 0; margin-left: 12px; margin-top: 2px;" data-i18n="terminal.expand">展开</button>
               </div>
               <div id="xterm-container" class="settings-terminal-container" style="display: none;"></div>
             </div>
@@ -1133,24 +1133,24 @@
               <p style="margin: 4px 0 0 0;" data-i18n="acc.desc">内置 mihomo（ClashMeta）核心，按步骤添加配置、选择节点并启用加速。</p>
             </div>
             <div class="acc-header-actions">
-              <span id="acc-status-pill" class="acc-status-pill">未启用</span>
-              <div class="acc-mini-enable" title="启用加速通道">
-                <span>启用</span>
+              <span id="acc-status-pill" class="acc-status-pill" data-i18n="acc.status.disabled">未启用</span>
+              <div class="acc-mini-enable" title="启用加速通道" data-i18n-title="acc.enable.title">
+                <span data-i18n="acc.enable">启用</span>
                 <label class="switch-slider-btn" for="acc-page-enabled-toggle">
                   <input type="checkbox" id="acc-page-enabled-toggle">
                   <span class="slider-knob"></span>
                 </label>
               </div>
-              <button type="button" class="btn-secondary" id="acc-refresh-btn">刷新</button>
+              <button type="button" class="btn-secondary" id="acc-refresh-btn" data-i18n="acc.refresh">刷新</button>
             </div>
           </div>
 
           <div class="acc-subtabs" role="tablist">
-            <button type="button" class="acc-subtab active" data-acc-panel="dashboard">仪表盘</button>
-            <button type="button" class="acc-subtab" data-acc-panel="proxies">代理</button>
-            <button type="button" class="acc-subtab" data-acc-panel="profiles">配置</button>
-            <button type="button" class="acc-subtab" data-acc-panel="connections">连接</button>
-            <button type="button" class="acc-subtab" data-acc-panel="controls">控制</button>
+            <button type="button" class="acc-subtab active" data-acc-panel="dashboard" data-i18n="acc.tab.dashboard">仪表盘</button>
+            <button type="button" class="acc-subtab" data-acc-panel="proxies" data-i18n="acc.tab.proxies">代理</button>
+            <button type="button" class="acc-subtab" data-acc-panel="profiles" data-i18n="acc.tab.profiles">配置</button>
+            <button type="button" class="acc-subtab" data-acc-panel="connections" data-i18n="acc.tab.connections">连接</button>
+            <button type="button" class="acc-subtab" data-acc-panel="controls" data-i18n="acc.tab.controls">控制</button>
           </div>
 
           <!-- 仪表盘页：图形化状态监控 -->
@@ -1160,7 +1160,7 @@
               <div class="acc-card acc-dash-chart-card">
                 <div class="acc-card-head" style="margin-bottom: 8px;">
                   <div class="acc-card-title" style="margin-bottom: 0; display: flex; align-items: center; gap: 6px;">
-                    <span style="font-size: 14px;">📈</span> 网络速度
+                    <span style="font-size: 14px;">📈</span> <span data-i18n="acc.dash.speed">网络速度</span>
                   </div>
                   <div id="acc-dash-speed-text" class="acc-dash-speed-text">
                     <span class="speed-up">↑ 0 B/s</span>
@@ -1171,8 +1171,8 @@
                   <canvas id="acc-dash-speed-canvas"></canvas>
                   <div id="acc-dash-speed-empty" class="acc-dash-speed-empty">
                     <div class="acc-dash-speed-empty-icon">📡</div>
-                    <div class="acc-dash-speed-empty-title">等待网络流量</div>
-                    <div class="acc-dash-speed-empty-desc">启用加速后，浏览网页或下载时这里会显示实时上下行曲线</div>
+                    <div class="acc-dash-speed-empty-title" data-i18n="acc.dash.speed_empty_title">等待网络流量</div>
+                    <div class="acc-dash-speed-empty-desc" data-i18n="acc.dash.speed_empty_desc">启用加速后，浏览网页或下载时这里会显示实时上下行曲线</div>
                   </div>
                 </div>
               </div>
@@ -1182,13 +1182,13 @@
                 <div class="acc-card acc-dash-side-panel">
                   <div class="acc-dash-side-section">
                     <div class="acc-dash-side-header">
-                      <span class="acc-dash-side-title"><span>✈</span> 出站模式</span>
-                      <span class="acc-dash-mode-hint" id="acc-dash-mode-hint">按规则分流</span>
+                      <span class="acc-dash-side-title"><span>✈</span> <span data-i18n="acc.dash.mode">出站模式</span></span>
+                      <span class="acc-dash-mode-hint" id="acc-dash-mode-hint" data-i18n="acc.mode.rule_hint">按规则分流</span>
                     </div>
                     <div class="acc-dash-mode-group" role="radiogroup" aria-label="出站模式">
-                      <button type="button" class="acc-dash-mode-btn" data-mode="rule">规则</button>
-                      <button type="button" class="acc-dash-mode-btn" data-mode="global">全局</button>
-                      <button type="button" class="acc-dash-mode-btn" data-mode="direct">直连</button>
+                      <button type="button" class="acc-dash-mode-btn" data-mode="rule" data-i18n="acc.mode.rule">规则</button>
+                      <button type="button" class="acc-dash-mode-btn" data-mode="global" data-i18n="acc.mode.global">全局</button>
+                      <button type="button" class="acc-dash-mode-btn" data-mode="direct" data-i18n="acc.mode.direct">直连</button>
                     </div>
                   </div>
 
@@ -1198,7 +1198,7 @@
                       <div class="acc-dash-info-card-header">
                         <div class="acc-dash-info-card-header-left">
                           <span class="acc-dash-info-card-dot"></span>
-                          <span class="acc-dash-info-card-title">主通道配置</span>
+                          <span class="acc-dash-info-card-title" data-i18n="acc.dash.profile">主通道配置</span>
                         </div>
                         <span id="acc-dash-active-profile" class="acc-dash-info-card-profile">--</span>
                       </div>
@@ -1206,7 +1206,7 @@
                       <div class="acc-dash-info-card-body">
                         <div class="acc-dash-node-row">
                           <div class="acc-dash-node-meta">
-                            <span class="acc-dash-node-label">活跃节点</span>
+                            <span class="acc-dash-node-label" data-i18n="acc.dash.active_node">活跃节点</span>
                             <div class="acc-dash-node-value">
                               <strong id="acc-dash-current-proxy" class="acc-dash-kv-accent">--</strong>
                             </div>
@@ -1221,18 +1221,18 @@
                     <!-- 参数明细网格 (副卡片网格) -->
                     <div class="acc-dash-telemetry-grid">
                       <div class="acc-dash-telemetry-item">
-                        <span class="acc-dash-telemetry-label">本地代理</span>
+                        <span class="acc-dash-telemetry-label" data-i18n="acc.dash.mixed">本地代理</span>
                         <strong id="acc-dash-mixed-port" class="acc-dash-kv-mono">--</strong>
                       </div>
                       <div class="acc-dash-telemetry-item">
-                        <span class="acc-dash-telemetry-label">控制端口</span>
+                        <span class="acc-dash-telemetry-label" data-i18n="acc.dash.controller">控制端口</span>
                         <strong id="acc-dash-controller" class="acc-dash-kv-mono">--</strong>
                       </div>
                       <div class="acc-dash-telemetry-item acc-dash-telemetry-item-full">
-                        <span class="acc-dash-telemetry-label">加速运行状态</span>
+                        <span class="acc-dash-telemetry-label" data-i18n="acc.dash.run_status">加速运行状态</span>
                         <div class="acc-dash-status-indicator">
                           <span class="acc-dash-status-dot"></span>
-                          <strong id="acc-dash-run-status">未启用</strong>
+                          <strong id="acc-dash-run-status" data-i18n="acc.status.disabled">未启用</strong>
                         </div>
                       </div>
                     </div>
@@ -1241,8 +1241,8 @@
                   <div class="acc-dash-side-section acc-dash-side-toggles">
                     <div class="acc-dash-toggle-row">
                       <div class="toggle-info">
-                        <div class="toggle-name">启用加速通道</div>
-                        <div class="toggle-desc">开启内置代理内核以启用加速</div>
+                        <div class="toggle-name" data-i18n="acc.toggle.enabled">启用加速通道</div>
+                        <div class="toggle-desc" data-i18n="acc.toggle.enabled_desc">开启内置代理内核以启用加速</div>
                       </div>
                       <label class="switch-slider-btn">
                         <input type="checkbox" id="acc-dash-enabled-toggle">
@@ -1251,8 +1251,8 @@
                     </div>
                     <div class="acc-dash-toggle-row">
                       <div class="toggle-info">
-                        <div class="toggle-name">系统代理</div>
-                        <div class="toggle-desc" title="把 Windows 系统代理指到本地 Clash 端口">写入 Windows 系统代理</div>
+                        <div class="toggle-name" data-i18n="acc.toggle.system_proxy">系统代理</div>
+                        <div class="toggle-desc" title="把 Windows 系统代理指到本地 Clash 端口" data-i18n="acc.toggle.system_proxy_desc" data-i18n-title="acc.toggle.system_proxy_desc">写入 Windows 系统代理</div>
                       </div>
                       <label class="switch-slider-btn">
                         <input type="checkbox" id="acc-dash-system-proxy-toggle">
@@ -1261,8 +1261,8 @@
                     </div>
                     <div class="acc-dash-toggle-row">
                       <div class="toggle-info">
-                        <div class="toggle-name">虚拟网卡 TUN</div>
-                        <div class="toggle-desc" title="需管理员权限，并安装 wintun.dll；未提权时无法真正接管流量">需管理员，否则开了也不生效</div>
+                        <div class="toggle-name" data-i18n="acc.toggle.tun">虚拟网卡 TUN</div>
+                        <div class="toggle-desc" title="需管理员权限，并安装 wintun.dll；未提权时无法真正接管流量" data-i18n="acc.toggle.tun_desc" data-i18n-title="acc.toggle.tun_desc">需管理员，否则开了也不生效</div>
                       </div>
                       <label class="switch-slider-btn">
                         <input type="checkbox" id="acc-dash-tun-toggle">
@@ -1280,8 +1280,8 @@
               <div class="acc-card acc-dash-stat-card">
                 <div class="stat-icon">💻</div>
                 <div class="stat-main">
-                  <div class="stat-label">内网 IP</div>
-                  <div id="acc-dash-local-ip" class="stat-value">获取中...</div>
+                  <div class="stat-label" data-i18n="acc.stat.local_ip">内网 IP</div>
+                  <div id="acc-dash-local-ip" class="stat-value" data-i18n="acc.stat.fetching">获取中...</div>
                 </div>
               </div>
 
@@ -1289,17 +1289,17 @@
               <div class="acc-card acc-dash-stat-card" style="position: relative;">
                 <div class="stat-icon">🌐</div>
                 <div class="stat-main" style="padding-right: 32px;">
-                  <div class="stat-label">网络检测</div>
-                  <div id="acc-dash-ip-detect-result" class="stat-value" style="font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="自动检测本机或代理出口 IP">检测中...</div>
+                  <div class="stat-label" data-i18n="acc.stat.net_detect">网络检测</div>
+                  <div id="acc-dash-ip-detect-result" class="stat-value" style="font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="自动检测本机或代理出口 IP" data-i18n="acc.stat.detecting" data-i18n-title="acc.stat.net_detect_title">检测中...</div>
                 </div>
-                <button type="button" id="acc-dash-ip-detect-btn" class="acc-dash-detect-btn" title="检测网络出口 IP">⚡</button>
+                <button type="button" id="acc-dash-ip-detect-btn" class="acc-dash-detect-btn" title="检测网络出口 IP" data-i18n-title="acc.stat.detect_btn">⚡</button>
               </div>
 
               <!-- 流量统计 -->
               <div class="acc-card acc-dash-stat-card" style="display: flex; align-items: center; gap: 8px;">
                 <canvas id="acc-dash-traffic-canvas" width="48" height="48" style="flex-shrink: 0;"></canvas>
                 <div class="stat-main">
-                  <div class="stat-label">流量统计</div>
+                  <div class="stat-label" data-i18n="acc.stat.traffic">流量统计</div>
                   <div class="stat-traffic-details">
                     <span id="acc-dash-upload-total">↑ 0 B</span>
                     <span id="acc-dash-download-total">↓ 0 B</span>
@@ -1311,7 +1311,7 @@
               <div class="acc-card acc-dash-stat-card">
                 <div class="stat-icon">⚙</div>
                 <div class="stat-main">
-                  <div class="stat-label">内存信息</div>
+                  <div class="stat-label" data-i18n="acc.stat.memory">内存信息</div>
                   <div id="acc-dash-memory-val" class="stat-value">-- MB</div>
                 </div>
               </div>

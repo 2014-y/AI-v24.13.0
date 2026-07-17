@@ -534,16 +534,16 @@ function renderFeishuAccounts() {
                     </div>
                     <div style="font-size: 11px; color: var(--text-secondary); margin-top: 6px; display: flex; flex-direction: column; gap: 2px;">
                         <span>App ID: ${acc.appId || '--'}</span>
-                        <span>Encrypt Key: ${acc.encryptKey ? '已配置' : '未配置'}</span>
-                        ${acc.domain ? `<span>域名: ${acc.domain === 'lark' ? 'Lark' : '飞书'}</span>` : ''}
-                        ${Array.isArray(acc.allowFrom) && acc.allowFrom.length ? `<span>私信白名单: ${acc.allowFrom.length === 1 ? '仅本人(扫码绑定)' : acc.allowFrom.length + ' 人'}</span>` : ''}
+                        <span>Encrypt Key: ${acc.encryptKey ? t('已配置', 'Configured', '已配置') : t('未配置', 'Not configured', '未配置')}</span>
+                        ${acc.domain ? `<span>${t('域名', 'Domain', '網域')}: ${acc.domain === 'lark' ? 'Lark' : t('飞书', 'Feishu', '飛書')}</span>` : ''}
+                        ${Array.isArray(acc.allowFrom) && acc.allowFrom.length ? `<span>${t('私信白名单', 'DM allowlist', '私訊白名單')}: ${acc.allowFrom.length === 1 ? t('仅本人(扫码绑定)', 'Only me (QR bound)', '僅本人（掃碼綁定）') : t(`${acc.allowFrom.length} 人`, `${acc.allowFrom.length} users`, `${acc.allowFrom.length} 人`)}</span>` : ''}
                     </div>
                 </div>
             </div>
             <div style="display: flex; gap: 8px;">
-                ${!isDefault ? `<button type="button" class="btn-primary btn-set-default-feishu" data-id="${id}" style="margin-top: 0; padding: 0 10px; font-size: 11px; height: 26px; border-radius: 4px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer;">设为默认</button>` : ''}
-                <button type="button" class="btn-primary btn-edit-feishu" data-id="${id}" style="margin-top: 0; padding: 0 10px; font-size: 11px; height: 26px; border-radius: 4px; background: rgba(140, 82, 255, 0.1); border: 1px solid rgba(140, 82, 255, 0.3); color: #b388ff; cursor: pointer;">编辑</button>
-                <button type="button" class="btn-primary btn-delete-feishu" data-id="${id}" style="margin-top: 0; padding: 0 10px; font-size: 11px; height: 26px; border-radius: 4px; background: rgba(255, 82, 82, 0.1); border: 1px solid rgba(255, 82, 82, 0.3); color: #ff5252; cursor: pointer;">删除</button>
+                ${!isDefault ? `<button type="button" class="btn-primary btn-set-default-feishu" data-id="${id}" style="margin-top: 0; padding: 0 10px; font-size: 11px; height: 26px; border-radius: 4px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer;">${t('设为默认', 'Set Default', '設為默認')}</button>` : ''}
+                <button type="button" class="btn-primary btn-edit-feishu" data-id="${id}" style="margin-top: 0; padding: 0 10px; font-size: 11px; height: 26px; border-radius: 4px; background: rgba(140, 82, 255, 0.1); border: 1px solid rgba(140, 82, 255, 0.3); color: #b388ff; cursor: pointer;">${t('编辑', 'Edit', '編輯')}</button>
+                <button type="button" class="btn-primary btn-delete-feishu" data-id="${id}" style="margin-top: 0; padding: 0 10px; font-size: 11px; height: 26px; border-radius: 4px; background: rgba(255, 82, 82, 0.1); border: 1px solid rgba(255, 82, 82, 0.3); color: #ff5252; cursor: pointer;">${t('删除', 'Delete', '刪除')}</button>
             </div>
         `;
         container.appendChild(card);
@@ -682,9 +682,9 @@ function renderQqbotAccounts() {
                 </div>
             </div>
             <div style="display: flex; gap: 8px;">
-                ${!isDefault ? `<button type="button" class="btn-primary btn-set-default-qqbot" data-id="${id}" style="margin-top: 0; padding: 0 10px; font-size: 11px; height: 26px; border-radius: 4px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer;">设为默认</button>` : ''}
-                <button type="button" class="btn-primary btn-edit-qqbot" data-id="${id}" style="margin-top: 0; padding: 0 10px; font-size: 11px; height: 26px; border-radius: 4px; background: rgba(140, 82, 255, 0.1); border: 1px solid rgba(140, 82, 255, 0.3); color: #b388ff; cursor: pointer;">编辑</button>
-                <button type="button" class="btn-primary btn-delete-qqbot" data-id="${id}" style="margin-top: 0; padding: 0 10px; font-size: 11px; height: 26px; border-radius: 4px; background: rgba(255, 82, 82, 0.1); border: 1px solid rgba(255, 82, 82, 0.3); color: #ff5252; cursor: pointer;">删除</button>
+                ${!isDefault ? `<button type="button" class="btn-primary btn-set-default-qqbot" data-id="${id}" style="margin-top: 0; padding: 0 10px; font-size: 11px; height: 26px; border-radius: 4px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer;">${t('设为默认', 'Set Default', '設為默認')}</button>` : ''}
+                <button type="button" class="btn-primary btn-edit-qqbot" data-id="${id}" style="margin-top: 0; padding: 0 10px; font-size: 11px; height: 26px; border-radius: 4px; background: rgba(140, 82, 255, 0.1); border: 1px solid rgba(140, 82, 255, 0.3); color: #b388ff; cursor: pointer;">${t('编辑', 'Edit', '編輯')}</button>
+                <button type="button" class="btn-primary btn-delete-qqbot" data-id="${id}" style="margin-top: 0; padding: 0 10px; font-size: 11px; height: 26px; border-radius: 4px; background: rgba(255, 82, 82, 0.1); border: 1px solid rgba(255, 82, 82, 0.3); color: #ff5252; cursor: pointer;">${t('删除', 'Delete', '刪除')}</button>
             </div>
         `;
         container.appendChild(card);
@@ -1370,6 +1370,22 @@ async function init() {
             const selectedLang = e.target.value;
             localStorage.setItem('setting_language', selectedLang);
             applyLanguage(selectedLang);
+            updateRightPluginsCountUI();
+            try { renderFeishuAccounts(); } catch (e) {}
+            try { renderQqbotAccounts(); } catch (e) {}
+            try { updateConsoleChannelStatusUI(); } catch (e) {}
+            try { updateWeChatStatusUI(); } catch (e) {}
+            try { if (typeof window.syncChatQuickPanelToggleText === 'function') window.syncChatQuickPanelToggleText(); } catch (e) {}
+            const btnToggleTerminal = document.getElementById('btn-toggle-terminal');
+            const terminalContainer = document.getElementById('xterm-container');
+            if (btnToggleTerminal && terminalContainer) {
+                const key = terminalContainer.style.display === 'none' ? 'terminal.expand' : 'terminal.collapse';
+                btnToggleTerminal.setAttribute('data-i18n', key);
+                btnToggleTerminal.textContent = t(key);
+            }
+            if (typeof accelerationState !== 'undefined' && accelerationState) {
+                renderAccelerationChannel(accelerationState);
+            }
             if (selectedLang === 'en-US') {
                 showToast(t('toast.switch_lang_en', 'Switched to English interface.'));
             } else if (selectedLang === 'zh-TW') {
@@ -3706,24 +3722,18 @@ function bindProviderEvents() {
 
             btn.disabled = true;
 
+            // 必须声明在 try 外：catch 里会用到，否则超时后二次 ReferenceError，状态卡在「正在检验…」
+            let testUrl = `${baseUrl.replace(/\/$/, '')}/models`;
+            if (apiType === 'ollama' && baseUrl.includes('11434')) {
+                testUrl = baseUrl.replace('/v1', '').replace(/\/$/, '') + '/api/tags';
+            }
+            const headers = { 'Content-Type': 'application/json' };
+            if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+            let timeoutId = null;
+
             try {
-                // 构建测试 URL
-                let testUrl = `${baseUrl.replace(/\/$/, '')}/models`;
-                if (apiType === 'ollama') {
-                    if (baseUrl.includes('11434')) {
-                        testUrl = baseUrl.replace('/v1', '').replace(/\/$/, '') + '/api/tags';
-                    }
-                }
-
-                const headers = {
-                    'Content-Type': 'application/json'
-                };
-                if (apiKey) {
-                    headers['Authorization'] = `Bearer ${apiKey}`;
-                }
-
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 8000);
+                timeoutId = setTimeout(() => controller.abort(), 8000);
 
                 const response = await fetch(testUrl, {
                     method: 'GET',
@@ -3732,6 +3742,7 @@ function bindProviderEvents() {
                 });
                 
                 clearTimeout(timeoutId);
+                timeoutId = null;
 
                 if (response.ok) {
                     showToast(t(`✅ ${provider} 连通性检验连接成功！`, `✅ ${provider} connectivity verification succeeded!`, `✅ ${provider} 連通性檢驗連接成功！`));
@@ -3762,14 +3773,20 @@ function bindProviderEvents() {
                 }
                 showToast(t(`❌ ${provider} 连通性检验超时或失败`, `❌ ${provider} connectivity verification timed out or failed`, `❌ ${provider} 連通性檢驗超時或失敗`));
                 if (resultSpan) {
-                    resultSpan.innerHTML = `
-                        <span>❌ ${t('连接超时或失败', 'Connection timed out or failed', '連接超時或失敗')} (${errMsg})</span>
-                        <span class="btn-view-request-details" data-url="${testUrl || '无'}" data-status="无" data-status-text="${t('网络异常或超时', 'Network anomaly or timeout', '網路異常或超時')}" data-headers="${encodeURIComponent(JSON.stringify(headers))}" style="cursor: pointer; color: #b388ff; text-decoration: underline; font-size: 11px; margin-left: 8px; user-select: none;">${t('[查看请求详情]', '[View Request Details]', '[查看請求詳情]')}</span>
-                    `;
-                    resultSpan.style.color = '#ff5252';
-                    bindDetailsClick(resultSpan);
+                    try {
+                        resultSpan.innerHTML = `
+                            <span>❌ ${t('连接超时或失败', 'Connection timed out or failed', '連接超時或失敗')} (${errMsg})</span>
+                            <span class="btn-view-request-details" data-url="${testUrl}" data-status="-" data-status-text="${t('网络异常或超时', 'Network anomaly or timeout', '網路異常或超時')}" data-headers="${encodeURIComponent(JSON.stringify(headers))}" style="cursor: pointer; color: #b388ff; text-decoration: underline; font-size: 11px; margin-left: 8px; user-select: none;">${t('[查看请求详情]', '[View Request Details]', '[查看請求詳情]')}</span>
+                        `;
+                        resultSpan.style.color = '#ff5252';
+                        bindDetailsClick(resultSpan);
+                    } catch (uiErr) {
+                        resultSpan.textContent = `❌ ${t('连接超时或失败', 'Connection timed out or failed', '連接超時或失敗')} (${errMsg})`;
+                        resultSpan.style.color = '#ff5252';
+                    }
                 }
             } finally {
+                if (timeoutId) clearTimeout(timeoutId);
                 btn.disabled = false;
             }
         });
@@ -3856,17 +3873,13 @@ function bindProviderEvents() {
                 return;
             }
 
+            // 必须声明在 try 外：catch 里会用到，否则超时后二次 ReferenceError，状态卡在「正在验证…」
+            const testUrl = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
+            const headers = { 'Content-Type': 'application/json' };
+            if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+            let timeoutId = null;
+
             try {
-                // 构建强鉴权测试端点
-                let testUrl = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
-
-                const headers = {
-                    'Content-Type': 'application/json'
-                };
-                if (apiKey) {
-                    headers['Authorization'] = `Bearer ${apiKey}`;
-                }
-
                 const body = {
                     model: testModel,
                     messages: [{ role: 'user', content: 'ping' }],
@@ -3874,7 +3887,7 @@ function bindProviderEvents() {
                 };
 
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 8000);
+                timeoutId = setTimeout(() => controller.abort(), 8000);
 
                 const response = await fetch(testUrl, {
                     method: 'POST',
@@ -3884,6 +3897,7 @@ function bindProviderEvents() {
                 });
 
                 clearTimeout(timeoutId);
+                timeoutId = null;
 
                 let responseJson = null;
                 try {
@@ -3951,14 +3965,20 @@ function bindProviderEvents() {
                 }
                 showToast(t(`❌ ${provider} 密钥验证超时或异常`, `❌ ${provider} key validation timed out or encountered exception`, `❌ ${provider} 金鑰驗證超時或異常`));
                 if (resultSpan) {
-                    resultSpan.innerHTML = `
-                        <span>❌ ${t('验证超时或失败', 'Validation timed out or failed', '驗證超時或失敗')} (${errMsg})</span>
-                        <span class="btn-view-request-details" data-url="${testUrl || '无'}" data-status="无" data-status-text="${t('网络异常或超时', 'Network anomaly or timeout', '網路異常或超時')}" data-headers="${encodeURIComponent(JSON.stringify(headers))}" style="cursor: pointer; color: #b388ff; text-decoration: underline; font-size: 11px; margin-left: 8px; user-select: none;">${t('[查看请求详情]', '[View Request Details]', '[查看請求詳情]')}</span>
-                    `;
-                    resultSpan.style.color = '#ff5252';
-                    bindDetailsClick(resultSpan);
+                    try {
+                        resultSpan.innerHTML = `
+                            <span>❌ ${t('验证超时或失败', 'Validation timed out or failed', '驗證超時或失敗')} (${errMsg})</span>
+                            <span class="btn-view-request-details" data-url="${testUrl}" data-status="-" data-status-text="${t('网络异常或超时', 'Network anomaly or timeout', '網路異常或超時')}" data-headers="${encodeURIComponent(JSON.stringify(headers))}" style="cursor: pointer; color: #b388ff; text-decoration: underline; font-size: 11px; margin-left: 8px; user-select: none;">${t('[查看请求详情]', '[View Request Details]', '[查看請求詳情]')}</span>
+                        `;
+                        resultSpan.style.color = '#ff5252';
+                        bindDetailsClick(resultSpan);
+                    } catch (uiErr) {
+                        resultSpan.textContent = `❌ ${t('验证超时或失败', 'Validation timed out or failed', '驗證超時或失敗')} (${errMsg})`;
+                        resultSpan.style.color = '#ff5252';
+                    }
                 }
             } finally {
+                if (timeoutId) clearTimeout(timeoutId);
                 btn.disabled = false;
             }
         });
@@ -4673,17 +4693,18 @@ let __gatewayLoadedPluginCount = null;
 function updateRightPluginsCountUI() {
     const rightPluginsCountEl = document.getElementById('right-plugins-count');
     if (!rightPluginsCountEl) return;
+    const formatPluginCount = (n) => t(`${n} 个`, `${n}`, `${n} 個`);
     if (__gatewayLoadedPluginCount != null) {
-        rightPluginsCountEl.innerText = `${__gatewayLoadedPluginCount} 个`;
+        rightPluginsCountEl.innerText = formatPluginCount(__gatewayLoadedPluginCount);
         return;
     }
     // 尚未收到 gateway listening 前：只数「真正 enabled」的条目，避免 allow 虚高
     if (configData && configData.plugins && configData.plugins.entries) {
         const n = Object.values(configData.plugins.entries).filter((e) => e && e.enabled === true).length;
-        rightPluginsCountEl.innerText = `${n} 个`;
+        rightPluginsCountEl.innerText = formatPluginCount(n);
         return;
     }
-    rightPluginsCountEl.innerText = '0 个';
+    rightPluginsCountEl.innerText = formatPluginCount(0);
 }
 
 // 渲染插件卡片网格
@@ -6709,6 +6730,13 @@ function applyLanguage(lang) {
         sidebarPercent.style.display = 'none';
     }
 
+    // 5c. 模型对话「展开/收起帮助」按钮（动态文案，不走 data-i18n）
+    try {
+        if (typeof window.syncChatQuickPanelToggleText === 'function') {
+            window.syncChatQuickPanelToggleText();
+        }
+    } catch (e) {}
+
     // 6. 重新执行动态生成的 UI 模块渲染
     if (typeof renderProvidersList === 'function') {
         try { renderProvidersList(); } catch(e) { console.error(e); }
@@ -6821,43 +6849,47 @@ function initChatView() {
     const quickPanel = document.getElementById('chat-quick-panel');
     const toggleBtn = document.getElementById('btn-toggle-quick-panel');
     const toggleIcon = document.getElementById('quick-panel-toggle-icon');
-    
+
+    function syncChatQuickPanelToggleText() {
+        const collapsed = localStorage.getItem('chat_quick_panel_collapsed') === 'true';
+        const el = document.getElementById('quick-panel-toggle-text');
+        if (!el) return;
+        el.innerText = collapsed
+            ? t('展开帮助', 'Show Help', '展開幫助')
+            : t('收起帮助', 'Hide Help', '收起幫助');
+    }
+    window.syncChatQuickPanelToggleText = syncChatQuickPanelToggleText;
+
     const isCollapsed = localStorage.getItem('chat_quick_panel_collapsed') === 'true';
-    const toggleText = document.getElementById('quick-panel-toggle-text');
     if (isCollapsed && quickPanel) {
         quickPanel.style.maxHeight = '0px';
         quickPanel.style.opacity = '0';
         quickPanel.style.marginTop = '0px';
         quickPanel.style.pointerEvents = 'none';
-        if (toggleText) toggleText.innerText = t('展开帮助', 'Show Help', '展開幫助');
         if (toggleIcon) toggleIcon.style.transform = 'rotate(-180deg)';
-    } else {
-        if (toggleText) toggleText.innerText = t('收起帮助', 'Hide Help', '收起幫助');
     }
+    syncChatQuickPanelToggleText();
 
     if (toggleBtn) {
         toggleBtn.addEventListener('click', () => {
             const currentCollapsed = localStorage.getItem('chat_quick_panel_collapsed') === 'true';
             const nextCollapsed = !currentCollapsed;
             localStorage.setItem('chat_quick_panel_collapsed', nextCollapsed ? 'true' : 'false');
-            
+
             if (nextCollapsed) {
-                // 收起帮助
                 quickPanel.style.maxHeight = '0px';
                 quickPanel.style.opacity = '0';
                 quickPanel.style.marginTop = '0px';
                 quickPanel.style.pointerEvents = 'none';
-                if (toggleText) toggleText.innerText = t('展开帮助', 'Show Help', '展開幫助');
                 if (toggleIcon) toggleIcon.style.transform = 'rotate(-180deg)';
             } else {
-                // 展开帮助
                 quickPanel.style.maxHeight = '80px';
                 quickPanel.style.opacity = '1';
                 quickPanel.style.marginTop = '2px';
                 quickPanel.style.pointerEvents = 'auto';
-                if (toggleText) toggleText.innerText = t('收起帮助', 'Hide Help', '收起幫助');
                 if (toggleIcon) toggleIcon.style.transform = 'rotate(0deg)';
             }
+            syncChatQuickPanelToggleText();
         });
     }
     
@@ -9520,13 +9552,17 @@ function renderAccelerationChannel(data) {
     document.querySelectorAll('.acc-dash-mode-btn').forEach((btn) => {
         btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
     });
-    const modeHintText = mode === 'global'
-        ? '全部流量走代理'
+    const modeHintKey = mode === 'global'
+        ? 'acc.mode.global_hint'
         : mode === 'direct'
-            ? '全部直连不代理'
-            : '按规则分流';
+            ? 'acc.mode.direct_hint'
+            : 'acc.mode.rule_hint';
+    const modeHintText = t(modeHintKey);
     const modeHint = document.getElementById('acc-dash-mode-hint');
-    if (modeHint) modeHint.textContent = modeHintText;
+    if (modeHint) {
+        modeHint.setAttribute('data-i18n', modeHintKey);
+        modeHint.textContent = modeHintText;
+    }
     const controlsModeHint = document.getElementById('acc-controls-mode-hint');
     if (controlsModeHint) {
         controlsModeHint.textContent = mode === 'global'
@@ -9547,11 +9583,17 @@ function renderAccelerationChannel(data) {
         if (dashRunStatus.parentElement) {
             dashRunStatus.parentElement.classList.toggle('enabled', enabled);
         }
-        if (!enabled) dashRunStatus.textContent = '未启用';
-        else if (data.virtualNic && data.systemProxy) dashRunStatus.textContent = 'TUN + 系统代理';
-        else if (data.virtualNic) dashRunStatus.textContent = 'TUN 已开启';
-        else if (data.systemProxy) dashRunStatus.textContent = '系统代理已开';
-        else dashRunStatus.textContent = '内核运行中';
+        const statusKey = !enabled
+            ? 'acc.status.disabled'
+            : data.virtualNic && data.systemProxy
+                ? 'acc.status.tun_proxy'
+                : data.virtualNic
+                    ? 'acc.status.tun'
+                    : data.systemProxy
+                        ? 'acc.status.system_proxy'
+                        : 'acc.status.running';
+        dashRunStatus.setAttribute('data-i18n', statusKey);
+        dashRunStatus.textContent = t(statusKey);
     }
 
     const desc = document.getElementById('acc-enabled-desc');
@@ -9565,7 +9607,9 @@ function renderAccelerationChannel(data) {
 
     const pill = document.getElementById('acc-status-pill');
     if (pill) {
-        pill.textContent = enabled ? '已启用' : '未启用';
+        const pillKey = enabled ? 'acc.status.enabled' : 'acc.status.disabled';
+        pill.setAttribute('data-i18n', pillKey);
+        pill.textContent = t(pillKey);
         pill.classList.toggle('enabled', enabled);
     }
     const mixed = document.getElementById('acc-mixed-port');
@@ -10915,7 +10959,8 @@ function initBuiltinTerminal() {
             const isHidden = container.style.display === 'none';
             if (isHidden) {
                 container.style.display = 'block';
-                btnToggle.textContent = '折叠';
+                btnToggle.setAttribute('data-i18n', 'terminal.collapse');
+                btnToggle.textContent = t('terminal.collapse');
                 terminalNeedsFit = true;
                 scheduleBuiltinTerminalFit(true);
                 setTimeout(() => {
@@ -10923,7 +10968,8 @@ function initBuiltinTerminal() {
                 }, 50);
             } else {
                 container.style.display = 'none';
-                btnToggle.textContent = '展开';
+                btnToggle.setAttribute('data-i18n', 'terminal.expand');
+                btnToggle.textContent = t('terminal.expand');
                 try { builtinTerminal.blur(); } catch (e) {}
             }
         });
@@ -10945,7 +10991,7 @@ function initBuiltinTerminal() {
     
     if (!container) return;
     if (!window.Terminal) {
-        container.innerHTML = '<div style="color:#f44336;padding:16px;font-family:Consolas,monospace;font-size:13px;">xterm 组件未加载（打包后资源缺失）。请重新安装完整包。</div>';
+        container.innerHTML = `<div style="color:#f44336;padding:16px;font-family:Consolas,monospace;font-size:13px;">${escapeHtml(t('xterm 组件未加载（打包后资源缺失）。请重新安装完整包。', 'xterm component failed to load (packaged resource missing). Please reinstall the full package.', 'xterm 元件未載入（打包後資源缺失）。請重新安裝完整包。'))}</div>`;
         return;
     }
     
@@ -11005,14 +11051,14 @@ function initBuiltinTerminal() {
             window.api.startBuiltinTerminal(currentLang).then((res) => {
                 if (res && res.ok === false && builtinTerminal) {
                     builtinTerminal.writeln('');
-                    builtinTerminal.writeln('\x1b[33m若内置终端无输出，已尝试打开外部沙箱窗口。\x1b[0m');
+                    builtinTerminal.writeln(`\x1b[33m${t('若内置终端无输出，已尝试打开外部沙箱窗口。', 'If the built-in terminal has no output, an external sandbox window has been opened as fallback.', '若內置終端無輸出，已嘗試打開外部沙箱視窗。')}\x1b[0m`);
                 }
                 terminalNeedsFit = true;
                 scheduleBuiltinTerminalFit(true);
             }).catch((err) => {
                 if (builtinTerminal) {
                     builtinTerminal.writeln('');
-                    builtinTerminal.writeln('\x1b[31m内置终端启动失败: ' + (err && err.message ? err.message : err) + '\x1b[0m');
+                    builtinTerminal.writeln(`\x1b[31m${t('内置终端启动失败', 'Built-in terminal failed to start', '內置終端啟動失敗')}: ${err && err.message ? err.message : err}\x1b[0m`);
                 }
             });
         } catch (err) {
@@ -11020,8 +11066,7 @@ function initBuiltinTerminal() {
             isTerminalInitialized = false;
             console.error('[BuiltinTerminal] init failed:', err);
             try {
-                container.innerHTML = '<div style="color:#f44336;padding:16px;font-family:Consolas,monospace;font-size:13px;">内置终端初始化失败: '
-                    + (err && err.message ? err.message : String(err)) + '</div>';
+                container.innerHTML = `<div style="color:#f44336;padding:16px;font-family:Consolas,monospace;font-size:13px;">${escapeHtml(t('内置终端初始化失败', 'Built-in terminal initialization failed', '內置終端初始化失敗'))}: ${escapeHtml(err && err.message ? err.message : String(err))}</div>`;
             } catch (e) {}
         }
     }, 0);

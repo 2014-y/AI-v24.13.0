@@ -14,12 +14,13 @@ const { URL } = require('url');
 const crypto = require('crypto');
 const zlib = require('zlib');
 const net = require('net');
+const accelerationCoreConfig = require('./config/acceleration-core.json');
 
 let MIXED_PORT = 17890;
 const CONTROLLER_HOST = '127.0.0.1';
 let CONTROLLER_PORT = 19090;
 const CONTROLLER_SECRET = 'nexora-acc-secret';
-const MIHOMO_VERSION = 'v1.19.28';
+const MIHOMO_VERSION = accelerationCoreConfig.mihomoVersion;
 
 const NO_PROXY_LIST = [
     'localhost',
@@ -66,6 +67,125 @@ function getCoreDir() {
     return path.join(getRootDir(), 'core');
 }
 
+function getBundledCoreDir() {
+    const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+    const relative = path.join('acceleration-core', `${process.platform}-${arch}`);
+    const candidates = [
+        path.join(process.resourcesPath || '', relative),
+        path.join(__dirname, 'build-resources', relative)
+    ];
+    return candidates.find((candidate) => {
+        try {
+            return candidate && fs.existsSync(path.join(candidate, 'core-manifest.json'));
+        } catch (e) {
+            return false;
+        }
+    }) || null;
+}
+
+function fileSha256(file) {
+    return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+}
+
+function copyBundledFileIfNeeded(source, destination, expectedSha256, minSize) {
+    try {
+        if (!fs.existsSync(source)) return false;
+        const sourceStat = fs.statSync(source);
+        if (!sourceStat.isFile() || sourceStat.size < minSize) return false;
+        const sourceHash = expectedSha256 || fileSha256(source);
+        if (expectedSha256 && sourceHash !== expectedSha256) {
+            throw new Error(`内置文件校验失败: ${path.basename(source)}`);
+        }
+        if (fs.existsSync(destination)) {
+            try {
+                const destinationStat = fs.statSync(destination);
+                if (destinationStat.isFile()
+                    && destinationStat.size >= minSize
+                    && fileSha256(destination) === sourceHash) {
+                    return true;
+                }
+            } catch (e) {}
+        }
+        fs.mkdirSync(path.dirname(destination), { recursive: true });
+        const temporary = `${destination}.bundled.tmp`;
+        fs.copyFileSync(source, temporary);
+        fs.renameSync(temporary, destination);
+        return true;
+    } catch (e) {
+        try { fs.rmSync(`${destination}.bundled.tmp`, { force: true }); } catch (ignored) {}
+        console.warn('[Acceleration] bundled core copy failed:', e && e.message);
+        return false;
+    }
+}
+
+/** 安装包随附内核：首次启动复制到可写 userData，联网下载只作为兜底。 */
+function installBundledCore() {
+    ensureDirs();
+    const bundledDir = getBundledCoreDir();
+    if (!bundledDir) return { success: false, bundled: false };
+    try {
+        const manifest = JSON.parse(fs.readFileSync(path.join(bundledDir, 'core-manifest.json'), 'utf8'));
+        const mihomo = manifest.files && manifest.files.mihomo;
+        const wintun = manifest.files && manifest.files.wintun;
+        const geoip = manifest.files && manifest.files.geoip;
+        const geosite = manifest.files && manifest.files.geosite;
+        const coreReady = mihomo && copyBundledFileIfNeeded(
+            path.join(bundledDir, mihomo.name || 'mihomo.exe'),
+            getMihomoPath(),
+            mihomo.sha256,
+            1024 * 1024
+        );
+        const wintunReady = process.platform !== 'win32' || (wintun && copyBundledFileIfNeeded(
+            path.join(bundledDir, wintun.name || 'wintun.dll'),
+            getWintunPath(),
+            wintun.sha256,
+            32 * 1024
+        ));
+        if (wintunReady && process.platform === 'win32') {
+            try { fs.copyFileSync(getWintunPath(), path.join(getRootDir(), 'wintun.dll')); } catch (e) {}
+        }
+        // mihomo -d 工作目录读取 geoip.dat / geosite.dat；内置后无需联网下载
+        if (geoip) {
+            copyBundledFileIfNeeded(
+                path.join(bundledDir, geoip.name || 'geoip.dat'),
+                path.join(getRootDir(), 'geoip.dat'),
+                geoip.sha256,
+                Number(geoip.minSize) || 1024 * 1024
+            );
+        }
+        if (geosite) {
+            copyBundledFileIfNeeded(
+                path.join(bundledDir, geosite.name || 'geosite.dat'),
+                path.join(getRootDir(), 'geosite.dat'),
+                geosite.sha256,
+                Number(geosite.minSize) || 100 * 1024
+            );
+        }
+        return { success: !!coreReady, bundled: true, wintunReady: !!wintunReady };
+    } catch (e) {
+        console.warn('[Acceleration] bundled core manifest invalid:', e && e.message);
+        return { success: false, bundled: true, error: e.message || String(e) };
+    }
+}
+
+function stripYamlTopLevelBlocks(body, dropKeys, blockDropKeys) {
+    let inBlock = false;
+    const lines = String(body || '').split(/\r?\n/).filter((line) => {
+        const trimmed = line.trim();
+        if (dropKeys.some((re) => re.test(trimmed))) return false;
+        if (blockDropKeys.some((re) => re.test(line))) {
+            inBlock = true;
+            return false;
+        }
+        if (inBlock) {
+            if (/^\s+/.test(line) || trimmed === '') return false;
+            inBlock = false;
+        }
+        return true;
+    });
+    return lines.join('\n');
+}
+
 function getStatePath() {
     return path.join(getRootDir(), 'state.json');
 }
@@ -83,6 +203,7 @@ function ensureDirs() {
 function init(electronApp) {
     appRef = electronApp;
     ensureDirs();
+    installBundledCore();
     bootstrapSecondaryAccelerationFromPrimary();
     loadState();
 }
@@ -241,6 +362,8 @@ async function ensureWintun(onProgress) {
     if (process.platform !== 'win32') return { success: true, skipped: true };
     ensureDirs();
     if (isWintunReady()) return { success: true, path: getWintunPath() };
+    installBundledCore();
+    if (isWintunReady()) return { success: true, path: getWintunPath(), bundled: true };
 
     const zipUrl = 'https://www.wintun.net/builds/wintun-0.14.1.zip';
     const mirrors = [
@@ -350,6 +473,8 @@ async function assertTunPrerequisites() {
 async function ensureCore(onProgress) {
     ensureDirs();
     if (isCoreReady()) return { success: true, path: getMihomoPath() };
+    installBundledCore();
+    if (isCoreReady()) return { success: true, path: getMihomoPath(), bundled: true };
 
     const arch = process.arch === 'arm64' ? 'arm64' : 'amd64';
     const zipName = process.platform === 'win32'
@@ -665,7 +790,7 @@ async function fetchSubscription(url, redirects = 0) {
     if (!proxyPort && state.activeProfileId && !state.enabled) {
         try {
             const started = await startTempMihomoCore();
-            if (started && MIXED_PORT > 0) {
+            if (started && started.ok && MIXED_PORT > 0) {
                 proxyPort = MIXED_PORT;
                 startedTempForFetch = true;
             }
@@ -874,8 +999,7 @@ function writeProfileYaml(id, content) {
 
 function buildTempRuntimeYaml(profileContent, tempControllerPort, mixedPort = 0) {
     let body = String(profileContent || '').replace(/^\uFEFF/, '');
-    // 临时测速尽量保留订阅原始 DNS / unified-delay，只改端口与控制器，
-    // 避免我们重写 DNS 导致测速路径和 FlClash 不一致、数字虚高。
+    // 临时测速：不联网拉 Geo，也不走规则匹配；只保留节点，供 /proxies/*/delay 使用。
     const dropKeys = [
         /^mixed-port\s*:/i,
         /^port\s*:/i,
@@ -891,24 +1015,14 @@ function buildTempRuntimeYaml(profileContent, tempControllerPort, mixedPort = 0)
         /^log-level\s*:/i,
         /^ipv6\s*:/i,
         /^unified-delay\s*:/i,
-        /^tcp-concurrent\s*:/i
+        /^tcp-concurrent\s*:/i,
+        /^geodata-mode\s*:/i,
+        /^geo-auto-update\s*:/i,
+        /^geo-update-interval\s*:/i,
+        /^find-process-mode\s*:/i
     ];
-    const blockDropKeys = [/^tun\s*:/i, /^dns\s*:/i];
-    let inBlock = false;
-    const lines = body.split(/\r?\n/).filter((line) => {
-        const trimmed = line.trim();
-        if (dropKeys.some((re) => re.test(trimmed))) return false;
-        if (blockDropKeys.some((re) => re.test(line))) {
-            inBlock = true;
-            return false;
-        }
-        if (inBlock) {
-            if (/^\s+/.test(line) || trimmed === '') return false;
-            else inBlock = false;
-        }
-        return true;
-    });
-    body = lines.join('\n');
+    const blockDropKeys = [/^tun\s*:/i, /^dns\s*:/i, /^geox-url\s*:/i];
+    body = stripYamlTopLevelBlocks(body, dropKeys, blockDropKeys);
 
     const port = Number(mixedPort) > 0 ? Number(mixedPort) : 0;
     const header = [
@@ -916,9 +1030,10 @@ function buildTempRuntimeYaml(profileContent, tempControllerPort, mixedPort = 0)
         'allow-lan: false',
         'ipv6: false',
         'unified-delay: true',
-        // 'tcp-concurrent: true',
-        'mode: rule',
+        'mode: global',
         'log-level: warning',
+        'geodata-mode: true',
+        'geo-auto-update: false',
         `external-controller: 127.0.0.1:${tempControllerPort}`,
         `secret: "${CONTROLLER_SECRET}"`,
         'tun:',
@@ -931,7 +1046,8 @@ function buildTempRuntimeYaml(profileContent, tempControllerPort, mixedPort = 0)
         '  default-nameserver:',
         '    - 223.5.5.5',
         '  nameserver:',
-        '    - https://dns.alidns.com/dns-query',
+        '    - 223.5.5.5',
+        '    - 119.29.29.29',
         ''
     ].join('\n');
     return header + body;
@@ -990,39 +1106,20 @@ function buildRuntimeYaml(profileContent) {
         /^ipv6\s*:/i,
         /^unified-delay\s*:/i,
         /^tcp-concurrent\s*:/i,
-        /^find-process-mode\s*:/i
+        /^find-process-mode\s*:/i,
+        /^geodata-mode\s*:/i,
+        /^geo-auto-update\s*:/i,
+        /^geo-update-interval\s*:/i
     ];
 
     // 需要整块剔除的顶层 YAML 节点（包含其所有缩进子行）
     const blockDropKeys = [/^tun\s*:/i, /^geox-url\s*:/i, /^dns\s*:/i];
-
-    let inBlock = false;
-    const lines = body.split(/\r?\n/).filter((line) => {
-        const trimmed = line.trim();
-        if (dropKeys.some((re) => re.test(trimmed))) return false;
-
-        // 检测是否进入需要整块删除的 YAML 节点
-        if (blockDropKeys.some((re) => re.test(line))) {
-            inBlock = true;
-            return false;
-        }
-        if (inBlock) {
-            // 缩进行或空行都属于该块的子行
-            if (/^\s+/.test(line) || trimmed === '') {
-                return false;
-            } else {
-                // 遇到新的非缩进行，退出块模式
-                inBlock = false;
-            }
-        }
-        return true;
-    });
-    body = lines.join('\n');
+    body = stripYamlTopLevelBlocks(body, dropKeys, blockDropKeys);
     body = forceSoftSwitchInProxyGroups(body);
 
     const mode = ['rule', 'global', 'direct'].includes(state.mode) ? state.mode : 'rule';
     // 性能相关：tcp-concurrent / unified-delay 显著降低“延迟低但网页慢”
-    // DNS 优先国内 UDP，避免 DoH/国外 fallback 首包卡住
+    // Geo 使用安装包内置的本地 dat，禁止启动时联网下载（云电脑常卡死）
     const header = [
         `mixed-port: ${MIXED_PORT}`,
         'allow-lan: false',
@@ -1035,10 +1132,8 @@ function buildRuntimeYaml(profileContent) {
         'unified-delay: true',
         // 'tcp-concurrent: true',
         'find-process-mode: off',
-        'geox-url:',
-        '  geoip: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"',
-        '  geosite: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"',
-        '  mmdb: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"',
+        'geodata-mode: true',
+        'geo-auto-update: false',
         'tun:',
         `  enable: ${state.virtualNic ? 'true' : 'false'}`,
         '  stack: mixed',
@@ -1801,7 +1896,9 @@ async function delayTestSingle(name, timeoutMs) {
 async function startTempMihomoCore() {
     try {
         const id = state.activeProfileId;
-        if (!id) return false;
+        if (!id) {
+            return { ok: false, error: '请先在「配置」页选择一份加速订阅' };
+        }
 
         if (tempMihomoProc && !tempMihomoProc.killed) {
             // 仅复用「同一配置」的临时内核；换订阅必须重建，否则代理页会混进旧节点
@@ -1817,7 +1914,7 @@ async function startTempMihomoCore() {
             if (!stale) {
                 try {
                     await controllerRequest('GET', '/version');
-                    return true;
+                    return { ok: true };
                 } catch (e) {
                     await stopTempMihomoCore();
                 }
@@ -1827,10 +1924,18 @@ async function startTempMihomoCore() {
         }
 
         const content = getProfileContent(id);
-        if (!content) return false;
+        if (!content) {
+            return { ok: false, error: '当前订阅配置文件缺失，请到「配置」页重新导入' };
+        }
 
         const ensured = await ensureCore();
-        if (!ensured.success) return false;
+        if (!ensured.success) {
+            return { ok: false, error: ensured.error || '代理内核不可用（内置复制或下载失败）' };
+        }
+        const runnable = assertCoreRunnable();
+        if (!runnable.ok) {
+            return { ok: false, error: runnable.error || '代理内核不可用' };
+        }
 
         // 临时测速内核，使用动态生成的端口避让
         MIXED_PORT = await getNextAvailablePort(17890);
@@ -1839,12 +1944,27 @@ async function startTempMihomoCore() {
         const runtimeYaml = buildTempRuntimeYaml(content, CONTROLLER_PORT, MIXED_PORT);
         fs.writeFileSync(getRuntimeConfigPath(), runtimeYaml, 'utf8');
 
+        let bootLog = '';
+        const appendBootLog = (buf) => {
+            try {
+                bootLog += Buffer.from(buf).toString('utf8');
+                if (bootLog.length > 8000) bootLog = bootLog.slice(-8000);
+            } catch (e) {}
+        };
+
         tempMihomoProc = spawn(getMihomoPath(), ['-d', getRootDir(), '-f', getRuntimeConfigPath()], {
             cwd: getRootDir(),
             windowsHide: true,
             stdio: ['ignore', 'pipe', 'pipe']
         });
         tempCoreProfileId = id;
+        if (tempMihomoProc.stdout) tempMihomoProc.stdout.on('data', appendBootLog);
+        if (tempMihomoProc.stderr) tempMihomoProc.stderr.on('data', appendBootLog);
+        tempMihomoProc.on('error', (err) => {
+            appendBootLog(String((err && err.message) || err));
+            tempMihomoProc = null;
+            tempCoreProfileId = null;
+        });
         tempMihomoProc.on('exit', () => {
             tempMihomoProc = null;
             tempCoreProfileId = null;
@@ -1852,22 +1972,30 @@ async function startTempMihomoCore() {
 
         const ready = await waitControllerReady(15000);
         if (!ready) {
+            const hint = bootLog.trim()
+                ? bootLog.trim().replace(/\s+/g, ' ').slice(0, 180)
+                : '';
             await stopTempMihomoCore();
-            return false;
+            return {
+                ok: false,
+                error: hint
+                    ? `测速内核启动失败：${hint}`
+                    : '测速内核启动超时（可能被杀毒软件拦截 mihomo.exe，请放行后重试）'
+            };
         }
         // 临时内核刚起来时代理列表可能尚未完全就绪，稍等再测
         for (let i = 0; i < 8; i++) {
             const proxies = await getProxiesFromController();
             if (proxies && Object.keys(proxies).length > 5) {
                 await new Promise((r) => setTimeout(r, 200));
-                return true;
+                return { ok: true };
             }
             await new Promise((r) => setTimeout(r, 200));
         }
-        return true;
+        return { ok: true };
     } catch (e) {
         console.error('[TempCore] start failed:', e);
-        return false;
+        return { ok: false, error: e.message || String(e) };
     }
 }
 
@@ -1959,8 +2087,8 @@ async function delayTest(names, options = {}) {
     let usedTempCore = false;
     if (!state.enabled) {
         const started = await startTempMihomoCore();
-        if (!started) {
-            throw new Error('未选择可用配置或启动测速内核失败');
+        if (!started || !started.ok) {
+            throw new Error((started && started.error) || '测速内核启动失败');
         }
         usedTempCore = true;
     }

@@ -32,7 +32,7 @@
     "probe": "openclaw mcp probe",
     "logs": "type logs\\openclaw-%date%.log",
     "app:start": "electron .",
-    "preapp:dist": "node scripts/pack-gateway-runtime.js && node patch_nsis.js",
+    "preapp:dist": "node scripts/pack-gateway-runtime.js && node scripts/prepare-acceleration-core.js && node patch_nsis.js",
     "app:dist": "electron-builder --windows nsis",
     "app:pack": "electron-packager . \"Nexora Agent\" --platform=win32 --arch=x64 --out=dist --overwrite",
     "pack:runtime": "node scripts/pack-gateway-runtime.js"
@@ -98,6 +98,10 @@
       {
         "from": "build-resources/gateway-runtime.zip",
         "to": "gateway-runtime.zip"
+      },
+      {
+        "from": "build-resources/acceleration-core",
+        "to": "acceleration-core"
       }
     ],
     "files": [
@@ -123,6 +127,7 @@
       "index.html",
       "index.css",
       "splash.html",
+      "config/acceleration-core.json",
       "config/openclaw.json.example",
       "config/openclaw-templates/**/*",
       "config/icon.jpg",

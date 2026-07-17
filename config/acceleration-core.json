@@ -1,0 +1,8 @@
+{
+  "mihomoVersion": "v1.19.28",
+  "wintunVersion": "0.14.1",
+  "geodata": {
+    "geoip": "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat",
+    "geosite": "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
+  }
+}
