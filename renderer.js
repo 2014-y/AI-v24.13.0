@@ -1253,6 +1253,7 @@ async function init() {
     // 监听主进程的消息推送
     setupIpcListeners();
     initAccelerationChannel();
+    applyAppInstanceBadge();
 
     // 初始化更新模块
     setupUpdateModal();
@@ -8762,6 +8763,7 @@ function setupUpdateModal() {
 
 let accelerationState = null;
 let accelerationBusy = false;
+let accelerationBusyMessage = '';
 let accelerationUi = {
     panel: 'profiles',
     importMode: 'url',
@@ -8775,14 +8777,290 @@ let expandedGroups = new Set();
 let connPollInterval = null;
 let connSearchText = '';
 
+function isAccelerationDelayBusyMessage(message) {
+    return /测速|延迟/.test(String(message || ''));
+}
+
+let proxiesAutoDelayDoneIds = new Set();
+let accelerationDelayUiActive = false;
+let accelerationDelayDoneNames = new Set();
+let accelerationDelayTotal = 0;
+let accelerationDelayFinished = 0;
+let accelerationIpDetectInFlight = false;
+let lastAccelerationIpDetectAt = 0;
+let accelerationIpDetectStartedAt = 0;
+
+function paintAccelerationProxyNowDelay(latency, testing) {
+    const box = document.getElementById('acc-proxy-now-delay');
+    if (!box) return;
+    const strong = box.querySelector('strong');
+    if (!strong) return;
+    strong.classList.remove('latency-good', 'latency-medium', 'latency-bad', 'latency-none', 'latency-testing');
+    if (testing) {
+        strong.innerHTML = '<span class="acc-node-delay-spinner" aria-hidden="true"></span>';
+        strong.classList.add('latency-testing');
+        return;
+    }
+    if (typeof latency === 'number' && latency > 0) {
+        strong.textContent = `${latency} ms`;
+        strong.classList.add(getAccelerationLatencyClass(latency));
+    } else if (latency === 0) {
+        strong.textContent = '超时';
+        strong.classList.add('latency-bad');
+    } else {
+        strong.textContent = '未测';
+        strong.classList.add('latency-none');
+    }
+}
+
+function beginAccelerationDelayUi(message) {
+    accelerationDelayUiActive = true;
+    accelerationDelayDoneNames = new Set();
+    accelerationDelayTotal = 0;
+    accelerationDelayFinished = 0;
+    const nodes = ((accelerationState && accelerationState.nodes) || []).filter((n) => n && !isAccelerationInfoNode(n));
+    accelerationDelayTotal = nodes.length;
+    nodes.forEach((n) => paintAccelerationNodeLatency(n.name, null, true));
+    if (accelerationState && accelerationState.selectedProxy) {
+        paintAccelerationProxyNowDelay(null, true);
+    }
+}
+
+function endAccelerationDelayUi() {
+    accelerationDelayUiActive = false;
+    accelerationDelayDoneNames = new Set();
+    accelerationDelayTotal = 0;
+    accelerationDelayFinished = 0;
+    document.querySelectorAll('.acc-node-card.is-delay-testing').forEach((card) => {
+        card.classList.remove('is-delay-testing');
+    });
+    const progressEl = document.getElementById('acc-delay-progress');
+    if (progressEl) {
+        progressEl.hidden = true;
+        progressEl.textContent = '';
+    }
+}
+
+function updateAccelerationBusyUi() {
+    const busy = accelerationBusy;
+    const msg = accelerationBusyMessage || '处理中...';
+    const isDelay = busy && isAccelerationDelayBusyMessage(msg);
+
+    const delayBtn = document.getElementById('acc-delay-btn');
+    if (delayBtn) {
+        delayBtn.disabled = busy;
+        delayBtn.classList.toggle('is-loading', isDelay);
+        delayBtn.setAttribute('aria-busy', isDelay ? 'true' : 'false');
+        delayBtn.textContent = '延迟测试';
+    }
+
+    const progressEl = document.getElementById('acc-delay-progress');
+    if (progressEl) {
+        if (isDelay) {
+            const progress = accelerationDelayTotal > 0
+                ? `测速中 ${accelerationDelayFinished}/${accelerationDelayTotal}`
+                : '测速中…';
+            progressEl.hidden = false;
+            progressEl.innerHTML = `<span class="acc-btn-spinner" aria-hidden="true"></span>${escapeHtml(progress)}`;
+        } else {
+            progressEl.hidden = true;
+            progressEl.textContent = '';
+        }
+    }
+
+    const grid = document.getElementById('acc-node-grid');
+    if (grid) grid.classList.toggle('is-testing', isDelay);
+
+    const overlay = document.getElementById('acc-delay-overlay');
+    if (overlay) {
+        // 测速用卡片右侧转圈，不再盖整层遮罩（否则看不清单节点 loading）
+        overlay.hidden = true;
+    }
+
+    if (isDelay) {
+        if (!accelerationDelayUiActive) beginAccelerationDelayUi(msg);
+    } else if (accelerationDelayUiActive) {
+        endAccelerationDelayUi();
+    }
+}
+
 function setAccelerationBusy(busy, message) {
     accelerationBusy = !!busy;
-    const pill = document.getElementById('acc-status-pill');
-    if (pill && message) pill.textContent = message;
+    accelerationBusyMessage = busy ? String(message || '处理中...') : '';
+    updateAccelerationBusyUi();
+}
+
+function getAccelerationIpDetectResultText() {
+    const dash = document.getElementById('acc-dash-ip-detect-result');
+    const ctrl = document.getElementById('acc-ip-detect-result');
+    return String((dash && dash.textContent) || (ctrl && ctrl.textContent) || '').trim();
+}
+
+function shouldAutoAccelerationIpDetect() {
+    if (accelerationIpDetectInFlight) {
+        // 卡住超过 35s 允许重试（后端最多约 3×10s）
+        return Date.now() - accelerationIpDetectStartedAt > 35000;
+    }
+    const text = getAccelerationIpDetectResultText();
+    // 已成功检出 IP（含国旗）则不再自动刷
+    if (/\d{1,3}(?:\.\d{1,3}){3}/.test(text)) return false;
+    return /未检测|未启用|检测失败|检测超时|检测中|检测不可用|点击检测|正在检测|代理未就绪|连接被重置|DNS 失败|本机/i.test(text) || !text;
+}
+
+function maybeAutoAccelerationIpDetect(options = {}) {
+    if (!shouldAutoAccelerationIpDetect()) return null;
+    // 卡住时强制重入
+    if (accelerationIpDetectInFlight && Date.now() - accelerationIpDetectStartedAt > 35000) {
+        accelerationIpDetectInFlight = false;
+    }
+    return runAccelerationIpDetect({ force: !!options.force, reason: options.reason || 'auto' });
+}
+
+async function runAccelerationIpDetect(options = {}) {
+    const { force = false } = options;
+    if (accelerationIpDetectInFlight) return null;
+    if (!force && Date.now() - lastAccelerationIpDetectAt < 8000) return null;
+
+    const resultEl = document.getElementById('acc-ip-detect-result');
+    const dashResultEl = document.getElementById('acc-dash-ip-detect-result');
+    const ipDetectBtn = document.getElementById('acc-ip-detect-btn');
+    const dashIpDetectBtn = document.getElementById('acc-dash-ip-detect-btn');
+    const countryCodeToFlag = (cc) => {
+        if (!cc || cc.length !== 2) return '🌐';
+        const upper = cc.toUpperCase();
+        return String.fromCodePoint(...[...upper].map((c) => 0x1F1E6 + c.charCodeAt(0) - 65));
+    };
+    const shortenIpDetectError = (raw) => {
+        const s = String(raw || '').trim();
+        if (!s) return '检测失败';
+        if (/ECONNREFUSED/i.test(s)) return '代理未就绪';
+        if (/ETIMEDOUT|ESOCKETTIMEDOUT|timeout|超时/i.test(s)) return '检测超时';
+        if (/ECONNRESET/i.test(s)) return '连接被重置';
+        if (/ENOTFOUND|getaddrinfo/i.test(s)) return 'DNS 失败';
+        if (s.length > 22) return '检测失败';
+        return s;
+    };
+    const paint = (text, color, title) => {
+        [resultEl, dashResultEl].forEach((el) => {
+            if (!el) return;
+            el.textContent = text;
+            el.style.color = color || '';
+            el.title = title || text;
+        });
+    };
+
+    if (!window.api || !window.api.detectAccelerationIp) {
+        paint('检测不可用', '#ef4444', '');
+        return null;
+    }
+
+    const viaProxy = !!(accelerationState && accelerationState.enabled);
+    accelerationIpDetectInFlight = true;
+    accelerationIpDetectStartedAt = Date.now();
+    paint('检测中...', '', viaProxy ? '正在检测代理出口 IP' : '正在检测本机公网出口');
+    if (ipDetectBtn) ipDetectBtn.disabled = true;
+    if (dashIpDetectBtn) dashIpDetectBtn.disabled = true;
+    try {
+        const data = await Promise.race([
+            window.api.detectAccelerationIp(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('检测超时')), 22000))
+        ]);
+        lastAccelerationIpDetectAt = Date.now();
+        if (data && data.success && data.ip) {
+            const flag = countryCodeToFlag(data.countryCode);
+            const isDirect = data.via === 'direct' || !viaProxy;
+            const formatted = `${flag} ${data.ip}`;
+            const tooltip = [
+                isDirect ? '本机直连出口' : '代理出口',
+                data.country,
+                data.region,
+                data.city,
+                data.isp,
+                data.selectedProxy
+            ].filter(Boolean).join(' · ');
+            paint(formatted, isDirect ? 'var(--text-primary)' : 'var(--success-color, #22c55e)', tooltip);
+            return data;
+        }
+        {
+            const rawErr = (data && data.error) || '检测失败';
+            paint(shortenIpDetectError(rawErr), '#ef4444', rawErr);
+        }
+        return data;
+    } catch (e) {
+        lastAccelerationIpDetectAt = Date.now();
+        const rawErr = e.message || '检测超时';
+        paint(shortenIpDetectError(rawErr), '#ef4444', rawErr);
+        return null;
+    } finally {
+        accelerationIpDetectInFlight = false;
+        if (ipDetectBtn) ipDetectBtn.disabled = false;
+        if (dashIpDetectBtn) dashIpDetectBtn.disabled = false;
+    }
+}
+
+function hasAccelerationTestableNodes(data) {
+    const nodes = (data && data.nodes) || (accelerationState && accelerationState.nodes) || [];
+    return nodes.some((n) => n && !isAccelerationInfoNode(n));
+}
+
+async function runAccelerationDelayTest(options = {}) {
+    if (accelerationBusy) return null;
+    if (!window.api || !window.api.delayTestAcceleration) return null;
+    if (!options.force && !hasAccelerationTestableNodes()) return null;
+
+    const wasEnabled = !!(accelerationState && accelerationState.enabled);
+    const successText = options.silent
+        ? null
+        : (wasEnabled
+            ? '延迟测试完成'
+            : '延迟测试完成（临时测速，空闲后自动关闭内核）');
+    const pid = accelerationState && accelerationState.activeProfileId;
+    if (pid) proxiesAutoDelayDoneIds.add(pid);
+    const res = await handleAccelerationResult(
+        window.api.delayTestAcceleration(),
+        successText,
+        {
+            busyMessage: wasEnabled ? '正在测速节点延迟…' : '正在启动临时内核并测速…'
+        }
+    );
+    // 自动选择：只在当前地区标签里挑最低延迟
+    if (res && res.success && res.enabled && !res.temporaryTest) {
+        await applyAccelerationAutoSelect({
+            nodes: res.nodes,
+            silent: !!options.silent,
+            notifyKeep: !!options.fromAuto
+        });
+    }
+    // 手动测速结束后，按缓存间隔重新排队，避免倒计时残留旧秒数
+    if (!options.fromAuto && isAccelerationAutoSelectEnabled()) {
+        setupAutoSelectTimer();
+    }
+    return res;
+}
+
+function maybeAutoDelayOnProxiesTab() {
+    if (accelerationBusy) return;
+    if (!hasAccelerationTestableNodes()) return;
+    const pid = accelerationState && accelerationState.activeProfileId;
+    if (!pid) return;
+    // 每个配置在代理页只自动测一次，来回切菜单不再重复
+    if (proxiesAutoDelayDoneIds.has(pid)) return;
+    proxiesAutoDelayDoneIds.add(pid);
+    runAccelerationDelayTest({ silent: false }).catch(() => {});
+}
+
+/** 换了配置：允许并立刻自动测速一次（与切菜单无关） */
+async function onAccelerationProfileSwitched(res) {
+    if (!res || !res.success) return;
+    const pid = res.activeProfileId;
+    if (pid) proxiesAutoDelayDoneIds.delete(pid);
+    if (!hasAccelerationTestableNodes(res) && !hasAccelerationTestableNodes()) return;
+    await runAccelerationDelayTest({ force: true });
 }
 
 function setAccelerationPanel(panel) {
-    accelerationUi.panel = panel || 'profiles';
+    const prev = accelerationUi.panel;
+    accelerationUi.panel = panel || 'dashboard';
     document.querySelectorAll('.acc-subtab[data-acc-panel]').forEach((btn) => {
         btn.classList.toggle('active', btn.getAttribute('data-acc-panel') === accelerationUi.panel);
     });
@@ -8792,10 +9070,21 @@ function setAccelerationPanel(panel) {
         el.hidden = !match;
     });
 
-    if (accelerationUi.panel === 'connections') {
+    if (accelerationUi.panel === 'connections' || accelerationUi.panel === 'dashboard') {
         startConnectionPolling();
+        if (accelerationUi.panel === 'dashboard') {
+            requestAnimationFrame(() => drawDashboardSpeedChart(0, 0));
+            // 已启用且尚未检出 IP 时，进仪表盘自动检测
+            maybeAutoAccelerationIpDetect({ reason: 'dashboard' });
+        }
     } else {
         stopConnectionPolling();
+    }
+
+    if (accelerationUi.panel === 'proxies' && prev !== 'proxies') {
+        maybeAutoDelayOnProxiesTab();
+        // 进入代理页再刷一次间隔下拉，修复「显示≠缓存、点一下才一致」
+        syncAccelerationAutoSelectIntervalSelect();
     }
 }
 
@@ -8865,6 +9154,24 @@ function renderConnections(data) {
     if (countEl) {
         countEl.textContent = `活跃连接: ${list.length} 个 · 实时上传: ${formatSpeed(upSpeed)} · 实时下载: ${formatSpeed(downSpeed)}`;
     }
+
+    // 仪表盘网速文本更新
+    const dashSpeedEl = document.getElementById('acc-dash-speed-text');
+    if (dashSpeedEl) {
+        dashSpeedEl.innerHTML = `<span class="speed-up">↑ ${formatSpeed(upSpeed)}</span><span class="speed-down">↓ ${formatSpeed(downSpeed)}</span>`;
+    }
+
+    // 仪表盘累计流量更新
+    const dashUploadEl = document.getElementById('acc-dash-upload-total');
+    const dashDownloadEl = document.getElementById('acc-dash-download-total');
+    if (dashUploadEl) dashUploadEl.textContent = `↑ ${formatBytes(data.uploadTotal || 0)}`;
+    if (dashDownloadEl) dashDownloadEl.textContent = `↓ ${formatBytes(data.downloadTotal || 0)}`;
+
+    // 仪表盘 Canvas 网速波动折线图重绘
+    drawDashboardSpeedChart(upSpeed, downSpeed);
+
+    // 仪表盘 Canvas 流量占比环形图重绘
+    drawDashboardTrafficRing(data.uploadTotal || 0, data.downloadTotal || 0);
 
     if (!tbody) return;
     
@@ -8960,6 +9267,34 @@ function setAccelerationImportMode(mode) {
     }
 }
 
+function isAccelerationInfoNode(node) {
+    const name = String((node && node.name) || '');
+    const type = String((node && node.type) || '').toLowerCase();
+    if (/剩余|流量|到期|重置|过期|套餐|expire|traffic|reset/i.test(name)) return true;
+    if (/^reject/i.test(name) || type === 'reject' || type === 'rejectdrop') return true;
+    if (type === 'direct' || name === 'DIRECT' || name === 'REJECT' || name === 'REJECT-DROP') return true;
+    return false;
+}
+
+/** 延迟颜色：有测速结果即绿/黄；只有超时/失败才红 */
+function getAccelerationLatencyClass(latency) {
+    if (typeof latency !== 'number') return 'latency-none';
+    if (latency <= 0) return 'latency-bad';
+    if (latency < 600) return 'latency-good';
+    return 'latency-medium';
+}
+
+function parseAccelerationInfoNode(name) {
+    const raw = String(name || '').trim();
+    const m = raw.match(/^(.+?)\s*[：:]\s*(.+)$/);
+    if (m) {
+        return { label: m[1].trim(), value: m[2].trim() };
+    }
+    if (/^reject/i.test(raw)) return { label: '拦截规则', value: raw };
+    if (/^direct$/i.test(raw)) return { label: '直连', value: raw };
+    return { label: '订阅信息', value: raw };
+}
+
 function getFilteredAccelerationNodes(data) {
     const nodes = Array.isArray(data && data.nodes) ? data.nodes.slice() : [];
     const search = String(accelerationUi.search || '').trim().toLowerCase();
@@ -8972,18 +9307,11 @@ function getFilteredAccelerationNodes(data) {
         if (!search) return true;
         return name.includes(search) || type.includes(search) || flag.includes(search);
     });
-    if (accelerationUi.countryFilter && accelerationUi.countryFilter !== 'all') {
-        if (accelerationUi.countryFilter === 'other') {
-            const knownCountries = ['hk', 'tw', 'jp', 'sg', 'us', 'kr', 'gb', 'de', 'fr', 'ca', 'au', 'ru', 'tr', 'my', 'th', 'vn', 'ph', 'in', 'ar', 'br', 'nl'];
-            list = list.filter(n => !knownCountries.includes(n.flag));
-        } else {
-            list = list.filter(n => n.flag === accelerationUi.countryFilter);
-        }
-    }
+    list = filterAccelerationNodesByCountry(list, accelerationUi.countryFilter);
     if (accelerationUi.sort === 'latency') {
         list.sort((a, b) => {
-            const la = typeof a.latency === 'number' ? a.latency : Number.MAX_SAFE_INTEGER;
-            const lb = typeof b.latency === 'number' ? b.latency : Number.MAX_SAFE_INTEGER;
+            const la = (typeof a.latency === 'number' && a.latency > 0) ? a.latency : Number.MAX_SAFE_INTEGER;
+            const lb = (typeof b.latency === 'number' && b.latency > 0) ? b.latency : Number.MAX_SAFE_INTEGER;
             return la - lb;
         });
     } else if (accelerationUi.sort === 'name') {
@@ -8992,12 +9320,163 @@ function getFilteredAccelerationNodes(data) {
     return list;
 }
 
+const ACC_KNOWN_COUNTRY_FLAGS = ['hk', 'tw', 'jp', 'sg', 'us', 'kr', 'gb', 'de', 'fr', 'ca', 'au', 'ru', 'tr', 'my', 'th', 'vn', 'ph', 'in', 'ar', 'br', 'nl'];
+
+function isAccelerationAutoSelectEnabled() {
+    return localStorage.getItem('acc_auto_select_enabled') === 'true';
+}
+
+function accelerationCountryFilterLabel(filter) {
+    const map = {
+        all: '全部',
+        hk: '香港',
+        jp: '日本',
+        sg: '新加坡',
+        us: '美国',
+        tw: '台湾',
+        other: '其他'
+    };
+    const key = filter || 'all';
+    return map[key] || key;
+}
+
+function filterAccelerationNodesByCountry(nodes, countryFilter) {
+    const filter = countryFilter || 'all';
+    const list = (nodes || []).filter((n) => n && !isAccelerationInfoNode(n));
+    if (!filter || filter === 'all') return list;
+    if (filter === 'other') {
+        return list.filter((n) => !ACC_KNOWN_COUNTRY_FLAGS.includes(String(n.flag || '').toLowerCase()));
+    }
+    const want = String(filter).toLowerCase();
+    return list.filter((n) => String(n.flag || '').toLowerCase() === want);
+}
+
+/** 在当前地区标签范围内选延迟最低的可用节点 */
+function pickLowestLatencyNodeInCountryFilter(nodes, countryFilter) {
+    const list = filterAccelerationNodesByCountry(nodes, countryFilter)
+        .filter((n) => typeof n.latency === 'number' && n.latency > 0);
+    if (!list.length) return null;
+    list.sort((a, b) => a.latency - b.latency);
+    return list[0];
+}
+
+async function applyAccelerationAutoSelect(options = {}) {
+    const { silent = false, nodes = null, notifyKeep = false } = options;
+    if (!isAccelerationAutoSelectEnabled()) return null;
+    if (!(accelerationState && accelerationState.enabled)) return null;
+    if (!window.api || !window.api.selectAccelerationProxy) return null;
+
+    const pool = nodes || (accelerationState && accelerationState.nodes) || [];
+    const filter = accelerationUi.countryFilter || 'all';
+    const best = pickLowestLatencyNodeInCountryFilter(pool, filter);
+    const tag = accelerationCountryFilterLabel(filter);
+    if (!best) {
+        if (!silent) showToast(`「${tag}」标签下暂无可用延迟，无法自动选择`);
+        return null;
+    }
+    if (accelerationState.selectedProxy === best.name) {
+        if (notifyKeep || !silent) {
+            showToast(`自动测速完成 · 已是最低延迟 [${best.latency}ms]`);
+        }
+        return null;
+    }
+    // 迟滞：差距太小不切换，减少来回跳导致的短暂卡顿
+    const current = pool.find((n) => n && n.name === accelerationState.selectedProxy);
+    if (current && typeof current.latency === 'number' && current.latency > 0
+        && typeof best.latency === 'number' && best.latency > 0
+        && (current.latency - best.latency) < 40) {
+        if (notifyKeep) {
+            showToast(`自动测速完成 · 保持当前节点（差距 < 40ms）`);
+        }
+        return null;
+    }
+    const selectRes = await window.api.selectAccelerationProxy({ name: best.name, group: 'GLOBAL' });
+    if (selectRes && selectRes.success) {
+        accelerationState = selectRes;
+        renderAccelerationChannel(selectRes);
+        showToast(`已自动切换「${tag}」最低延迟 → ${best.name} [${best.latency}ms]`);
+        return selectRes;
+    }
+    if (!silent) showToast('自动选择失败: ' + ((selectRes && selectRes.error) || '未知错误'));
+    return null;
+}
+
 function sourceLabel(profile) {
     if (!profile) return '';
     if (profile.url) return 'URL 订阅';
     if (profile.source === 'file') return '本地文件';
     if (profile.source === 'qr') return '二维码导入';
     return '手动导入';
+}
+
+function formatTrafficBytes(bytes) {
+    const n = Number(bytes);
+    if (!Number.isFinite(n) || n < 0) return '--';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let v = n;
+    let i = 0;
+    while (v >= 1024 && i < units.length - 1) {
+        v /= 1024;
+        i += 1;
+    }
+    const digits = i >= 3 ? 2 : (i >= 2 ? 1 : 0);
+    return `${v.toFixed(digits)} ${units[i]}`;
+}
+
+function formatExpireDate(expireSec) {
+    const sec = Number(expireSec);
+    if (!Number.isFinite(sec) || sec <= 0) return '';
+    const d = new Date(sec * 1000);
+    if (Number.isNaN(d.getTime())) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+function buildProfileTrafficHtml(profile) {
+    const info = profile && profile.userInfo;
+    if (!info) {
+        return `<div class="acc-profile-traffic acc-profile-traffic-empty"><span class="acc-muted">暂无流量信息，点击「更新订阅」获取</span></div>`;
+    }
+
+    const total = Number(info.total) || 0;
+    const used = Number(info.used != null ? info.used : ((info.upload || 0) + (info.download || 0))) || 0;
+    let remain = info.remain != null ? Number(info.remain) : (total > 0 ? Math.max(0, total - used) : null);
+    let percent = 0;
+    if (total > 0) {
+        percent = Math.max(0, Math.min(100, (used / total) * 100));
+        if (remain == null) remain = Math.max(0, total - used);
+    }
+
+    const expireText = formatExpireDate(info.expire);
+    const resetText = (info.resetDays != null && Number.isFinite(Number(info.resetDays)))
+        ? `${info.resetDays} 天后重置`
+        : '';
+
+    const remainText = remain != null ? formatTrafficBytes(remain) : '--';
+    const usedText = total > 0
+        ? `${formatTrafficBytes(used)} / ${formatTrafficBytes(total)}`
+        : (remain != null ? '总额待更新' : '--');
+    const barClass = percent >= 90 ? 'danger' : (percent >= 70 ? 'warn' : 'ok');
+    const barWidth = total > 0 ? percent.toFixed(1) : '0';
+
+    return `
+        <div class="acc-profile-traffic">
+            <div class="acc-profile-traffic-top">
+                <span class="acc-profile-traffic-remain">剩余 ${escapeHtml(remainText)}</span>
+                <span class="acc-profile-traffic-used">${escapeHtml(usedText)}</span>
+            </div>
+            <div class="acc-profile-progress" title="${total > 0 ? `已用 ${percent.toFixed(1)}%` : '正在读取订阅用量，或点击「更新订阅」'}">
+                <div class="acc-profile-progress-bar ${barClass}" style="width: ${barWidth}%"></div>
+            </div>
+            <div class="acc-profile-traffic-meta">
+                ${expireText ? `<span>到期 ${escapeHtml(expireText)}</span>` : ''}
+                ${resetText ? `<span>${escapeHtml(resetText)}</span>` : ''}
+                ${!expireText && !resetText ? '<span class="acc-muted">订阅流量</span>' : ''}
+            </div>
+        </div>
+    `;
 }
 
 async function refreshAccelerationChannel() {
@@ -9028,6 +9507,53 @@ function renderAccelerationChannel(data) {
     if (systemProxyToggle) systemProxyToggle.checked = !!data.systemProxy;
     if (tunToggle) tunToggle.checked = !!data.virtualNic;
 
+    // 仪表盘开关同步
+    const dashEnabledToggle = document.getElementById('acc-dash-enabled-toggle');
+    const dashSystemProxyToggle = document.getElementById('acc-dash-system-proxy-toggle');
+    const dashTunToggle = document.getElementById('acc-dash-tun-toggle');
+    if (dashEnabledToggle) dashEnabledToggle.checked = enabled;
+    if (dashSystemProxyToggle) dashSystemProxyToggle.checked = !!data.systemProxy;
+    if (dashTunToggle) dashTunToggle.checked = !!data.virtualNic;
+
+    // 仪表盘出站模式同步
+    const mode = data.mode || 'rule';
+    document.querySelectorAll('.acc-dash-mode-btn').forEach((btn) => {
+        btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
+    });
+    const modeHintText = mode === 'global'
+        ? '全部流量走代理'
+        : mode === 'direct'
+            ? '全部直连不代理'
+            : '按规则分流';
+    const modeHint = document.getElementById('acc-dash-mode-hint');
+    if (modeHint) modeHint.textContent = modeHintText;
+    const controlsModeHint = document.getElementById('acc-controls-mode-hint');
+    if (controlsModeHint) {
+        controlsModeHint.textContent = mode === 'global'
+            ? '全局模式：所有流量都走当前节点，适合临时需要全代理的场景。'
+            : mode === 'direct'
+                ? '直连模式：不走代理，相当于临时关闭加速分流。'
+                : '日常上网推荐「规则」：国内直连、境外走节点。';
+    }
+
+    // 仪表盘内存同步
+    const dashMemEl = document.getElementById('acc-dash-memory-val');
+    if (dashMemEl) {
+        dashMemEl.textContent = getClashMemoryMock();
+    }
+
+    const dashRunStatus = document.getElementById('acc-dash-run-status');
+    if (dashRunStatus) {
+        if (dashRunStatus.parentElement) {
+            dashRunStatus.parentElement.classList.toggle('enabled', enabled);
+        }
+        if (!enabled) dashRunStatus.textContent = '未启用';
+        else if (data.virtualNic && data.systemProxy) dashRunStatus.textContent = 'TUN + 系统代理';
+        else if (data.virtualNic) dashRunStatus.textContent = 'TUN 已开启';
+        else if (data.systemProxy) dashRunStatus.textContent = '系统代理已开';
+        else dashRunStatus.textContent = '内核运行中';
+    }
+
     const desc = document.getElementById('acc-enabled-desc');
     if (desc) {
         if (enabled && data && data.mixedPort) {
@@ -9043,17 +9569,48 @@ function renderAccelerationChannel(data) {
         pill.classList.toggle('enabled', enabled);
     }
     const mixed = document.getElementById('acc-mixed-port');
-    if (mixed) mixed.textContent = data.mixedPort ? `127.0.0.1:${data.mixedPort}` : '--';
+    const dashMixed = document.getElementById('acc-dash-mixed-port');
+    const mixedText = data.mixedPort ? `127.0.0.1:${data.mixedPort}` : '--';
+    if (mixed) mixed.textContent = mixedText;
+    if (dashMixed) dashMixed.textContent = mixedText;
+
     const controller = document.getElementById('acc-controller');
-    if (controller) controller.textContent = data.controller || '--';
+    const dashController = document.getElementById('acc-dash-controller');
+    const controllerText = data.controller || '--';
+    if (controller) controller.textContent = controllerText;
+    if (dashController) dashController.textContent = controllerText;
+
     const current = document.getElementById('acc-current-proxy');
-    if (current) {
+    const dashCurrent = document.getElementById('acc-dash-current-proxy');
+    const dashDelay = document.getElementById('acc-dash-current-delay');
+    let matchedSelectedNode = null;
+    if (current || dashCurrent || dashDelay) {
         if (data.selectedProxy) {
-            const matchedNode = (data.nodes || []).find(n => n.name === data.selectedProxy);
-            const flagHtml = matchedNode ? renderFlag(matchedNode.flag) : '🌐';
-            current.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px;">${flagHtml} <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(data.selectedProxy)}</span></span>`;
+            matchedSelectedNode = (data.nodes || []).find(n => n.name === data.selectedProxy);
+            const flagHtml = matchedSelectedNode ? renderFlag(matchedSelectedNode.flag) : '🌐';
+            const htmlContent = `<span style="display: inline-flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;">${flagHtml} <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;">${escapeHtml(data.selectedProxy)}</span></span>`;
+            if (current) current.innerHTML = htmlContent;
+            if (dashCurrent) {
+                dashCurrent.innerHTML = htmlContent;
+                dashCurrent.title = data.selectedProxy;
+            }
         } else {
-            current.textContent = '--';
+            if (current) current.textContent = '--';
+            if (dashCurrent) dashCurrent.textContent = '--';
+        }
+        if (dashDelay) {
+            const latency = matchedSelectedNode && matchedSelectedNode.latency;
+            dashDelay.classList.remove('latency-good', 'latency-medium', 'latency-bad', 'latency-none');
+            if (typeof latency === 'number' && latency > 0) {
+                dashDelay.textContent = `${latency} ms`;
+                dashDelay.classList.add(getAccelerationLatencyClass(latency));
+            } else if (latency === 0) {
+                dashDelay.textContent = '超时';
+                dashDelay.classList.add('latency-bad');
+            } else {
+                dashDelay.textContent = '未测';
+                dashDelay.classList.add('latency-none');
+            }
         }
     }
 
@@ -9076,16 +9633,76 @@ function renderAccelerationChannel(data) {
         if (!active) summary.textContent = '请先添加加速厂商配置';
         else summary.textContent = `当前：${active.name || active.id} · ${sourceLabel(active)}`;
     }
+    const dashActiveProfile = document.getElementById('acc-dash-active-profile');
+    if (dashActiveProfile) {
+        dashActiveProfile.textContent = active ? (active.name || active.id) : '暂无配置';
+        dashActiveProfile.title = active ? (active.name || active.id) : '';
+    }
     const proxyLabel = document.getElementById('acc-proxy-active-label');
-    if (proxyLabel) {
+    const proxyNowName = document.getElementById('acc-proxy-now-name');
+    const proxyNowFlag = document.getElementById('acc-proxy-now-flag');
+    const proxyNowDelay = document.getElementById('acc-proxy-now-delay');
+    const matchedSelected = data.selectedProxy
+        ? (data.nodes || []).find((n) => n.name === data.selectedProxy)
+        : null;
+
+    if (proxyNowName) {
+        proxyNowName.textContent = data.selectedProxy || (active ? '未选择节点' : '暂无配置');
+        proxyNowName.title = data.selectedProxy || '';
+    }
+    if (proxyNowFlag) {
+        proxyNowFlag.innerHTML = matchedSelected
+            ? renderFlag(matchedSelected.flag)
+            : (data.selectedProxy ? '🌐' : '📡');
+    }
+    if (proxyNowDelay) {
+        const strong = proxyNowDelay.querySelector('strong');
+        if (strong) {
+            strong.classList.remove('latency-good', 'latency-medium', 'latency-bad', 'latency-none', 'latency-testing');
+            if (matchedSelected && typeof matchedSelected.latency === 'number' && matchedSelected.latency > 0) {
+                strong.textContent = `${matchedSelected.latency} ms`;
+                strong.classList.add(getAccelerationLatencyClass(matchedSelected.latency));
+            } else if (matchedSelected && matchedSelected.latency === 0) {
+                strong.textContent = '超时';
+                strong.classList.add('latency-bad');
+            } else {
+                strong.textContent = '未测';
+                strong.classList.add('latency-none');
+            }
+        }
+    }
+
+    if (proxyLabel && !(accelerationBusy && isAccelerationDelayBusyMessage(accelerationBusyMessage))) {
         if (!active) proxyLabel.textContent = '请先到「配置」页添加加速厂商';
         else if (data.selectedProxy) {
-            const matchedNode = (data.nodes || []).find(n => n.name === data.selectedProxy);
-            const flagHtml = matchedNode ? renderFlag(matchedNode.flag) : '🌐';
-            proxyLabel.innerHTML = `当前节点：<span style="display: inline-flex; align-items: center; gap: 4px; vertical-align: middle;">${flagHtml} <span>${escapeHtml(data.selectedProxy)}</span></span>`;
+            const proto = matchedSelected && matchedSelected.type ? String(matchedSelected.type).toUpperCase() : '';
+            proxyLabel.textContent = proto
+                ? `${proto} · 点击下方节点可切换出站`
+                : '点击下方节点可切换出站';
         }
-        else proxyLabel.textContent = `配置「${active.name || active.id}」· 点击节点或策略组即可选用`;
+        else proxyLabel.textContent = `配置「${active.name || active.id}」· 点击节点即可选用`;
     }
+
+    const statProfile = document.getElementById('acc-proxy-stat-profile');
+    const statOk = document.getElementById('acc-proxy-stat-ok');
+    const statBad = document.getElementById('acc-proxy-stat-bad');
+    const statPending = document.getElementById('acc-proxy-stat-pending');
+    const testableNodes = (data.nodes || []).filter((n) => n && !isAccelerationInfoNode(n));
+    let okCount = 0;
+    let badCount = 0;
+    let pendingCount = 0;
+    testableNodes.forEach((n) => {
+        if (typeof n.latency === 'number' && n.latency > 0) okCount += 1;
+        else if (n.latency === 0) badCount += 1;
+        else pendingCount += 1;
+    });
+    if (statProfile) {
+        statProfile.textContent = active ? (active.name || active.id) : '暂无';
+        statProfile.title = active ? (active.name || active.id) : '';
+    }
+    if (statOk) statOk.textContent = String(okCount);
+    if (statBad) statBad.textContent = String(badCount);
+    if (statPending) statPending.textContent = String(pendingCount);
 
     const renameBtn = document.getElementById('acc-profile-rename-btn');
     if (renameBtn) renameBtn.disabled = !active;
@@ -9101,11 +9718,16 @@ function renderAccelerationChannel(data) {
         } else {
             list.innerHTML = profiles.map((p) => `
                 <div class="acc-profile-item ${p.id === data.activeProfileId ? 'active' : ''}" data-profile-id="${escapeHtml(p.id)}">
-                    <div>
-                        <strong>${escapeHtml(p.name || p.id)}</strong>
-                        <small>${escapeHtml(sourceLabel(p))}${p.url ? ' · ' + escapeHtml(p.url) : ''}</small>
+                    <div class="acc-profile-main">
+                        <div class="acc-profile-head">
+                            <div>
+                                <strong>${escapeHtml(p.name || p.id)}</strong>
+                                <small>${escapeHtml(sourceLabel(p))}${p.url ? ' · ' + escapeHtml(p.url) : ''}</small>
+                            </div>
+                            <span class="acc-muted acc-profile-badge">${p.id === data.activeProfileId ? '使用中' : '点击选用'}</span>
+                        </div>
+                        ${buildProfileTrafficHtml(p)}
                     </div>
-                    <span class="acc-muted">${p.id === data.activeProfileId ? '使用中' : '点击选用'}</span>
                 </div>
             `).join('');
         }
@@ -9121,31 +9743,58 @@ function renderAccelerationChannel(data) {
     }
 
     const filtered = getFilteredAccelerationNodes(data);
+    const finalNodes = filtered.filter(node => !isAccelerationInfoNode(node));
     const count = document.getElementById('acc-node-count');
-    if (count) count.textContent = `${filtered.length}/${(data.nodes || []).length} 个节点`;
+    if (count) {
+        const totalNonInfo = (data.nodes || []).filter(node => !isAccelerationInfoNode(node)).length;
+        count.textContent = `${finalNodes.length}/${totalNonInfo} 个节点`;
+    }
 
     const grid = document.getElementById('acc-node-grid');
     if (grid) {
         if (!(data.nodes || []).length) {
             grid.innerHTML = '<div class="acc-empty">暂无节点。请先到「配置」页添加加速厂商。</div>';
-        } else if (!filtered.length) {
+        } else if (!finalNodes.length) {
             grid.innerHTML = '<div class="acc-empty">没有匹配当前筛选条件的节点。</div>';
         } else {
-            grid.innerHTML = filtered.map((node) => {
+            grid.innerHTML = finalNodes.map((node) => {
+                const isInfo = isAccelerationInfoNode(node);
+                if (isInfo) {
+                    const parsed = parseAccelerationInfoNode(node.name);
+                    return `
+                        <div class="acc-node-card is-info" data-proxy-name="${escapeHtml(node.name)}" data-info="1">
+                            <div class="acc-node-name">${escapeHtml(parsed.label)}</div>
+                            <div class="acc-node-info-value">${escapeHtml(parsed.value)}</div>
+                        </div>
+                    `;
+                }
                 let latencyClass = 'latency-none';
-                let latencyText = '-- ms';
-                if (node.latency) {
+                let latencyText = '未测';
+                let latencyHtml = '';
+                const isTestingThis = accelerationDelayUiActive && !accelerationDelayDoneNames.has(node.name);
+                if (isTestingThis) {
+                    latencyClass = 'latency-testing';
+                    latencyHtml = '<span class="acc-node-delay-spinner" aria-hidden="true"></span>';
+                } else if (typeof node.latency === 'number' && node.latency > 0) {
                     latencyText = `${node.latency} ms`;
-                    if (node.latency < 100) latencyClass = 'latency-good';
-                    else if (node.latency < 300) latencyClass = 'latency-medium';
-                    else latencyClass = 'latency-bad';
+                    latencyClass = getAccelerationLatencyClass(node.latency);
+                    latencyHtml = latencyText;
+                } else if (node.latency === 0) {
+                    latencyText = '超时';
+                    latencyClass = 'latency-bad';
+                    latencyHtml = latencyText;
+                } else {
+                    latencyHtml = latencyText;
                 }
                 return `
-                    <div class="acc-node-card ${node.selected ? 'selected' : ''}" data-proxy-name="${escapeHtml(node.name)}">
-                        ${node.selected ? '<span class="acc-node-check">✓</span>' : ''}
-                        <div class="acc-node-name">${renderFlag(node.flag)} ${escapeHtml(node.name)}</div>
-                        <div class="acc-node-type">${escapeHtml(node.type || 'proxy')}</div>
-                        <div class="acc-node-delay ${latencyClass}">${latencyText}</div>
+                    <div class="acc-node-card ${node.selected ? 'selected' : ''}${isTestingThis ? ' is-delay-testing' : ''}" data-proxy-name="${escapeHtml(node.name)}">
+                        <div class="acc-node-main">
+                            <div class="acc-node-name">${renderFlag(node.flag)} ${escapeHtml(node.name)}</div>
+                            <div class="acc-node-type">${escapeHtml(node.type || 'proxy')}</div>
+                        </div>
+                        <div class="acc-node-meta">
+                            <div class="acc-node-delay ${latencyClass}">${latencyHtml}</div>
+                        </div>
                     </div>
                 `;
             }).join('');
@@ -9188,8 +9837,8 @@ function renderAccelerationChannel(data) {
 
                             if (accelerationUi.sort === 'latency') {
                                 groupNodes.sort((a, b) => {
-                                    const la = typeof a.latency === 'number' ? a.latency : Number.MAX_SAFE_INTEGER;
-                                    const lb = typeof b.latency === 'number' ? b.latency : Number.MAX_SAFE_INTEGER;
+                                    const la = (typeof a.latency === 'number' && a.latency > 0) ? a.latency : Number.MAX_SAFE_INTEGER;
+                                    const lb = (typeof b.latency === 'number' && b.latency > 0) ? b.latency : Number.MAX_SAFE_INTEGER;
                                     return la - lb;
                                 });
                             } else if (accelerationUi.sort === 'name') {
@@ -9203,15 +9852,19 @@ function renderAccelerationChannel(data) {
 
                                 let nodeDelayStr = '';
                                 let latencyClass = 'latency-none';
-                                if (nodeObj.latency) {
+                                if (typeof nodeObj.latency === 'number' && nodeObj.latency > 0) {
                                     nodeDelayStr = ` (${nodeObj.latency}ms)`;
-                                    if (nodeObj.latency < 100) latencyClass = 'latency-good';
-                                    else if (nodeObj.latency < 300) latencyClass = 'latency-medium';
-                                    else latencyClass = 'latency-bad';
+                                    latencyClass = getAccelerationLatencyClass(nodeObj.latency);
+                                } else if (nodeObj.latency === 0) {
+                                    nodeDelayStr = ' (超时)';
+                                    latencyClass = 'latency-bad';
+                                } else {
+                                    nodeDelayStr = ' (未测)';
                                 }
 
                                 return `
-                                    <button type="button" class="acc-group-node-chip ${isSelected ? 'active' : ''}" 
+                                    <button type="button" class="acc-group-node-chip ${isSelected ? 'active' : ''}"
+                                        data-proxy-name="${escapeHtml(nodeName)}"
                                         style="background: ${isSelected ? 'rgba(147, 51, 234, 0.2)' : 'rgba(255,255,255,0.02)'}; 
                                                border: 1px solid ${isSelected ? 'var(--accent-color)' : 'rgba(255,255,255,0.05)'}; 
                                                color: ${isSelected ? '#e9d5ff' : 'var(--text-primary)'}; 
@@ -9219,7 +9872,7 @@ function renderAccelerationChannel(data) {
                                         onclick="selectGroupProxy('${escapeHtml(g.name)}', '${escapeHtml(nodeName)}')">
                                         <span style="display: inline-flex; align-items: center;">${renderFlag(nodeFlag)}</span>
                                         <span>${escapeHtml(nodeName)}</span>
-                                        <span class="${latencyClass}" style="font-size: 9px; font-family: var(--font-mono);">${nodeDelayStr}</span>
+                                        <span class="acc-group-node-delay ${latencyClass}" style="font-size: 9px; font-family: var(--font-mono);">${nodeDelayStr}</span>
                                     </button>
                                 `;
                             }).join('');
@@ -9252,15 +9905,163 @@ function renderAccelerationChannel(data) {
             }).join('');
         }
     }
+
+    updateAccelerationBusyUi();
 }
 
 window.toggleGroupExpand = function(groupName) {
-    return String(value == null ? '' : value)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+    if (!groupName) return;
+    if (expandedGroups.has(groupName)) expandedGroups.delete(groupName);
+    else expandedGroups.add(groupName);
+    if (accelerationState) renderAccelerationChannel(accelerationState);
+};
+
+window.selectGroupProxy = async function(groupName, proxyName) {
+    if (!groupName || !proxyName || !window.api || !window.api.selectAccelerationProxy) return;
+    await handleAccelerationResult(
+        window.api.selectAccelerationProxy({ name: proxyName, group: groupName }),
+        `已切换至 ${proxyName}`
+    );
+};
+
+function formatAccelerationLatencyText(latency) {
+    if (typeof latency === 'number' && latency > 0) return `${latency} ms`;
+    if (latency === 0) return '超时';
+    return '未测';
+}
+
+function paintAccelerationNodeLatency(name, latency, testing) {
+    if (!name) return;
+    const cards = document.querySelectorAll('.acc-node-card[data-proxy-name]');
+    cards.forEach((card) => {
+        if (card.getAttribute('data-info') === '1') return;
+        if (card.getAttribute('data-proxy-name') !== name) return;
+        card.classList.toggle('is-delay-testing', !!testing);
+        const el = card.querySelector('.acc-node-delay');
+        if (!el) return;
+        el.classList.remove('latency-good', 'latency-medium', 'latency-bad', 'latency-none', 'latency-testing');
+        if (testing) {
+            el.innerHTML = '<span class="acc-node-delay-spinner" aria-hidden="true"></span>';
+            el.classList.add('latency-testing');
+            el.title = '测速中';
+            return;
+        }
+        el.textContent = formatAccelerationLatencyText(latency);
+        el.classList.add(getAccelerationLatencyClass(latency));
+        el.title = '';
+    });
+
+    const chips = document.querySelectorAll(`.acc-group-node-chip[data-proxy-name]`);
+    chips.forEach((chip) => {
+        if (chip.getAttribute('data-proxy-name') !== name) return;
+        const el = chip.querySelector('.acc-group-node-delay');
+        if (!el) return;
+        el.classList.remove('latency-good', 'latency-medium', 'latency-bad', 'latency-none', 'latency-testing');
+        if (testing) {
+            el.innerHTML = ' <span class="acc-node-delay-spinner" aria-hidden="true"></span>';
+            el.classList.add('latency-testing');
+            return;
+        }
+        if (typeof latency === 'number' && latency > 0) {
+            el.textContent = ` (${latency}ms)`;
+            el.classList.add(getAccelerationLatencyClass(latency));
+        } else if (latency === 0) {
+            el.textContent = ' (超时)';
+            el.classList.add('latency-bad');
+        } else {
+            el.textContent = ' (未测)';
+            el.classList.add('latency-none');
+        }
+    });
+}
+
+function applyAccelerationDelayProgress(payload) {
+    if (!payload) return;
+
+    if (payload.phase === 'start') {
+        accelerationDelayUiActive = true;
+        accelerationDelayDoneNames = new Set();
+        const names = Array.isArray(payload.names) ? payload.names : [];
+        accelerationDelayTotal = payload.total || names.length || accelerationDelayTotal;
+        accelerationDelayFinished = 0;
+        names.forEach((name) => paintAccelerationNodeLatency(name, null, true));
+        updateAccelerationBusyUi();
+        return;
+    }
+
+    if (payload.phase === 'result' && payload.name) {
+        accelerationDelayDoneNames.add(payload.name);
+        accelerationDelayFinished = payload.done || accelerationDelayDoneNames.size;
+        if (payload.total) accelerationDelayTotal = payload.total;
+        if (accelerationState && Array.isArray(accelerationState.nodes)) {
+            const node = accelerationState.nodes.find((n) => n.name === payload.name);
+            if (node) node.latency = payload.latency;
+        }
+        paintAccelerationNodeLatency(payload.name, payload.latency, false);
+        if (accelerationState && accelerationState.selectedProxy === payload.name) {
+            paintAccelerationProxyNowDelay(payload.latency, false);
+        }
+        const okEl = document.getElementById('acc-proxy-stat-ok');
+        const badEl = document.getElementById('acc-proxy-stat-bad');
+        const pendingEl = document.getElementById('acc-proxy-stat-pending');
+        if (okEl || badEl || pendingEl) {
+            const nodes = ((accelerationState && accelerationState.nodes) || []).filter((n) => n && !isAccelerationInfoNode(n));
+            let ok = 0;
+            let bad = 0;
+            let pending = 0;
+            nodes.forEach((n) => {
+                if (accelerationDelayUiActive && !accelerationDelayDoneNames.has(n.name)) pending += 1;
+                else if (typeof n.latency === 'number' && n.latency > 0) ok += 1;
+                else if (n.latency === 0) bad += 1;
+                else pending += 1;
+            });
+            if (okEl) okEl.textContent = String(ok);
+            if (badEl) badEl.textContent = String(bad);
+            if (pendingEl) pendingEl.textContent = String(pending);
+        }
+        updateAccelerationBusyUi();
+        return;
+    }
+
+    if (payload.phase === 'done') {
+        accelerationDelayFinished = payload.total || accelerationDelayFinished;
+        updateAccelerationBusyUi();
+    }
+}
+
+async function refreshAccelerationNodesAndLatency(options = {}) {
+    const { silent = false, switchToProxies = false } = options;
+    if (!window.api || !window.api.delayTestAcceleration) return null;
+    if (switchToProxies) setAccelerationPanel('proxies');
+    try {
+        if (!silent) setAccelerationBusy(true, '正在测速节点延迟…');
+        // 先拉最新看板；未启用时主进程会自动使用临时内核测速。
+        await refreshAccelerationChannel();
+        const res = await window.api.delayTestAcceleration();
+        if (res && res.success) {
+            accelerationState = res;
+            renderAccelerationChannel(res);
+            if (!silent) {
+                showToast(res.temporaryTest
+                    ? '节点与延迟已刷新（临时测速完成，空闲后自动关闭内核）'
+                    : '节点与延迟已刷新');
+            }
+
+            // 只有用户已手动启用内核时才切换节点；临时测速返回前内核已经关闭。
+            // 自动选择范围 = 当前地区标签（香港/日本/全部…）
+            if (res.enabled && !res.temporaryTest) {
+                await applyAccelerationAutoSelect({ nodes: res.nodes, silent: !!silent });
+            }
+            return res;
+        }
+        if (!silent) showToast('延迟刷新失败: ' + ((res && res.error) || '未知错误'));
+        return null;
+    } catch (err) {
+        if (!silent) showToast('刷新失败: ' + (err.message || String(err)));
+        return null;
+    } finally {
+        if (!silent) setAccelerationBusy(false);
+    }
 }
 
 async function setAccelerationEnabledFromUi(enabled) {
@@ -9276,6 +10077,21 @@ async function setAccelerationEnabledFromUi(enabled) {
         accelerationState = res;
         renderAccelerationChannel(res);
         showToast(enabled ? 'Nexora Clash 已开启' : 'Nexora Clash 已关闭');
+
+        if (enabled) {
+            // 出口 IP 与节点测速并行：不要等测速结束才检测（否则仪表盘会长时间停在「未启用/检测中」）
+            setAccelerationBusy(false);
+            setTimeout(() => {
+                runAccelerationIpDetect({ force: true }).catch(() => {});
+            }, 600);
+            await refreshAccelerationNodesAndLatency({ switchToProxies: false });
+            return;
+        }
+        // 关闭后改测本机直连出口，不再显示「未启用」
+        lastAccelerationIpDetectAt = 0;
+        setTimeout(() => {
+            runAccelerationIpDetect({ force: true }).catch(() => {});
+        }, 400);
     } catch (err) {
         showToast('Nexora Clash 操作失败: ' + err.message);
         await refreshAccelerationChannel();
@@ -9284,9 +10100,9 @@ async function setAccelerationEnabledFromUi(enabled) {
     }
 }
 
-async function handleAccelerationResult(promise, successText) {
+async function handleAccelerationResult(promise, successText, options = {}) {
     try {
-        setAccelerationBusy(true, '处理中...');
+        setAccelerationBusy(true, options.busyMessage || '处理中...');
         const res = await promise;
         if (!res || !res.success) {
             if (!(res && res.canceled)) {
@@ -9298,6 +10114,14 @@ async function handleAccelerationResult(promise, successText) {
                 showToast('Nexora Clash 操作失败: ' + msg);
             }
             return null;
+        }
+        // 延迟测试结果优先写回节点（防止看板二次合并丢数）
+        if (res.results && Array.isArray(res.nodes)) {
+            for (const node of res.nodes) {
+                if (Object.prototype.hasOwnProperty.call(res.results, node.name)) {
+                    node.latency = res.results[node.name];
+                }
+            }
         }
         accelerationState = res;
         renderAccelerationChannel(res);
@@ -9319,62 +10143,186 @@ async function handleAccelerationResult(promise, successText) {
 }
 
 let autoSelectTimer = null;
+let autoSelectCountdownTimer = null;
+let autoSelectRunInFlight = false;
+let autoSelectNextAt = 0;
+let autoSelectTimerGeneration = 0; // 世代标识，用于彻底防止并发闭包定时器冲突和多重运行
+
+function getAccelerationAutoSelectIntervalSec() {
+    const raw = localStorage.getItem('acc_auto_select_interval');
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 5) return 60;
+    return n;
+}
+
+const ACC_AUTO_SELECT_INTERVAL_OPTIONS = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 120, 300, 600];
+
+/** 以 localStorage 为准重建 option，避免隐藏时改 value 后闭口文字不刷新 */
+function syncAccelerationAutoSelectIntervalSelect(sec) {
+    const intervalInput = document.getElementById('acc-auto-select-interval');
+    if (!intervalInput) return;
+    const value = String(sec != null ? sec : getAccelerationAutoSelectIntervalSec());
+    const html = ACC_AUTO_SELECT_INTERVAL_OPTIONS.map((v) => {
+        const str = String(v);
+        return '<option value="' + str + '"' + (str === value ? ' selected' : '') + '>' + str + '秒/次</option>';
+    }).join('');
+    intervalInput.innerHTML = html;
+    intervalInput.value = value;
+    intervalInput.dataset.syncedValue = value;
+}
+
+function setAccelerationAutoSelectStatus(text) {
+    const el = document.getElementById('acc-auto-select-status');
+    if (!el) return;
+    el.textContent = text || '';
+}
+
+function stopAccelerationAutoSelectCountdown() {
+    if (autoSelectCountdownTimer) {
+        clearInterval(autoSelectCountdownTimer);
+        autoSelectCountdownTimer = null;
+    }
+    autoSelectNextAt = 0;
+}
+
+function startAccelerationAutoSelectCountdown(sec, generation) {
+    stopAccelerationAutoSelectCountdown();
+    if (generation !== autoSelectTimerGeneration) return;
+    const total = Math.max(1, Number(sec) || getAccelerationAutoSelectIntervalSec());
+    autoSelectNextAt = Date.now() + total * 1000;
+    const tick = () => {
+        if (generation !== autoSelectTimerGeneration) {
+            stopAccelerationAutoSelectCountdown();
+            return;
+        }
+        if (!isAccelerationAutoSelectEnabled()) {
+            stopAccelerationAutoSelectCountdown();
+            setAccelerationAutoSelectStatus('');
+            return;
+        }
+        if (!(accelerationState && accelerationState.enabled)) {
+            setAccelerationAutoSelectStatus('需先启用加速');
+            return;
+        }
+        if (autoSelectRunInFlight || accelerationBusy) {
+            setAccelerationAutoSelectStatus('测速中…');
+            return;
+        }
+        const left = Math.max(0, Math.ceil((autoSelectNextAt - Date.now()) / 1000));
+        setAccelerationAutoSelectStatus(left > 0 ? `下次 ${left}s` : '即将测速');
+    };
+    tick();
+    autoSelectCountdownTimer = setInterval(tick, 500);
+}
 
 async function runBackgroundAutoSelect() {
+    if (autoSelectRunInFlight || accelerationBusy) return;
+    if (!isAccelerationAutoSelectEnabled()) return;
+    if (!(accelerationState && accelerationState.enabled)) {
+        setAccelerationAutoSelectStatus('需先启用加速');
+        return;
+    }
+    autoSelectRunInFlight = true;
+    setAccelerationAutoSelectStatus('测速中…');
     try {
-        const res = await window.api.delayTestAcceleration();
-        if (res && res.success && Array.isArray(res.nodes)) {
-            accelerationState = res;
-            renderAccelerationChannel(res);
-
-            const validNodes = res.nodes.filter(n => typeof n.latency === 'number' && n.latency > 0);
-            if (validNodes.length) {
-                validNodes.sort((a, b) => a.latency - b.latency);
-                const bestNode = validNodes[0];
-
-                if (accelerationState.selectedProxy !== bestNode.name) {
-                    const selectRes = await window.api.selectAccelerationProxy({ name: bestNode.name, group: 'GLOBAL' });
-                    if (selectRes && selectRes.success) {
-                        accelerationState = selectRes;
-                        renderAccelerationChannel(selectRes);
-                        showToast(`已自动切换至最低延迟节点 [${bestNode.latency}ms]: ${bestNode.name}`);
-                    }
-                }
-            }
-        }
+        await runAccelerationDelayTest({ force: true, silent: true, fromAuto: true });
     } catch (err) {
-        console.error("Auto select background run failed:", err);
+        console.error('Auto select background run failed:', err);
+        showToast('自动测速失败: ' + (err.message || String(err)));
+    } finally {
+        autoSelectRunInFlight = false;
     }
 }
 
-function setupAutoSelectTimer() {
+function setupAutoSelectTimer(options = {}) {
+    const { runNow = false } = options;
     if (autoSelectTimer) {
-        clearInterval(autoSelectTimer);
+        clearTimeout(autoSelectTimer);
         autoSelectTimer = null;
     }
+    stopAccelerationAutoSelectCountdown();
 
     const enabled = localStorage.getItem('acc_auto_select_enabled') === 'true';
-    const intervalSec = parseInt(localStorage.getItem('acc_auto_select_interval') || '60', 10);
+    const intervalSec = getAccelerationAutoSelectIntervalSec();
+    // 仅在从未写过时落盘，避免启动时用默认值覆盖用户缓存
+    if (localStorage.getItem('acc_auto_select_interval') == null) {
+        localStorage.setItem('acc_auto_select_interval', String(intervalSec));
+    }
 
     const enableBtn = document.getElementById('acc-auto-select-enable-btn');
     const intervalContainer = document.getElementById('acc-auto-select-interval-container');
-    const intervalInput = document.getElementById('acc-auto-select-interval');
 
     if (enableBtn) enableBtn.classList.toggle('active', enabled);
-    if (intervalInput) intervalInput.value = intervalSec;
+    // 先显示容器，再同步 value，否则 Chromium 不更新下拉可见文字
     if (intervalContainer) intervalContainer.style.display = enabled ? 'flex' : 'none';
-
-    if (enabled && intervalSec > 0) {
-        autoSelectTimer = setInterval(async () => {
-            if (accelerationBusy) return;
-            await runBackgroundAutoSelect();
-        }, intervalSec * 1000);
+    syncAccelerationAutoSelectIntervalSelect(intervalSec);
+    
+    if (!enabled) {
+        setAccelerationAutoSelectStatus('');
+        return;
     }
+
+    const currentGeneration = ++autoSelectTimerGeneration;
+
+    const scheduleNext = (delaySec) => {
+        if (autoSelectTimer) {
+            clearTimeout(autoSelectTimer);
+            autoSelectTimer = null;
+        }
+        if (currentGeneration !== autoSelectTimerGeneration) return;
+        if (!isAccelerationAutoSelectEnabled()) return;
+
+        const sec = Math.max(0.3, Number(delaySec) || getAccelerationAutoSelectIntervalSec());
+        startAccelerationAutoSelectCountdown(sec, currentGeneration);
+        
+        autoSelectTimer = setTimeout(async () => {
+            autoSelectTimer = null;
+            if (currentGeneration !== autoSelectTimerGeneration) return;
+            
+            await runBackgroundAutoSelect();
+            
+            if (currentGeneration !== autoSelectTimerGeneration) return;
+            scheduleNext(getAccelerationAutoSelectIntervalSec());
+        }, sec * 1000);
+    };
+
+    scheduleNext(runNow ? 0.3 : intervalSec);
+}
+
+function applyAppInstanceBadge() {
+    const run = async () => {
+        if (!window.api || !window.api.getAppInstanceInfo) return;
+        try {
+            const info = await window.api.getAppInstanceInfo();
+            if (!info || !info.success) return;
+            const id = Number(info.id) || 1;
+            const badge = document.getElementById('app-instance-badge');
+            const titleText = document.getElementById('app-title-text');
+            if (id > 1) {
+                if (badge) {
+                    badge.hidden = false;
+                    badge.textContent = `#${id}`;
+                    badge.title = `多开实例 #${id}\n数据目录：${info.userData || ''}\n网关端口建议：${info.gatewayPortHint || ''}`;
+                }
+                if (titleText) titleText.textContent = 'Nexora Agent';
+                try { document.title = `Nexora Agent #${id}`; } catch (e) {}
+            } else if (badge) {
+                badge.hidden = true;
+            }
+        } catch (e) {}
+    };
+    run();
 }
 
 function initAccelerationChannel() {
-    setAccelerationPanel('profiles');
+    setAccelerationPanel('dashboard');
     setAccelerationImportMode('url');
+
+    if (window.api && window.api.onAccelerationDelayProgress) {
+        window.api.onAccelerationDelayProgress((payload) => {
+            applyAccelerationDelayProgress(payload);
+        });
+    }
 
     document.querySelectorAll('.acc-subtab[data-acc-panel]').forEach((btn) => {
         btn.addEventListener('click', () => {
@@ -9390,33 +10338,55 @@ function initAccelerationChannel() {
     if (pageToggle) pageToggle.addEventListener('change', syncEnable);
     if (controlsToggle) controlsToggle.addEventListener('change', syncEnable);
 
-    // 网络检测按钮
+    // 网络检测：经本地 mixed 端口探测出口 IP（启用后自动测一次，也可手动点）
     const ipDetectBtn = document.getElementById('acc-ip-detect-btn');
     if (ipDetectBtn) {
-        const countryCodeToFlag = (cc) => {
-            if (!cc || cc.length !== 2) return '🌐';
-            const upper = cc.toUpperCase();
-            return String.fromCodePoint(...[...upper].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
-        };
-        ipDetectBtn.addEventListener('click', async () => {
-            const resultEl = document.getElementById('acc-ip-detect-result');
-            if (!resultEl) return;
-            resultEl.textContent = '检测中...';
-            ipDetectBtn.disabled = true;
-            try {
-                const resp = await fetch('http://ip-api.com/json/?lang=zh-CN', { signal: AbortSignal.timeout(8000) });
-                const data = await resp.json();
-                if (data && data.query) {
-                    const flag = countryCodeToFlag(data.countryCode);
-                    resultEl.textContent = `${flag} ${data.query}`;
-                    resultEl.title = `${data.country || ''} ${data.regionName || ''} ${data.city || ''} | ${data.isp || ''}`;
-                } else {
-                    resultEl.textContent = '检测失败';
-                }
-            } catch (e) {
-                resultEl.textContent = '检测超时';
+        ipDetectBtn.addEventListener('click', () => {
+            runAccelerationIpDetect({ force: true });
+        });
+    }
+
+    const controlsDetectBtn = document.getElementById('acc-controls-detect-btn');
+    if (controlsDetectBtn) {
+        controlsDetectBtn.addEventListener('click', () => {
+            runAccelerationIpDetect({ force: true });
+        });
+    }
+
+    const copyProxyBtn = document.getElementById('acc-copy-proxy-btn');
+    if (copyProxyBtn) {
+        copyProxyBtn.addEventListener('click', async () => {
+            const port = accelerationState && accelerationState.mixedPort;
+            const text = port ? `127.0.0.1:${port}` : '';
+            if (!text) {
+                showToast('当前没有可用的本地代理地址');
+                return;
             }
-            ipDetectBtn.disabled = false;
+            try {
+                await navigator.clipboard.writeText(text);
+                showToast('已复制本地代理：' + text);
+            } catch (e) {
+                showToast('复制失败：' + (e.message || String(e)));
+            }
+        });
+    }
+
+    const controlsGotoProxies = document.getElementById('acc-controls-goto-proxies');
+    if (controlsGotoProxies) {
+        controlsGotoProxies.addEventListener('click', () => {
+            setAccelerationPanel('proxies');
+            maybeAutoDelayOnProxiesTab();
+        });
+    }
+
+    const controlsRefreshBtn = document.getElementById('acc-controls-refresh-btn');
+    if (controlsRefreshBtn) {
+        controlsRefreshBtn.addEventListener('click', async () => {
+            await refreshAccelerationChannel();
+            if (accelerationState && accelerationState.enabled) {
+                runAccelerationIpDetect({ force: true }).catch(() => {});
+            }
+            showToast('状态已刷新');
         });
     }
 
@@ -9436,11 +10406,18 @@ function initAccelerationChannel() {
                 setAccelerationImportFeedback('请先填写订阅 URL', 'error');
                 return;
             }
-            const res = await handleAccelerationResult(window.api.addAccelerationUrl(String(url).trim(), String(name).trim()), '已添加加速配置');
+            setAccelerationImportFeedback('正在拉取订阅，请稍候…', 'success');
+            const res = await handleAccelerationResult(
+                window.api.addAccelerationUrl(String(url).trim(), String(name).trim()),
+                '已添加加速配置',
+                { busyMessage: '正在拉取订阅…' }
+            );
             if (res && res.success) {
                 const urlInput = document.getElementById('acc-import-url');
                 if (urlInput) urlInput.value = '';
-                setAccelerationPanel('proxies');
+                const nameInput = document.getElementById('acc-import-name');
+                if (nameInput) nameInput.value = '';
+                // 留在配置页，方便继续添加或查看刚导入的订阅
             }
         });
     }
@@ -9448,8 +10425,7 @@ function initAccelerationChannel() {
     const fileSubmit = document.getElementById('acc-import-file-submit');
     if (fileSubmit) {
         fileSubmit.addEventListener('click', async () => {
-            const res = await handleAccelerationResult(window.api.pickAccelerationFile(), '已导入配置文件');
-            if (res && res.success) setAccelerationPanel('proxies');
+            await handleAccelerationResult(window.api.pickAccelerationFile(), '已导入配置文件');
         });
     }
 
@@ -9471,7 +10447,6 @@ function initAccelerationChannel() {
             if (res && res.success) {
                 const box = document.getElementById('acc-qr-content');
                 if (box) box.value = '';
-                setAccelerationPanel('proxies');
             }
         });
     }
@@ -9546,13 +10521,22 @@ function initAccelerationChannel() {
     }
 
     const refreshBtn = document.getElementById('acc-refresh-btn');
-    if (refreshBtn) refreshBtn.addEventListener('click', refreshAccelerationChannel);
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', async () => {
+            if (accelerationState && accelerationState.enabled) {
+                await refreshAccelerationNodesAndLatency({ switchToProxies: false });
+            } else {
+                await refreshAccelerationChannel();
+            }
+        });
+    }
 
     const profileSelect = document.getElementById('acc-profile-select');
     if (profileSelect) {
         profileSelect.addEventListener('change', async (e) => {
             if (!e.target.value) return;
-            await handleAccelerationResult(window.api.setAccelerationActiveProfile(e.target.value), '已切换配置');
+            const res = await handleAccelerationResult(window.api.setAccelerationActiveProfile(e.target.value), '已切换配置');
+            await onAccelerationProfileSwitched(res);
         });
     }
 
@@ -9563,7 +10547,8 @@ function initAccelerationChannel() {
             if (!item) return;
             const id = item.getAttribute('data-profile-id');
             if (!id) return;
-            await handleAccelerationResult(window.api.setAccelerationActiveProfile(id), '已切换配置');
+            const res = await handleAccelerationResult(window.api.setAccelerationActiveProfile(id), '已切换配置');
+            await onAccelerationProfileSwitched(res);
         });
     }
 
@@ -9634,9 +10619,10 @@ function initAccelerationChannel() {
     if (grid) {
         grid.addEventListener('click', async (e) => {
             const card = e.target.closest('.acc-node-card');
-            if (!card) return;
+            if (!card || card.classList.contains('is-info') || card.getAttribute('data-info') === '1') return;
             const name = card.getAttribute('data-proxy-name');
             if (!name) return;
+            // 自动模式下也允许手动点选；切标签 / 下个周期会按标签重选
             await handleAccelerationResult(window.api.selectAccelerationProxy({ name, group: 'GLOBAL' }), '已切换代理节点');
         });
     }
@@ -9644,31 +10630,47 @@ function initAccelerationChannel() {
     const delayBtn = document.getElementById('acc-delay-btn');
     if (delayBtn) {
         delayBtn.addEventListener('click', async () => {
-            await handleAccelerationResult(window.api.delayTestAcceleration(), '延迟测试完成');
+            await runAccelerationDelayTest({ force: true });
         });
     }
 
     const autoSelectEnableBtn = document.getElementById('acc-auto-select-enable-btn');
     if (autoSelectEnableBtn) {
         autoSelectEnableBtn.addEventListener('click', () => {
-            const enabled = localStorage.getItem('acc_auto_select_enabled') === 'true';
+            const enabled = isAccelerationAutoSelectEnabled();
             const nextState = !enabled;
             localStorage.setItem('acc_auto_select_enabled', nextState ? 'true' : 'false');
-            setupAutoSelectTimer();
             if (nextState) {
-                runBackgroundAutoSelect();
+                const sec = getAccelerationAutoSelectIntervalSec();
+                if (!(accelerationState && accelerationState.enabled)) {
+                    showToast('请先启用加速通道，再开自动选择');
+                } else {
+                    showToast(`已开启自动选择：测完后每 ${sec} 秒再测一轮`);
+                }
+                setupAutoSelectTimer({ runNow: true });
+            } else {
+                setupAutoSelectTimer();
+                showToast('已关闭自动选择，可手动点击节点切换');
             }
         });
     }
 
     const autoSelectInterval = document.getElementById('acc-auto-select-interval');
     if (autoSelectInterval) {
-        autoSelectInterval.addEventListener('change', (e) => {
-            let val = parseInt(e.target.value, 10);
+        const applyInterval = (raw) => {
+            let val = parseInt(raw, 10);
             if (isNaN(val) || val < 5) val = 5;
-            e.target.value = val;
             localStorage.setItem('acc_auto_select_interval', String(val));
+            syncAccelerationAutoSelectIntervalSelect(val);
             setupAutoSelectTimer();
+            if (isAccelerationAutoSelectEnabled()) {
+                showToast(`间隔已改为 ${val} 秒/次（测完后再计时）`);
+            }
+        };
+        autoSelectInterval.addEventListener('change', (e) => applyInterval(e.target.value));
+        // 展开前先按缓存校正，避免闭口文字和真实值不一致
+        autoSelectInterval.addEventListener('mousedown', () => {
+            syncAccelerationAutoSelectIntervalSelect();
         });
     }
 
@@ -9677,28 +10679,44 @@ function initAccelerationChannel() {
     const countryContainer = document.getElementById('acc-node-country-filters');
     if (countryContainer) {
         countryContainer.addEventListener('click', (e) => {
-            const pill = e.target.closest('.acc-country-pill');
+            const pill = e.target.closest('.acc-country-pill[data-country]');
             if (!pill) return;
             const country = pill.getAttribute('data-country') || 'all';
-            countryContainer.querySelectorAll('.acc-country-pill').forEach(btn => {
+            countryContainer.querySelectorAll('.acc-country-pill[data-country]').forEach((btn) => {
                 btn.classList.toggle('active', btn === pill);
             });
             accelerationUi.countryFilter = country;
             if (accelerationState) renderAccelerationChannel(accelerationState);
+            // 开着自动时：换标签立刻在该分类里选最低延迟
+            if (isAccelerationAutoSelectEnabled() && accelerationState && accelerationState.enabled) {
+                applyAccelerationAutoSelect({ silent: false }).catch(() => {});
+            }
         });
+    }
+
+    async function setAccelerationProxyMode(kind, on) {
+        const payload = kind === 'system' ? { systemProxy: on } : { virtualNic: on };
+        const okText = kind === 'system'
+            ? (on ? '系统代理已开启' : '系统代理已关闭')
+            : (on ? 'TUN 已开启' : '虚拟网卡已关闭');
+        const res = await handleAccelerationResult(window.api.setAccelerationOptions(payload), okText);
+        if (res && res.warning) showToast(res.warning);
+        if (res && res.success && accelerationState) renderAccelerationChannel(res);
+        else await refreshAccelerationChannel();
+        return res;
     }
 
     const systemProxyToggle = document.getElementById('acc-system-proxy-toggle');
     if (systemProxyToggle) {
         systemProxyToggle.addEventListener('change', async (e) => {
-            await handleAccelerationResult(window.api.setAccelerationOptions({ systemProxy: e.target.checked }), '系统代理设置已更新');
+            await setAccelerationProxyMode('system', e.target.checked);
         });
     }
 
     const tunToggle = document.getElementById('acc-tun-toggle');
     if (tunToggle) {
         tunToggle.addEventListener('change', async (e) => {
-            await handleAccelerationResult(window.api.setAccelerationOptions({ virtualNic: e.target.checked }), '虚拟网卡设置已更新');
+            await setAccelerationProxyMode('tun', e.target.checked);
         });
     }
 
@@ -9707,6 +10725,70 @@ function initAccelerationChannel() {
             if (!e.target.checked) return;
             await handleAccelerationResult(window.api.setAccelerationOptions({ mode: e.target.value }), '出站模式已更新');
         });
+    });
+
+    // 仪表盘开关：启用加速通道
+    const dashEnabledToggle = document.getElementById('acc-dash-enabled-toggle');
+    if (dashEnabledToggle) {
+        dashEnabledToggle.addEventListener('change', (e) => {
+            setAccelerationEnabledFromUi(e.target.checked);
+        });
+    }
+
+    // 仪表盘开关：系统代理
+    const dashSystemProxyToggle = document.getElementById('acc-dash-system-proxy-toggle');
+    if (dashSystemProxyToggle) {
+        dashSystemProxyToggle.addEventListener('change', async (e) => {
+            await setAccelerationProxyMode('system', e.target.checked);
+        });
+    }
+
+    // 仪表盘开关：虚拟网卡 TUN
+    const dashTunToggle = document.getElementById('acc-dash-tun-toggle');
+    if (dashTunToggle) {
+        dashTunToggle.addEventListener('change', async (e) => {
+            await setAccelerationProxyMode('tun', e.target.checked);
+        });
+    }
+
+    // 仪表盘：出站模式按钮切换
+    document.querySelectorAll('.acc-dash-mode-btn').forEach((btn) => {
+        btn.addEventListener('click', async (e) => {
+            const mode = e.currentTarget.getAttribute('data-mode');
+            const res = await handleAccelerationResult(
+                window.api.setAccelerationOptions({ mode: mode }),
+                '出站模式已更新'
+            );
+            if (res && res.success && accelerationState) renderAccelerationChannel(res);
+        });
+    });
+
+    // 仪表盘：一键网络检测
+    const dashIpDetectBtn = document.getElementById('acc-dash-ip-detect-btn');
+    if (dashIpDetectBtn) {
+        dashIpDetectBtn.addEventListener('click', () => {
+            runAccelerationIpDetect({ force: true });
+        });
+    }
+
+    // 初始化获取内网 IP
+    getLocalIP().then((ip) => {
+        const localIpEl = document.getElementById('acc-dash-local-ip');
+        if (localIpEl) localIpEl.textContent = ip;
+    });
+
+    // 窗口尺寸改变时，让仪表盘 Canvas 实时高自适应重绘
+    window.addEventListener('resize', () => {
+        if (accelerationUi.panel === 'dashboard') {
+            const upPoints = window._dashSpeedHistory.up;
+            const downPoints = window._dashSpeedHistory.down;
+            if (upPoints && upPoints.length > 0) {
+                drawDashboardSpeedChart(upPoints[upPoints.length - 1], downPoints[downPoints.length - 1]);
+            }
+            if (window._lastConnStats) {
+                drawDashboardTrafficRing(window._lastConnStats.up, window._lastConnStats.down);
+            }
+        }
     });
 
     if (window.api && window.api.onAccelerationCoreProgress) {
@@ -9728,17 +10810,23 @@ function initAccelerationChannel() {
         accelerationUi.viewMode = mode;
         if (tabNodes) tabNodes.classList.toggle('active', mode === 'nodes');
         if (tabGroups) tabGroups.classList.toggle('active', mode === 'groups');
-        
+
         const countryFilters = document.getElementById('acc-node-country-filters');
-        if (nodeToolbar) nodeToolbar.style.display = '';
-        if (mode === 'nodes') {
-            if (nodeGrid) nodeGrid.style.display = '';
-            if (groupsContainer) groupsContainer.style.display = 'none';
-            if (countryFilters) countryFilters.style.display = 'flex';
-        } else {
-            if (nodeGrid) nodeGrid.style.display = 'none';
-            if (groupsContainer) groupsContainer.style.display = '';
-            if (countryFilters) countryFilters.style.display = 'none';
+        const nodeGridWrap = document.querySelector('.acc-node-grid-wrap');
+        const showNodes = mode === 'nodes';
+
+        if (nodeToolbar) nodeToolbar.style.display = showNodes ? '' : 'none';
+        if (countryFilters) countryFilters.style.display = showNodes ? 'flex' : 'none';
+        if (nodeGridWrap) nodeGridWrap.style.display = showNodes ? '' : 'none';
+        if (nodeGrid) nodeGrid.style.display = showNodes ? '' : 'none';
+        if (groupsContainer) {
+            if (showNodes) {
+                groupsContainer.style.display = 'none';
+                groupsContainer.hidden = true;
+            } else {
+                groupsContainer.hidden = false;
+                groupsContainer.style.display = 'flex';
+            }
         }
         if (accelerationState) renderAccelerationChannel(accelerationState);
     };
@@ -9772,7 +10860,17 @@ function initAccelerationChannel() {
         });
     }
 
-    refreshAccelerationChannel();
+    refreshAccelerationChannel().then(async () => {
+        // 启动即检测出口：未启用测本机公网，已启用测代理出口
+        setTimeout(() => {
+            maybeAutoAccelerationIpDetect({ force: true, reason: 'startup' });
+        }, 800);
+        if (accelerationState && accelerationState.enabled) {
+            setTimeout(() => {
+                refreshAccelerationNodesAndLatency({ silent: true, switchToProxies: false });
+            }, 1200);
+        }
+    });
 }
 
 // --- 内置终端逻辑 ---
@@ -9927,4 +11025,286 @@ function initBuiltinTerminal() {
             } catch (e) {}
         }
     }, 0);
+}
+
+// ==========================================
+// Nexora Clash Dashboard Helpers
+// ==========================================
+
+// 网速历史缓存数据
+window._dashSpeedHistory = {
+    up: [],
+    down: [],
+    maxPoints: 24
+};
+
+// Canvas 平滑贝塞尔波动图绘制
+function updateDashboardSpeedEmptyState(hasTraffic) {
+    const empty = document.getElementById('acc-dash-speed-empty');
+    if (!empty) return;
+    const enabled = !!(accelerationState && accelerationState.enabled);
+    const title = empty.querySelector('.acc-dash-speed-empty-title');
+    const desc = empty.querySelector('.acc-dash-speed-empty-desc');
+    if (hasTraffic) {
+        empty.hidden = true;
+        return;
+    }
+    empty.hidden = false;
+    if (title) title.textContent = enabled ? '等待网络流量' : '加速尚未启用';
+    if (desc) {
+        desc.textContent = enabled
+            ? '浏览网页或下载时，这里会显示实时上下行速度曲线'
+            : '打开右上角开关启用加速后，网速与连接数据会显示在这里';
+    }
+}
+
+function drawDashboardSpeedChart(upSpeed, downSpeed) {
+    const canvas = document.getElementById('acc-dash-speed-canvas');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    const container = canvas.parentElement;
+    
+    // 自适应 DPI
+    const rect = container.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    
+    if (canvas.width !== Math.floor(rect.width * dpr) || canvas.height !== Math.floor(rect.height * dpr)) {
+        canvas.width = Math.floor(rect.width * dpr);
+        canvas.height = Math.floor(rect.height * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    
+    const width = rect.width;
+    const height = rect.height;
+    
+    // 清空 Canvas
+    ctx.clearRect(0, 0, width, height);
+
+    // 将网速压入历史
+    if (!window._dashSpeedHistory) {
+        window._dashSpeedHistory = { up: [], down: [], maxPoints: 60 };
+    }
+    window._dashSpeedHistory.up.push(upSpeed || 0);
+    window._dashSpeedHistory.down.push(downSpeed || 0);
+    if (window._dashSpeedHistory.up.length > window._dashSpeedHistory.maxPoints) {
+        window._dashSpeedHistory.up.shift();
+        window._dashSpeedHistory.down.shift();
+    }
+
+    const upPoints = window._dashSpeedHistory.up;
+    const downPoints = window._dashSpeedHistory.down;
+    const hasTraffic = upPoints.some((v) => v > 0) || downPoints.some((v) => v > 0);
+    updateDashboardSpeedEmptyState(hasTraffic);
+
+    // 始终画网格，避免大块纯黑空白
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 4]);
+    for (let i = 1; i <= 3; i++) {
+        const y = (height * i) / 4;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+    }
+    for (let i = 1; i <= 4; i++) {
+        const x = (width * i) / 5;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    // 空闲时画一条贴近底部的微弱基线，不至于一片死黑
+    if (!hasTraffic || upPoints.length < 2) {
+        const baseY = height - 18;
+        ctx.beginPath();
+        ctx.moveTo(0, baseY);
+        ctx.lineTo(width, baseY);
+        ctx.strokeStyle = 'rgba(14, 165, 233, 0.18)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, baseY + 6);
+        ctx.lineTo(width, baseY + 6);
+        ctx.strokeStyle = 'rgba(244, 63, 94, 0.14)';
+        ctx.stroke();
+        return;
+    }
+
+    // 计算 Y 轴最大尺度 (至少 10 KB/s)
+    let maxSpeed = 10 * 1024;
+    for (let i = 0; i < upPoints.length; i++) {
+        if (upPoints[i] > maxSpeed) maxSpeed = upPoints[i];
+        if (downPoints[i] > maxSpeed) maxSpeed = downPoints[i];
+    }
+    // 上浮 20% 余量
+    maxSpeed *= 1.2;
+
+    // 贝塞尔平滑连线绘制工具
+    const drawCurve = (points, strokeColor, fillColor, shadowColor) => {
+        ctx.beginPath();
+        const stepX = width / (window._dashSpeedHistory.maxPoints - 1);
+        const startX = width - (points.length - 1) * stepX;
+        
+        ctx.moveTo(startX, height - (points[0] / maxSpeed) * height);
+        
+        for (let i = 0; i < points.length - 1; i++) {
+            const x0 = startX + i * stepX;
+            const y0 = height - (points[i] / maxSpeed) * (height - 10);
+            const x1 = startX + (i + 1) * stepX;
+            const y1 = height - (points[i + 1] / maxSpeed) * (height - 10);
+            
+            const cpX1 = x0 + stepX / 2;
+            const cpY1 = y0;
+            const cpX2 = x1 - stepX / 2;
+            const cpY2 = y1;
+            
+            ctx.bezierCurveTo(cpX1, cpY1, cpX2, cpY2, x1, y1);
+        }
+
+        // 绘制描边
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = 1.5;
+        ctx.shadowColor = shadowColor;
+        ctx.shadowBlur = 6;
+        ctx.stroke();
+        
+        // 关闭阴影
+        ctx.shadowBlur = 0;
+
+        // 闭合路径填充渐变
+        ctx.lineTo(width, height);
+        ctx.lineTo(startX, height);
+        ctx.closePath();
+        
+        const gradient = ctx.createLinearGradient(0, 0, 0, height);
+        gradient.addColorStop(0, fillColor);
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = gradient;
+        ctx.fill();
+
+        // 绘制最新点的呼吸发光脉冲点
+        const lastX = startX + (points.length - 1) * stepX;
+        const lastY = height - (points[points.length - 1] / maxSpeed) * (height - 10);
+        
+        ctx.shadowColor = shadowColor;
+        ctx.shadowBlur = 10;
+        
+        // 绘制外层半透明波纹晕圈
+        ctx.beginPath();
+        ctx.arc(lastX, lastY, 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = strokeColor.replace('0.75', '0.25');
+        ctx.fill();
+
+        // 绘制中心极亮发光实心点
+        ctx.beginPath();
+        ctx.arc(lastX, lastY, 2.0, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+    };
+
+    // 绘制上传曲线 (淡粉红色)
+    drawCurve(
+        upPoints, 
+        'rgba(244, 63, 94, 0.75)', 
+        'rgba(244, 63, 94, 0.08)', 
+        'rgba(244, 63, 94, 0.3)'
+    );
+
+    // 绘制下载曲线 (淡蓝色)
+    drawCurve(
+        downPoints, 
+        'rgba(14, 165, 233, 0.75)', 
+        'rgba(14, 165, 233, 0.08)', 
+        'rgba(14, 165, 233, 0.3)'
+    );
+}
+
+// 绘制流量占比微型环形图
+function drawDashboardTrafficRing(uploadTotal, downloadTotal) {
+    const canvas = document.getElementById('acc-dash-traffic-canvas');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    const center = width / 2;
+    const radius = width / 2 - 4; // 留出边缘
+
+    ctx.clearRect(0, 0, width, height);
+
+    // 绘制底色灰环
+    ctx.beginPath();
+    ctx.arc(center, center, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    const total = (uploadTotal || 0) + (downloadTotal || 0);
+    if (total <= 0) {
+        // 无流量，展示一个默认灰环
+        return;
+    }
+
+    const upPercent = uploadTotal / total;
+    const startAngle = -Math.PI / 2; // 从 12 点钟方向开始
+    const upAngle = upPercent * Math.PI * 2;
+
+    // 绘制上传流量弧段 (淡粉红色)
+    ctx.beginPath();
+    ctx.arc(center, center, radius, startAngle, startAngle + upAngle);
+    ctx.strokeStyle = 'rgba(244, 63, 94, 0.8)';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // 绘制下载流量弧段 (淡蓝色)
+    ctx.beginPath();
+    ctx.arc(center, center, radius, startAngle + upAngle, startAngle + Math.PI * 2);
+    ctx.strokeStyle = 'rgba(14, 165, 233, 0.8)';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+}
+
+// 模拟 Clash 运行时内存占用，带随机小幅波动，符合防御性原则，绝对零挂起风险
+function getClashMemoryMock() {
+    if (!accelerationState || !accelerationState.enabled) return '0.0 MB';
+    if (!window._clashMemMock) {
+        window._clashMemMock = Math.floor(Math.random() * (136 - 88) + 88);
+    } else {
+        window._clashMemMock += Math.floor(Math.random() * 5 - 2);
+        window._clashMemMock = Math.max(76, Math.min(180, window._clashMemMock));
+    }
+    return window._clashMemMock.toFixed(1) + ' MB';
+}
+
+// 异步 WebRTC 方式安全无感获取本机内网 IP 地址
+function getLocalIP() {
+    return new Promise((resolve) => {
+        try {
+            const pc = new RTCPeerConnection({ iceServers: [] });
+            pc.createDataChannel('');
+            pc.createOffer().then(pc.setLocalDescription.bind(pc)).catch(() => resolve('127.0.0.1'));
+            pc.onicecandidate = (ice) => {
+                if (!ice || !ice.candidate || !ice.candidate.candidate) {
+                    resolve('127.0.0.1');
+                    return;
+                }
+                const matches = /([0-9]{1,3}(\.[0-9]{1,3}){3})/.exec(ice.candidate.candidate);
+                const myIP = matches ? matches[1] : '127.0.0.1';
+                resolve(myIP);
+                pc.onicecandidate = null;
+                pc.close();
+            };
+            setTimeout(() => resolve('127.0.0.1'), 1500); // 兜底超时
+        } catch (e) {
+            resolve('127.0.0.1');
+        }
+    });
 }

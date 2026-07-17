@@ -282,9 +282,17 @@ async function checkAndHealSandboxNode() {
     }
     
     const targetVersion = '24.15.0';
-    const tempZip = path.join(__dirname, 'node-v24.15.0.zip');
-    const tempExtract = path.join(__dirname, 'node-v24.15.0-temp');
     const arch = process.arch === 'arm64' ? 'win-arm64' : (process.arch === 'ia32' ? 'win-x86' : 'win-x64');
+    // 打包后 __dirname 在只读 asar / Program Files，临时文件必须落可写目录
+    let upgradeTmp;
+    try {
+        upgradeTmp = path.join(app.getPath('temp'), 'nexora-sandbox-upgrade');
+    } catch (e) {
+        upgradeTmp = path.join(require('os').tmpdir(), 'nexora-sandbox-upgrade');
+    }
+    try { fs.mkdirSync(upgradeTmp, { recursive: true }); } catch (e) {}
+    const tempZip = path.join(upgradeTmp, `node-v${targetVersion}.zip`);
+    const tempExtract = path.join(upgradeTmp, `node-v${targetVersion}-temp`);
     
     // 优先尝试阿里的国内淘宝/阿里镜像以获得极速下载，备用 Node.js 官方链接
     const urls = [
@@ -379,7 +387,7 @@ async function checkAndHealSandboxNode() {
         mainWindow.webContents.send('gateway-log', '[System] 解压完成，正在部署核心二进制组件...\n');
     }
     
-    const extractedDir = path.join(tempExtract, `node-v${targetVersion}-win-x64`);
+    const extractedDir = path.join(tempExtract, `node-v${targetVersion}-${arch}`);
     
     // 物理覆盖
     if (!fs.existsSync(sandboxDir)) {
@@ -510,12 +518,21 @@ function lockGatewayAuthBeforeStart() {
     ensureOpenClawConfigInitialized();
     let token = NEXORA_AGENT_DEFAULT_GATEWAY_TOKEN;
     let port = 18789;
+    const instanceId = (global.nexoraInstance && global.nexoraInstance.id) || 1;
+    const portHint = (global.nexoraInstance && global.nexoraInstance.gatewayPortHint) || 18789;
     try {
         if (fs.existsSync(CONFIG_PATH)) {
             const parsed = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8').replace(/^\uFEFF/, ''));
             const norm = normalizeGatewayAuthConfig(parsed, NEXORA_AGENT_DEFAULT_GATEWAY_TOKEN);
             token = norm.token;
             port = norm.port;
+            // 多开实例强制使用错开端口，避免两套网关互抢 18789
+            if (instanceId > 1) {
+                port = portHint;
+                if (!norm.config.gateway) norm.config.gateway = {};
+                norm.config.gateway.port = port;
+                norm.changed = true;
+            }
             if (norm.changed) {
                 fs.writeFileSync(CONFIG_PATH, JSON.stringify(norm.config, null, 2) + '\n', 'utf8');
                 console.log('[TokenGuard] Normalized gateway.auth before start');
@@ -525,6 +542,11 @@ function lockGatewayAuthBeforeStart() {
         console.warn('[TokenGuard] Primary config normalize failed:', e.message);
         try {
             const minimal = normalizeGatewayAuthConfig({}, NEXORA_AGENT_DEFAULT_GATEWAY_TOKEN).config;
+            if (instanceId > 1) {
+                if (!minimal.gateway) minimal.gateway = {};
+                minimal.gateway.port = portHint;
+                port = portHint;
+            }
             fs.mkdirSync(CONFIG_DIR, { recursive: true });
             fs.writeFileSync(CONFIG_PATH, JSON.stringify(minimal, null, 2) + '\n', 'utf8');
             token = NEXORA_AGENT_DEFAULT_GATEWAY_TOKEN;
@@ -1975,18 +1997,92 @@ function prepareChannelPluginsBeforeGateway() {
 // 忽略证书错误以兼容 Clash 等代理软件的 HTTPS 劫持/解密校验
 app.commandLine.appendSwitch('ignore-certificate-errors');
 
-// 单例锁，防止启动多个应用
-if (!app.requestSingleInstanceLock()) {
+/** 多开：每个实例独占 userData 槽位（-i2/-i3…），Clash/网关端口各自避让；卡不卡由用户决定 */
+function isPidAlive(pid) {
+    const n = Number(pid);
+    if (!Number.isFinite(n) || n <= 0) return false;
+    try {
+        process.kill(n, 0);
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function tryAcquireInstanceLock(dir) {
+    const lockFile = path.join(dir, '.nexora-instance.lock');
+    try {
+        fs.mkdirSync(dir, { recursive: true });
+    } catch (e) {}
+    const tryCreate = () => {
+        const fd = fs.openSync(lockFile, 'wx');
+        try {
+            fs.writeFileSync(fd, `${process.pid}\n${Date.now()}\n`);
+        } finally {
+            try { fs.closeSync(fd); } catch (e) {}
+        }
+        return true;
+    };
+    try {
+        return tryCreate();
+    } catch (e) {
+        try {
+            const raw = fs.readFileSync(lockFile, 'utf8');
+            const oldPid = parseInt(String(raw).split(/\r?\n/)[0], 10);
+            if (!isPidAlive(oldPid)) {
+                try { fs.unlinkSync(lockFile); } catch (e2) {}
+                return tryCreate();
+            }
+        } catch (e3) {}
+        return false;
+    }
+}
+
+function releaseInstanceLock(dir) {
+    try {
+        const lockFile = path.join(dir, '.nexora-instance.lock');
+        if (!fs.existsSync(lockFile)) return;
+        const raw = fs.readFileSync(lockFile, 'utf8');
+        const oldPid = parseInt(String(raw).split(/\r?\n/)[0], 10);
+        if (!oldPid || oldPid === process.pid || !isPidAlive(oldPid)) {
+            fs.unlinkSync(lockFile);
+        }
+    } catch (e) {}
+}
+
+function acquireNexoraInstanceSlot() {
+    const base = app.getPath('userData');
+    const max = 8;
+    for (let id = 1; id <= max; id++) {
+        const dir = id === 1 ? base : `${base}-i${id}`;
+        if (!tryAcquireInstanceLock(dir)) continue;
+        app.setPath('userData', dir);
+        const release = () => releaseInstanceLock(dir);
+        app.on('will-quit', release);
+        process.on('exit', release);
+        return {
+            id,
+            dir,
+            isPrimary: id === 1,
+            primaryUserData: base,
+            gatewayPortHint: 18789 + (id - 1) * 100
+        };
+    }
+    return null;
+}
+
+const nexoraInstance = acquireNexoraInstanceSlot();
+if (!nexoraInstance) {
+    console.error('[Instance] 已达到最大多开数量（8），退出');
     app.quit();
 } else {
-    app.on('second-instance', () => {
-        if (mainWindow) {
-            try { mainWindow.setBackgroundColor('#0d0b18'); } catch (e) {}
-            if (mainWindow.isMinimized()) mainWindow.restore();
-            mainWindow.show();
-            mainWindow.focus();
-        }
-    });
+    global.nexoraInstance = nexoraInstance;
+    console.log(`[Instance] #${nexoraInstance.id} userData=${nexoraInstance.dir}`);
+    // 第 2+ 实例隔离 OpenClaw 状态目录，避免与主实例抢网关/会话
+    if (nexoraInstance.id > 1) {
+        process.env.NEXORA_INSTANCE_ID = String(nexoraInstance.id);
+        process.env.OPENCLAW_HOME = path.join(nexoraInstance.dir, 'openclaw-home');
+    }
 }
 
 function createSplashWindow() {
@@ -2053,11 +2149,21 @@ function createWindow(existingSplash) {
     } catch (e) {}
 
     mainWindow.loadFile('index.html');
+    try {
+        const id = (global.nexoraInstance && global.nexoraInstance.id) || 1;
+        mainWindow.setTitle(id > 1 ? `Nexora Agent #${id}` : 'Nexora Agent');
+    } catch (e) {}
     // 当渲染进程首次绘制完成后，关闭 splash 并展示主窗口
     mainWindow.once('ready-to-show', () => {
         splash.destroy();
         try { mainWindow.setBackgroundColor(WINDOW_BG); } catch (e) {}
         mainWindow.show();
+        const id = (global.nexoraInstance && global.nexoraInstance.id) || 1;
+        if (id > 1) {
+            try {
+                showNotification(`Nexora Agent 多开 #${id}`, '已使用独立数据目录与端口；系统代理请勿多实例同时开启。');
+            } catch (e) {}
+        }
     });
 
     // 最小化/托盘还原时再刷一次底色，压住 Windows 白闪
@@ -2319,20 +2425,25 @@ async function startGatewayProcess() {
             return;
         }
 
-        // 每次拉起Nexora Agent前，先物理强制杀掉任何霸占 18789 端口的残留进程，确保新实例完美就绪
+        // 多开时：主实例仍清理本机默认 18789 残留；第 2+ 实例绝不杀其它实例的网关
+        const instanceId = (global.nexoraInstance && global.nexoraInstance.id) || 1;
+        const preferredGatewayPort = (global.nexoraInstance && global.nexoraInstance.gatewayPortHint) || 18789;
         if (process.platform === 'win32') {
             try {
-                // 精准物理强杀所有可能遗留的旧沙箱 node.exe 僵尸进程，彻底杜绝多实例抢占和日志刷屏
-                const killCmd = `powershell -ExecutionPolicy Bypass -NoProfile -Command "try { Get-CimInstance Win32_Process -Filter \\"Name = 'node.exe'\\" | Where-Object { $_.ExecutablePath -like '*Nexora Agent*' -or $_.CommandLine -like '*openclaw*' -or $_.ExecutablePath -like '*.node-sandbox*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force } } catch {}; exit 0"`;
-                await execAsync(killCmd);
+                if (instanceId <= 1) {
+                    // 精准物理强杀所有可能遗留的旧沙箱 node.exe 僵尸进程（仅主实例）
+                    const killCmd = `powershell -ExecutionPolicy Bypass -NoProfile -Command "try { Get-CimInstance Win32_Process -Filter \\"Name = 'node.exe'\\" | Where-Object { $_.ExecutablePath -like '*Nexora Agent*' -or $_.CommandLine -like '*openclaw*' -or $_.ExecutablePath -like '*.node-sandbox*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force } } catch {}; exit 0"`;
+                    await execAsync(killCmd);
+                }
 
                 const currentPid = process.pid;
                 const parentPid = process.ppid;
                 const netstatOut = await execAsync('netstat -ano');
                 const lines = netstatOut.split('\n');
                 const pidsToKill = new Set();
+                const portToken = `:${preferredGatewayPort}`;
                 for (const line of lines) {
-                    if (line.includes(':18789') && line.includes('LISTENING')) {
+                    if (line.includes(portToken) && line.includes('LISTENING')) {
                         const parts = line.trim().split(/\s+/);
                         const pid = parts[parts.length - 1];
                         if (pid && parseInt(pid) > 0 && pid !== currentPid.toString() && pid !== parentPid.toString()) {
@@ -2346,7 +2457,7 @@ async function startGatewayProcess() {
                     } catch (e) {}
                 }
             } catch(err) {
-                console.error('Failed to cleanup leftover port 18789 processes:', err);
+                console.error('Failed to cleanup leftover gateway port processes:', err);
             }
         }
 
@@ -4503,6 +4614,17 @@ async function applyElectronSessionProxy(enabled) {
     }
 }
 
+ipcMain.handle('app-instance-info', async () => {
+    const inst = global.nexoraInstance || { id: 1, isPrimary: true, dir: app.getPath('userData') };
+    return {
+        success: true,
+        id: inst.id || 1,
+        isPrimary: !!inst.isPrimary,
+        userData: inst.dir || app.getPath('userData'),
+        gatewayPortHint: inst.gatewayPortHint || 18789
+    };
+});
+
 ipcMain.handle('acceleration-status', async () => {
     try { return { success: true, ...(await acceleration.getDashboardData()) }; }
     catch (e) { return { success: false, error: e.message || String(e) }; }
@@ -4520,7 +4642,12 @@ ipcMain.handle('acceleration-close-connection', async (event, id) => {
 
 ipcMain.handle('acceleration-set-enabled', async (event, enabled, profileId) => {
     try {
-        const status = await acceleration.setEnabled(!!enabled, profileId || null);
+        const onProgress = (p) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('acceleration-core-progress', p);
+            }
+        };
+        const status = await acceleration.setEnabled(!!enabled, profileId || null, enabled ? onProgress : null);
         await applyElectronSessionProxy(!!status.enabled);
         return { success: true, ...status };
     } catch (e) {
@@ -4544,7 +4671,8 @@ ipcMain.handle('acceleration-ensure-core', async () => {
 ipcMain.handle('acceleration-add-url', async (event, url, name) => {
     try {
         const profile = await acceleration.addProfileFromUrl(url, name);
-        return { success: true, profile, ...(await acceleration.getDashboardData(profile.id)) };
+        // 只添加，不切换当前使用中的配置、不跳代理页
+        return { success: true, profile, ...(await acceleration.getDashboardData()) };
     } catch (e) {
         return { success: false, error: e.message || String(e) };
     }
@@ -4553,7 +4681,7 @@ ipcMain.handle('acceleration-add-url', async (event, url, name) => {
 ipcMain.handle('acceleration-add-file', async (event, filePath, name) => {
     try {
         const profile = acceleration.addProfileFromFile(filePath, name);
-        return { success: true, profile, ...(await acceleration.getDashboardData(profile.id)) };
+        return { success: true, profile, ...(await acceleration.getDashboardData()) };
     } catch (e) {
         return { success: false, error: e.message || String(e) };
     }
@@ -4562,7 +4690,7 @@ ipcMain.handle('acceleration-add-file', async (event, filePath, name) => {
 ipcMain.handle('acceleration-add-content', async (event, content, name) => {
     try {
         const profile = acceleration.addProfileFromContent(content, name, { source: 'qr' });
-        return { success: true, profile, ...(await acceleration.getDashboardData(profile.id)) };
+        return { success: true, profile, ...(await acceleration.getDashboardData()) };
     } catch (e) {
         return { success: false, error: e.message || String(e) };
     }
@@ -4582,7 +4710,7 @@ ipcMain.handle('acceleration-pick-file', async () => {
             return { success: false, canceled: true };
         }
         const profile = acceleration.addProfileFromFile(result.filePaths[0]);
-        return { success: true, profile, ...(await acceleration.getDashboardData(profile.id)) };
+        return { success: true, profile, ...(await acceleration.getDashboardData()) };
     } catch (e) {
         return { success: false, error: e.message || String(e) };
     }
@@ -4629,8 +4757,41 @@ ipcMain.handle('acceleration-select-proxy', async (event, payload) => {
 
 ipcMain.handle('acceleration-delay-test', async (event, names) => {
     try {
-        const results = await acceleration.delayTest(names);
-        return { success: true, results, ...(await acceleration.getDashboardData()) };
+        // 记录用户在测速前是否已手动启用。未启用时 acceleration.delayTest
+        // 会使用临时内核，完成后自动关闭，不能改变用户的启用状态。
+        const manuallyEnabled = !!acceleration.getStatus().enabled;
+        const results = await acceleration.delayTest(names, {
+            onProgress: (payload) => {
+                try {
+                    if (event && event.sender && !event.sender.isDestroyed()) {
+                        event.sender.send('acceleration-delay-progress', payload);
+                    }
+                } catch (e) {}
+            }
+        });
+        const dash = await acceleration.getDashboardData();
+        // 双保险：显式把测速结果写回节点，避免被内核 history 虚高值盖住
+        if (results && Array.isArray(dash.nodes)) {
+            for (const node of dash.nodes) {
+                if (Object.prototype.hasOwnProperty.call(results, node.name)) {
+                    node.latency = results[node.name];
+                }
+            }
+        }
+        return {
+            success: true,
+            results,
+            temporaryTest: !manuallyEnabled,
+            ...dash
+        };
+    } catch (e) {
+        return { success: false, error: e.message || String(e) };
+    }
+});
+
+ipcMain.handle('acceleration-detect-ip', async () => {
+    try {
+        return await acceleration.detectOutboundIp();
     } catch (e) {
         return { success: false, error: e.message || String(e) };
     }
@@ -4640,21 +4801,25 @@ ipcMain.handle('acceleration-set-options', async (event, options) => {
     try {
         const status = await acceleration.setOptions(options || {});
         await applyElectronSessionProxy(!!status.enabled);
-        return { success: true, ...(await acceleration.getDashboardData()) };
+        const dash = { success: true, ...status };
+        if (status && status.warning) dash.warning = status.warning;
+        return dash;
     } catch (e) {
-        return { success: false, error: e.message || String(e) };
+        let dash = {};
+        try { dash = await acceleration.getDashboardData(); } catch (e2) {}
+        return { success: false, error: e.message || String(e), ...dash };
     }
 });
 
 ipcMain.handle('acceleration-set-active-profile', async (event, id) => {
     try {
-        acceleration.setActiveProfileId(id);
+        await acceleration.setActiveProfileId(id);
         const st = acceleration.getStatus();
         if (st.enabled) {
             await acceleration.setEnabled(true, id);
             await applyElectronSessionProxy(true);
         }
-        return { success: true, ...(await acceleration.getDashboardData(id)) };
+        return { success: true, ...(await acceleration.getDashboardData()) };
     } catch (e) {
         return { success: false, error: e.message || String(e) };
     }
@@ -5237,6 +5402,17 @@ ipcMain.handle('install-update', async (event, savePath) => {
 
 // 4. 内置Nexora Agent核心包更新（openclaw npm 包热更新）
 ipcMain.handle('update-openclaw-package', async (event, { targetVersion }) => {
+    // 安装版 openclaw 在 gateway-runtime（可写目录），且部分升级辅助函数未落地；
+    // 避免对只读 asar / Program Files 执行 npm install 导致失败或损坏安装。
+    try {
+        if (app.isPackaged) {
+            return {
+                success: false,
+                message: '安装版请通过「检查更新」下载安装新版本；应用内热更新仅支持开发模式。'
+            };
+        }
+    } catch (e) {}
+
     const { execFile } = require('child_process');
     const path = require('path');
     const fs = require('fs');
@@ -5448,6 +5624,8 @@ ipcMain.handle('update-openclaw-package', async (event, { targetVersion }) => {
 
 // 初始化应用
 app.whenReady().then(async () => {
+    if (!global.nexoraInstance) return;
+
     // 初始化加速通道目录与状态
     try {
         acceleration.init(app);
@@ -5462,7 +5640,18 @@ app.whenReady().then(async () => {
     }
 
     // 家目录矫正：优先真实用户目录；不可写时改走 AppData\NexoraAgent，禁止落到裸 Temp
+    // 多开第 2+ 实例：强制使用本实例 userData 下的隔离 home，避免与主实例抢 .openclaw / 18789
     try {
+        const secondaryInstance = global.nexoraInstance && global.nexoraInstance.id > 1;
+        if (secondaryInstance) {
+            const isolatedHome = path.join(global.nexoraInstance.dir, 'openclaw-home');
+            fs.mkdirSync(isolatedHome, { recursive: true });
+            applyResolvedOpenClawHome(isolatedHome);
+            console.log(`[Instance] #${global.nexoraInstance.id} isolated OpenClaw home: ${isolatedHome}`);
+            console.log(`[System] OPENCLAW_HOME=${process.env.OPENCLAW_HOME}`);
+            console.log(`[System] OPENCLAW_STATE_DIR=${process.env.OPENCLAW_STATE_DIR}`);
+            console.log(`[System] OpenClaw config dir: ${CONFIG_DIR}`);
+        } else {
         // 保留改写前的真实用户目录，供鉴权双目录同步 / 排障
         if (!process.env.NEXORA_AGENT_ORIGINAL_USERPROFILE) {
             process.env.NEXORA_AGENT_ORIGINAL_USERPROFILE =
@@ -5519,6 +5708,7 @@ app.whenReady().then(async () => {
                 message: `检测到数据目录位于临时路径：\n${homePath}`,
                 actions: ['将 Nexora Agent 加入受控文件夹访问排除项', '重启 Nexora Agent']
             }, homePath));
+        }
         }
     } catch (err) {
         console.error('[System] Failed to resolve true user home:', err.message);
@@ -5612,12 +5802,15 @@ app.on('window-all-closed', () => {
     }
 });
 
-// 应用退出时必须清理系统代理和内核进程，防止用户断网
+// 应用退出时必须清理本实例内核；系统代理仅在本实例开启过时才关闭（避免多开误关主实例代理）
 app.on('will-quit', async (e) => {
     e.preventDefault();
     try {
+        const st = acceleration.getStatus();
         await acceleration.stopCore();
-        await acceleration.applySystemProxy(false);
+        if (st && st.systemProxy) {
+            await acceleration.applySystemProxy(false);
+        }
     } catch (err) {}
     app.exit(0);
 });

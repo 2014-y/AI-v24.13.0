@@ -18,7 +18,8 @@
     <header class="title-bar">
       <div class="title-logo-zone">
         <img src="config/icon.png" width="20" height="20" style="border-radius: 4px; object-fit: cover;">
-        <span>Nexora Agent</span>
+        <span id="app-title-text">Nexora Agent</span>
+        <span id="app-instance-badge" class="app-instance-badge" hidden></span>
       </div>
 
       <!-- 神经脉搏指示器 (窗口顶部绝对居中) -->
@@ -224,33 +225,27 @@
                         </div>
                         <div class="topo-channel-grid">
                           <div class="topo-node topo-channel-card node-wechat pending" id="node-wechat" data-channel="wechat">
-                            <div class="topo-card-top">
-                              <div class="node-icon topo-card-icon" aria-hidden="true">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8.5 10.5h.01M15.5 10.5h.01"/><path d="M4 11c0-3.3 3.6-6 8-6s8 2.7 8 6-3.6 6-8 6c-.7 0-1.4-.1-2-.2L6 19l.8-3.2C5.1 14.7 4 13 4 11z"/></svg>
-                              </div>
-                              <span class="topo-card-badge" id="badge-wechat" data-i18n="console.topology.status.pending">未连接</span>
+                            <div class="node-icon topo-card-icon" aria-hidden="true">
+                              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8.5 10.5h.01M15.5 10.5h.01"/><path d="M4 11c0-3.3 3.6-6 8-6s8 2.7 8 6-3.6 6-8 6c-.7 0-1.4-.1-2-.2L6 19l.8-3.2C5.1 14.7 4 13 4 11z"/></svg>
                             </div>
                             <div class="node-label topo-card-name" data-i18n="console.node.wechat">微信</div>
+                            <span class="topo-card-badge" id="badge-wechat" data-i18n="console.topology.status.pending">未连接</span>
                             <div class="topo-card-hint" id="hint-wechat" data-i18n="console.topology.hint.unbound">去通讯管理扫码绑定</div>
                           </div>
                           <div class="topo-node topo-channel-card node-qq pending" id="node-qq" data-channel="qq">
-                            <div class="topo-card-top">
-                              <div class="node-icon topo-card-icon" aria-hidden="true">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="9" r="4"/><path d="M5 19c1.5-3 4-4.5 7-4.5S17.5 16 19 19"/><path d="M8 8.5c-.8-1.2.2-3 1.8-2.4M16 8.5c.8-1.2-.2-3-1.8-2.4"/></svg>
-                              </div>
-                              <span class="topo-card-badge" id="badge-qq" data-i18n="console.topology.status.pending">未连接</span>
+                            <div class="node-icon topo-card-icon" aria-hidden="true">
+                              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="9" r="4"/><path d="M5 19c1.5-3 4-4.5 7-4.5S17.5 16 19 19"/><path d="M8 8.5c-.8-1.2.2-3 1.8-2.4M16 8.5c.8-1.2-.2-3-1.8-2.4"/></svg>
                             </div>
                             <div class="node-label topo-card-name" data-i18n="console.node.qq">QQ 机器人</div>
+                            <span class="topo-card-badge" id="badge-qq" data-i18n="console.topology.status.pending">未连接</span>
                             <div class="topo-card-hint" id="hint-qq" data-i18n="console.topology.hint.unbound">去通讯管理填写 AppID</div>
                           </div>
                           <div class="topo-node topo-channel-card node-feishu pending" id="node-feishu" data-channel="feishu">
-                            <div class="topo-card-top">
-                              <div class="node-icon topo-card-icon" aria-hidden="true">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12l7-8 2 5 7 1-6 3 2 7-5-4-7 2 4-6z"/></svg>
-                              </div>
-                              <span class="topo-card-badge" id="badge-feishu" data-i18n="console.topology.status.pending">未连接</span>
+                            <div class="node-icon topo-card-icon" aria-hidden="true">
+                              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12l7-8 2 5 7 1-6 3 2 7-5-4-7 2 4-6z"/></svg>
                             </div>
                             <div class="node-label topo-card-name" data-i18n="console.node.feishu">飞书</div>
+                            <span class="topo-card-badge" id="badge-feishu" data-i18n="console.topology.status.pending">未连接</span>
                             <div class="topo-card-hint" id="hint-feishu" data-i18n="console.topology.hint.unbound">去通讯管理扫码或填密钥</div>
                           </div>
                         </div>
@@ -312,11 +307,9 @@
                             <div class="node-icon topo-card-icon" aria-hidden="true">
                               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/><path d="M6.5 6.5l2 2M15.5 15.5l2 2M17.5 6.5l-2 2M8.5 15.5l-2 2"/></svg>
                             </div>
-                            <div class="topo-engine-body">
-                              <div class="node-label topo-card-name" data-i18n="console.node.llm">模型引擎</div>
-                              <div class="topo-card-hint" id="hint-llm" data-i18n="console.topology.hint.llm">等待网关就绪</div>
-                            </div>
+                            <div class="node-label topo-card-name" data-i18n="console.node.llm">模型引擎</div>
                             <span class="topo-card-badge" id="badge-llm" data-i18n="console.topology.status.pending">未连接</span>
+                            <div class="topo-card-hint" id="hint-llm" data-i18n="console.topology.hint.llm">等待网关就绪</div>
                           </div>
                         </section>
 
@@ -1153,14 +1146,180 @@
           </div>
 
           <div class="acc-subtabs" role="tablist">
-            <button type="button" class="acc-subtab active" data-acc-panel="profiles">配置</button>
+            <button type="button" class="acc-subtab active" data-acc-panel="dashboard">仪表盘</button>
             <button type="button" class="acc-subtab" data-acc-panel="proxies">代理</button>
+            <button type="button" class="acc-subtab" data-acc-panel="profiles">配置</button>
             <button type="button" class="acc-subtab" data-acc-panel="connections">连接</button>
             <button type="button" class="acc-subtab" data-acc-panel="controls">控制</button>
           </div>
 
+          <!-- 仪表盘页：图形化状态监控 -->
+          <div class="acc-panel active" id="acc-panel-dashboard">
+            <div class="acc-dash-top-grid">
+              <!-- 实时网速卡片 -->
+              <div class="acc-card acc-dash-chart-card">
+                <div class="acc-card-head" style="margin-bottom: 8px;">
+                  <div class="acc-card-title" style="margin-bottom: 0; display: flex; align-items: center; gap: 6px;">
+                    <span style="font-size: 14px;">📈</span> 网络速度
+                  </div>
+                  <div id="acc-dash-speed-text" class="acc-dash-speed-text">
+                    <span class="speed-up">↑ 0 B/s</span>
+                    <span class="speed-down">↓ 0 B/s</span>
+                  </div>
+                </div>
+                <div class="acc-dash-canvas-container">
+                  <canvas id="acc-dash-speed-canvas"></canvas>
+                  <div id="acc-dash-speed-empty" class="acc-dash-speed-empty">
+                    <div class="acc-dash-speed-empty-icon">📡</div>
+                    <div class="acc-dash-speed-empty-title">等待网络流量</div>
+                    <div class="acc-dash-speed-empty-desc">启用加速后，浏览网页或下载时这里会显示实时上下行曲线</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 右侧：出站模式 + 状态 + 开关（单卡填满高度） -->
+              <div class="acc-dash-controls-col">
+                <div class="acc-card acc-dash-side-panel">
+                  <div class="acc-dash-side-section">
+                    <div class="acc-dash-side-header">
+                      <span class="acc-dash-side-title"><span>✈</span> 出站模式</span>
+                      <span class="acc-dash-mode-hint" id="acc-dash-mode-hint">按规则分流</span>
+                    </div>
+                    <div class="acc-dash-mode-group" role="radiogroup" aria-label="出站模式">
+                      <button type="button" class="acc-dash-mode-btn" data-mode="rule">规则</button>
+                      <button type="button" class="acc-dash-mode-btn" data-mode="global">全局</button>
+                      <button type="button" class="acc-dash-mode-btn" data-mode="direct">直连</button>
+                    </div>
+                  </div>
+
+                  <div class="acc-dash-side-section acc-dash-side-meta">
+                    <!-- 核心节点信息卡片 (主卡片) -->
+                    <div class="acc-dash-info-card">
+                      <div class="acc-dash-info-card-header">
+                        <div class="acc-dash-info-card-header-left">
+                          <span class="acc-dash-info-card-dot"></span>
+                          <span class="acc-dash-info-card-title">主通道配置</span>
+                        </div>
+                        <span id="acc-dash-active-profile" class="acc-dash-info-card-profile">--</span>
+                      </div>
+                      
+                      <div class="acc-dash-info-card-body">
+                        <div class="acc-dash-node-row">
+                          <div class="acc-dash-node-meta">
+                            <span class="acc-dash-node-label">活跃节点</span>
+                            <div class="acc-dash-node-value">
+                              <strong id="acc-dash-current-proxy" class="acc-dash-kv-accent">--</strong>
+                            </div>
+                          </div>
+                          <div class="acc-dash-node-latency-wrapper">
+                            <span id="acc-dash-current-delay" class="acc-node-delay">--</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 参数明细网格 (副卡片网格) -->
+                    <div class="acc-dash-telemetry-grid">
+                      <div class="acc-dash-telemetry-item">
+                        <span class="acc-dash-telemetry-label">本地代理</span>
+                        <strong id="acc-dash-mixed-port" class="acc-dash-kv-mono">--</strong>
+                      </div>
+                      <div class="acc-dash-telemetry-item">
+                        <span class="acc-dash-telemetry-label">控制端口</span>
+                        <strong id="acc-dash-controller" class="acc-dash-kv-mono">--</strong>
+                      </div>
+                      <div class="acc-dash-telemetry-item acc-dash-telemetry-item-full">
+                        <span class="acc-dash-telemetry-label">加速运行状态</span>
+                        <div class="acc-dash-status-indicator">
+                          <span class="acc-dash-status-dot"></span>
+                          <strong id="acc-dash-run-status">未启用</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="acc-dash-side-section acc-dash-side-toggles">
+                    <div class="acc-dash-toggle-row">
+                      <div class="toggle-info">
+                        <div class="toggle-name">启用加速通道</div>
+                        <div class="toggle-desc">开启内置代理内核以启用加速</div>
+                      </div>
+                      <label class="switch-slider-btn">
+                        <input type="checkbox" id="acc-dash-enabled-toggle">
+                        <span class="slider-knob"></span>
+                      </label>
+                    </div>
+                    <div class="acc-dash-toggle-row">
+                      <div class="toggle-info">
+                        <div class="toggle-name">系统代理</div>
+                        <div class="toggle-desc" title="把 Windows 系统代理指到本地 Clash 端口">写入 Windows 系统代理</div>
+                      </div>
+                      <label class="switch-slider-btn">
+                        <input type="checkbox" id="acc-dash-system-proxy-toggle">
+                        <span class="slider-knob"></span>
+                      </label>
+                    </div>
+                    <div class="acc-dash-toggle-row">
+                      <div class="toggle-info">
+                        <div class="toggle-name">虚拟网卡 TUN</div>
+                        <div class="toggle-desc" title="需管理员权限，并安装 wintun.dll；未提权时无法真正接管流量">需管理员，否则开了也不生效</div>
+                      </div>
+                      <label class="switch-slider-btn">
+                        <input type="checkbox" id="acc-dash-tun-toggle">
+                        <span class="slider-knob"></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 下方状态卡片四列布局 -->
+            <div class="acc-dash-status-grid">
+              <!-- 内网 IP -->
+              <div class="acc-card acc-dash-stat-card">
+                <div class="stat-icon">💻</div>
+                <div class="stat-main">
+                  <div class="stat-label">内网 IP</div>
+                  <div id="acc-dash-local-ip" class="stat-value">获取中...</div>
+                </div>
+              </div>
+
+              <!-- 网络检测 -->
+              <div class="acc-card acc-dash-stat-card" style="position: relative;">
+                <div class="stat-icon">🌐</div>
+                <div class="stat-main" style="padding-right: 32px;">
+                  <div class="stat-label">网络检测</div>
+                  <div id="acc-dash-ip-detect-result" class="stat-value" style="font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="自动检测本机或代理出口 IP">检测中...</div>
+                </div>
+                <button type="button" id="acc-dash-ip-detect-btn" class="acc-dash-detect-btn" title="检测网络出口 IP">⚡</button>
+              </div>
+
+              <!-- 流量统计 -->
+              <div class="acc-card acc-dash-stat-card" style="display: flex; align-items: center; gap: 8px;">
+                <canvas id="acc-dash-traffic-canvas" width="48" height="48" style="flex-shrink: 0;"></canvas>
+                <div class="stat-main">
+                  <div class="stat-label">流量统计</div>
+                  <div class="stat-traffic-details">
+                    <span id="acc-dash-upload-total">↑ 0 B</span>
+                    <span id="acc-dash-download-total">↓ 0 B</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 内存信息 -->
+              <div class="acc-card acc-dash-stat-card">
+                <div class="stat-icon">⚙</div>
+                <div class="stat-main">
+                  <div class="stat-label">内存信息</div>
+                  <div id="acc-dash-memory-val" class="stat-value">-- MB</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- 配置页：添加厂商 + 已有配置列表 -->
-          <div class="acc-panel active" id="acc-panel-profiles">
+          <div class="acc-panel" id="acc-panel-profiles" hidden>
             <div class="acc-card">
               <div class="acc-card-title">添加加速厂商</div>
               <div class="acc-import-grid">
@@ -1228,35 +1387,61 @@
           <!-- 代理页：节点选择 -->
           <div class="acc-panel" id="acc-panel-proxies" hidden>
             <div class="acc-card acc-panel-fill" style="display: flex; flex-direction: column;">
-              <div class="acc-card-head" style="flex-shrink: 0;">
-                <div>
-                  <div class="acc-card-title" style="margin-bottom: 2px;">代理选择</div>
-                  <div id="acc-proxy-active-label" class="acc-muted">选择节点或策略组后将用于 Nexora Clash 出站</div>
-                </div>
-                <div style="display: flex; gap: 12px; align-items: center;">
-                  <button type="button" id="acc-delay-btn" class="btn-secondary" style="height: 28px; padding: 0 12px; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; margin: 0;">延迟测试</button>
-                  <button type="button" id="acc-auto-select-enable-btn" class="acc-country-pill" style="height: 28px; padding: 0 12px; border-radius: 6px; font-size: 11px; font-weight: 500; display: inline-flex; align-items: center; justify-content: center;">
-                    自动选择最低延迟
-                  </button>
-                  <div id="acc-auto-select-interval-container" style="display: none; align-items: center;">
-                    <select id="acc-auto-select-interval" class="acc-select" style="min-width: auto; width: 110px; height: 28px; padding: 0 8px; font-size: 11px; border-radius: 6px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: var(--text-primary); outline: none; cursor: pointer;">
-                      <option value="5">5 秒/次</option>
-                      <option value="10">10 秒/次</option>
-                      <option value="15">15 秒/次</option>
-                      <option value="20">20 秒/次</option>
-                      <option value="25">25 秒/次</option>
-                      <option value="30">30 秒/次</option>
-                      <option value="35">35 秒/次</option>
-                      <option value="40">40 秒/次</option>
-                      <option value="45">45 秒/次</option>
-                      <option value="50">50 秒/次</option>
-                      <option value="55">55 秒/次</option>
-                      <option value="60" selected>60 秒/次</option>
-                      <option value="120">120 秒/次</option>
-                      <option value="300">300 秒/次</option>
-                      <option value="600">600 秒/次</option>
-                    </select>
+              <div class="acc-proxy-hero" style="flex-shrink: 0;">
+                <div class="acc-proxy-now">
+                  <div class="acc-proxy-now-flag" id="acc-proxy-now-flag" aria-hidden="true">🌐</div>
+                  <div class="acc-proxy-now-body">
+                    <div class="acc-proxy-now-kicker">当前出站节点</div>
+                    <div class="acc-proxy-now-name" id="acc-proxy-now-name">未选择节点</div>
+                    <div id="acc-proxy-active-label" class="acc-proxy-now-sub">选择下方节点后，流量将经此节点出站</div>
                   </div>
+                  <div class="acc-proxy-now-delay" id="acc-proxy-now-delay">
+                    <span class="acc-proxy-delay-label">延迟</span>
+                    <strong class="latency-none">--</strong>
+                  </div>
+                </div>
+                <div class="acc-proxy-stats" aria-label="节点概况">
+                  <div class="acc-proxy-stat">
+                    <span>当前配置</span>
+                    <strong id="acc-proxy-stat-profile">--</strong>
+                  </div>
+                  <div class="acc-proxy-stat">
+                    <span>可用节点</span>
+                    <strong id="acc-proxy-stat-ok" class="is-ok">0</strong>
+                  </div>
+                  <div class="acc-proxy-stat">
+                    <span>超时</span>
+                    <strong id="acc-proxy-stat-bad" class="is-bad">0</strong>
+                  </div>
+                  <div class="acc-proxy-stat">
+                    <span>未测</span>
+                    <strong id="acc-proxy-stat-pending">0</strong>
+                  </div>
+                </div>
+                <div class="acc-proxy-actions">
+                  <button type="button" id="acc-delay-btn" class="btn-secondary acc-delay-btn">延迟测试</button>
+                  <button type="button" id="acc-auto-select-enable-btn" class="btn-secondary acc-proxy-auto-btn" title="开启后按右侧间隔自动测速，并在当前地区标签内选最低延迟">自动选择最低延迟</button>
+                  <div id="acc-auto-select-interval-container" class="acc-proxy-interval" style="display: none;" title="每次测速完成后，再等待该时长开始下一轮">
+                    <select id="acc-auto-select-interval" class="acc-select" autocomplete="off" aria-label="自动测速间隔">
+                      <option value="5">5秒/次</option>
+                      <option value="10">10秒/次</option>
+                      <option value="15">15秒/次</option>
+                      <option value="20">20秒/次</option>
+                      <option value="25">25秒/次</option>
+                      <option value="30">30秒/次</option>
+                      <option value="35">35秒/次</option>
+                      <option value="40">40秒/次</option>
+                      <option value="45">45秒/次</option>
+                      <option value="50">50秒/次</option>
+                      <option value="55">55秒/次</option>
+                      <option value="60">60秒/次</option>
+                      <option value="120">120秒/次</option>
+                      <option value="300">300秒/次</option>
+                      <option value="600">600秒/次</option>
+                    </select>
+                    <span id="acc-auto-select-status" class="acc-auto-select-status">等待中</span>
+                  </div>
+                  <span id="acc-delay-progress" class="acc-delay-progress" hidden aria-live="polite"></span>
                 </div>
               </div>
               <div class="acc-view-tabs" style="margin-bottom: 12px; display: flex; gap: 8px; flex-shrink: 0; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
@@ -1284,10 +1469,19 @@
                 <button type="button" class="acc-country-pill" data-country="tw">🇹🇼 台湾</button>
                 <button type="button" class="acc-country-pill" data-country="other">其他</button>
               </div>
-              <div id="acc-node-grid" class="acc-node-grid">
-                <div class="acc-empty">暂无节点。请先到「配置」页添加加速厂商。</div>
+              <div class="acc-node-grid-wrap">
+                <div id="acc-node-grid" class="acc-node-grid">
+                  <div class="acc-empty">暂无节点。请先到「配置」页添加加速厂商。</div>
+                </div>
+                <div id="acc-delay-overlay" class="acc-delay-overlay" hidden>
+                  <div class="acc-delay-overlay-inner">
+                    <span class="acc-btn-spinner acc-btn-spinner-lg" aria-hidden="true"></span>
+                    <div class="acc-delay-overlay-title">正在测速</div>
+                    <div class="acc-delay-overlay-desc">请稍候，正在检测节点延迟…</div>
+                  </div>
+                </div>
               </div>
-              <div id="acc-groups-container" class="acc-groups-container" style="display: none; flex: 1; overflow-y: auto;">
+              <div id="acc-groups-container" class="acc-groups-container" hidden>
                 <div class="acc-empty">暂无策略组。请先到「配置」页添加加速厂商并启用通道。</div>
               </div>
             </div>
@@ -1295,59 +1489,97 @@
 
           <!-- 控制页：开关与模式 -->
           <div class="acc-panel" id="acc-panel-controls" hidden>
-            <div class="acc-controls-grid">
-              <div class="acc-card">
-                <div class="acc-card-title">通道控制</div>
-                <div class="acc-control-row">
-                  <div style="flex: 1; min-width: 0; padding-right: 12px;">
-                    <div>启用加速通道</div>
-                    <div id="acc-enabled-desc" class="acc-muted">开启后网关与客户端请求走本地加速代理</div>
+            <div class="acc-controls-layout">
+              <div class="acc-controls-grid">
+                <div class="acc-card acc-controls-card">
+                  <div class="acc-card-title">通道控制</div>
+                  <div class="acc-controls-card-body">
+                    <div class="acc-control-row">
+                      <div style="flex: 1; min-width: 0; padding-right: 12px;">
+                        <div>启用加速通道</div>
+                        <div id="acc-enabled-desc" class="acc-muted">开启后网关与客户端请求走本地加速代理</div>
+                      </div>
+                      <label class="switch-slider-btn" for="acc-controls-enabled-toggle" style="margin-top: 2px; flex-shrink: 0;">
+                        <input type="checkbox" id="acc-controls-enabled-toggle">
+                        <span class="slider-knob"></span>
+                      </label>
+                    </div>
+                    <div class="acc-control-row">
+                      <div style="flex: 1; min-width: 0; padding-right: 12px;">
+                        <div>系统代理</div>
+                        <div class="acc-muted" title="把 Windows 系统代理指到本地 Clash 端口">写入 Windows 系统代理</div>
+                      </div>
+                      <label class="switch-slider-btn" for="acc-system-proxy-toggle" style="margin-top: 2px; flex-shrink: 0;">
+                        <input type="checkbox" id="acc-system-proxy-toggle">
+                        <span class="slider-knob"></span>
+                      </label>
+                    </div>
+                    <div class="acc-control-row">
+                      <div style="flex: 1; min-width: 0; padding-right: 12px;">
+                        <div>虚拟网卡 TUN</div>
+                        <div class="acc-muted" title="需管理员权限，并安装 wintun.dll">需管理员，否则开了也不生效</div>
+                      </div>
+                      <label class="switch-slider-btn" for="acc-tun-toggle" style="margin-top: 2px; flex-shrink: 0;">
+                        <input type="checkbox" id="acc-tun-toggle">
+                        <span class="slider-knob"></span>
+                      </label>
+                    </div>
                   </div>
-                  <label class="switch-slider-btn" for="acc-controls-enabled-toggle" style="margin-top: 2px; flex-shrink: 0;">
-                    <input type="checkbox" id="acc-controls-enabled-toggle">
-                    <span class="slider-knob"></span>
-                  </label>
                 </div>
-                <div class="acc-control-row">
-                  <div style="flex: 1; min-width: 0; padding-right: 12px;">
-                    <div>系统代理</div>
-                    <div class="acc-muted">写入 Windows 系统代理设置</div>
+
+                <div class="acc-card acc-controls-card">
+                  <div class="acc-card-title">出站模式</div>
+                  <div class="acc-controls-card-body">
+                    <label class="acc-radio-row"><input type="radio" name="acc-mode" value="rule" checked><span>规则 · 按订阅规则分流</span></label>
+                    <label class="acc-radio-row"><input type="radio" name="acc-mode" value="global"><span>全局 · 全部走代理</span></label>
+                    <label class="acc-radio-row"><input type="radio" name="acc-mode" value="direct"><span>直连 · 不走代理</span></label>
+                    <div id="acc-controls-mode-hint" class="acc-controls-mode-hint">日常上网推荐「规则」：国内直连、境外走节点。</div>
                   </div>
-                  <label class="switch-slider-btn" for="acc-system-proxy-toggle" style="margin-top: 2px; flex-shrink: 0;">
-                    <input type="checkbox" id="acc-system-proxy-toggle">
-                    <span class="slider-knob"></span>
-                  </label>
                 </div>
-                <div class="acc-control-row">
-                  <div style="flex: 1; min-width: 0; padding-right: 12px;">
-                    <div>虚拟网卡 TUN</div>
-                    <div class="acc-muted">捕获更多系统流量（可能需要管理员权限）</div>
+
+                <div class="acc-card acc-controls-card">
+                  <div class="acc-card-title">运行信息</div>
+                  <div class="acc-controls-card-body">
+                    <div class="acc-info-line"><span>本地代理</span><strong id="acc-mixed-port">--</strong></div>
+                    <div class="acc-info-line"><span>控制端口</span><strong id="acc-controller">--</strong></div>
+                    <div class="acc-info-line"><span>当前节点</span><strong id="acc-current-proxy">--</strong></div>
+                    <div class="acc-info-line" style="border-bottom: none;">
+                      <span>网络检测</span>
+                      <span style="display: flex; align-items: center; gap: 6px;">
+                        <strong id="acc-ip-detect-result" style="font-size: 12px;">检测中...</strong>
+                        <button type="button" id="acc-ip-detect-btn" class="btn-secondary" style="height: 22px; padding: 0 8px; font-size: 10px; border-radius: 4px; white-space: nowrap;">检测</button>
+                      </span>
+                    </div>
                   </div>
-                  <label class="switch-slider-btn" for="acc-tun-toggle" style="margin-top: 2px; flex-shrink: 0;">
-                    <input type="checkbox" id="acc-tun-toggle">
-                    <span class="slider-knob"></span>
-                  </label>
                 </div>
               </div>
 
-              <div class="acc-card">
-                <div class="acc-card-title">出站模式</div>
-                <label class="acc-radio-row"><input type="radio" name="acc-mode" value="rule" checked><span>规则 · 按订阅规则分流</span></label>
-                <label class="acc-radio-row"><input type="radio" name="acc-mode" value="global"><span>全局 · 全部走代理</span></label>
-                <label class="acc-radio-row"><input type="radio" name="acc-mode" value="direct"><span>直连 · 不走代理</span></label>
-              </div>
-
-              <div class="acc-card">
-                <div class="acc-card-title">运行信息</div>
-                <div class="acc-info-line"><span>本地代理</span><strong id="acc-mixed-port">--</strong></div>
-                <div class="acc-info-line"><span>控制端口</span><strong id="acc-controller">--</strong></div>
-                <div class="acc-info-line"><span>当前节点</span><strong id="acc-current-proxy">--</strong></div>
-                <div class="acc-info-line" style="border-bottom: none;">
-                  <span>网络检测</span>
-                  <span style="display: flex; align-items: center; gap: 6px;">
-                    <strong id="acc-ip-detect-result" style="font-size: 12px;">未检测</strong>
-                    <button type="button" id="acc-ip-detect-btn" class="btn-secondary" style="height: 22px; padding: 0 8px; font-size: 10px; border-radius: 4px; white-space: nowrap;">检测</button>
-                  </span>
+              <div class="acc-card acc-controls-guide">
+                <div class="acc-card-head" style="margin-bottom: 10px;">
+                  <div>
+                    <div class="acc-card-title" style="margin-bottom: 2px;">使用提示与快捷操作</div>
+                    <div class="acc-muted">控制页负责开关与模式；实时网速看「仪表盘」，选节点看「代理」。</div>
+                  </div>
+                </div>
+                <div class="acc-controls-tips">
+                  <div class="acc-tip-item">
+                    <strong>系统代理 vs TUN</strong>
+                    <span>一般开「系统代理」就够用；个别软件不走系统代理时再开 TUN。两者可同时开，但少数场景可能变慢。</span>
+                  </div>
+                  <div class="acc-tip-item">
+                    <strong>规则模式</strong>
+                    <span>推荐日常使用。订阅规则会分流：国内直连、需要加速的走当前节点。</span>
+                  </div>
+                  <div class="acc-tip-item">
+                    <strong>出口 IP</strong>
+                    <span>未启用时显示本机公网出口；启用后显示当前节点出口。也可点「检测」手动刷新。</span>
+                  </div>
+                </div>
+                <div class="acc-controls-actions">
+                  <button type="button" id="acc-copy-proxy-btn" class="btn-secondary">复制本地代理</button>
+                  <button type="button" id="acc-controls-detect-btn" class="btn-secondary">检测出口 IP</button>
+                  <button type="button" id="acc-controls-goto-proxies" class="btn-secondary">去代理页测速</button>
+                  <button type="button" id="acc-controls-refresh-btn" class="btn-secondary">刷新状态</button>
                 </div>
               </div>
             </div>

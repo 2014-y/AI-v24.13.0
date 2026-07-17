@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('api', {
     setAutoStart: (enabled) => ipcRenderer.invoke('autostart-set', enabled),
     openExternal: (url) => ipcRenderer.invoke('open-external', url),
     getAccelerationStatus: () => ipcRenderer.invoke('acceleration-status'),
+    getAppInstanceInfo: () => ipcRenderer.invoke('app-instance-info'),
     getAccelerationConnections: () => ipcRenderer.invoke('acceleration-get-connections'),
     closeAccelerationConnection: (id) => ipcRenderer.invoke('acceleration-close-connection', id),
     setAccelerationEnabled: (enabled, profileId) => ipcRenderer.invoke('acceleration-set-enabled', enabled, profileId),
@@ -54,9 +55,15 @@ contextBridge.exposeInMainWorld('api', {
     updateAccelerationProfile: (id) => ipcRenderer.invoke('acceleration-update-profile', id),
     selectAccelerationProxy: (payload) => ipcRenderer.invoke('acceleration-select-proxy', payload),
     delayTestAcceleration: (names) => ipcRenderer.invoke('acceleration-delay-test', names),
+    detectAccelerationIp: () => ipcRenderer.invoke('acceleration-detect-ip'),
     setAccelerationOptions: (options) => ipcRenderer.invoke('acceleration-set-options', options),
     setAccelerationActiveProfile: (id) => ipcRenderer.invoke('acceleration-set-active-profile', id),
     onAccelerationCoreProgress: (callback) => ipcRenderer.on('acceleration-core-progress', (event, data) => callback(data)),
+    onAccelerationDelayProgress: (callback) => {
+        const listener = (event, data) => callback(data);
+        ipcRenderer.on('acceleration-delay-progress', listener);
+        return () => ipcRenderer.removeListener('acceleration-delay-progress', listener);
+    },
     getDashboardUrl: () => ipcRenderer.invoke('get-dashboard-url'),
     clearOpenclawPanelSession: () => ipcRenderer.invoke('clear-openclaw-panel-session'),
     onDashboardUrlUpdated: (callback) => ipcRenderer.on('dashboard-url-updated', (event, url) => callback(url)),

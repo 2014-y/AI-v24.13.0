@@ -1,6 +1,27 @@
 const fs = require('fs');
 const path = require('path');
 
+// 把 runtime-pack-manifest 的 PACK_ID 注入 installer.nsh，避免首次启动重复解压
+try {
+    const { RUNTIME_PACK_ID } = require('./runtime-pack-manifest');
+    const nshPath = path.join(__dirname, 'config', 'installer.nsh');
+    if (fs.existsSync(nshPath) && RUNTIME_PACK_ID) {
+        let nsh = fs.readFileSync(nshPath, 'utf8');
+        const next = nsh.replace(
+            /(FileWrite \$1 "\$\{VERSION\}:)[^"]+(")/,
+            `$1${RUNTIME_PACK_ID}$2`
+        );
+        if (next !== nsh) {
+            fs.writeFileSync(nshPath, next, 'utf8');
+            console.log(`[patch_nsis] Injected RUNTIME_PACK_ID=${RUNTIME_PACK_ID} into installer.nsh`);
+        } else {
+            console.log(`[patch_nsis] installer.nsh already has RUNTIME_PACK_ID=${RUNTIME_PACK_ID}`);
+        }
+    }
+} catch (e) {
+    console.warn('[patch_nsis] Failed to inject RUNTIME_PACK_ID:', e.message);
+}
+
 // 自动为打包初始化 .node-sandbox 目录（防空漏）
 try {
     const sandboxDir = path.join(__dirname, '.node-sandbox');
