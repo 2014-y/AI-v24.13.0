@@ -2325,8 +2325,8 @@ textarea.acc-input {
 .log-terminal {
   flex: 1;
   font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: 13.5px;
+  line-height: 1.85;
   color: #c4b9d0;
   overflow-y: auto;
   white-space: pre-wrap;
