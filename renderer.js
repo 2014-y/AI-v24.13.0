@@ -8929,15 +8929,15 @@ function updateAccelerationBusyUi() {
         delayBtn.disabled = busy;
         delayBtn.classList.toggle('is-loading', isDelay);
         delayBtn.setAttribute('aria-busy', isDelay ? 'true' : 'false');
-        delayBtn.textContent = '延迟测试';
+        delayBtn.textContent = t('acc.proxy.delay_btn');
     }
 
     const progressEl = document.getElementById('acc-delay-progress');
     if (progressEl) {
         if (isDelay) {
             const progress = accelerationDelayTotal > 0
-                ? `测速中 ${accelerationDelayFinished}/${accelerationDelayTotal}`
-                : '测速中…';
+                ? `${t('测速中', 'Testing', '測速中')} ${accelerationDelayFinished}/${accelerationDelayTotal}`
+                : t('测速中…', 'Testing...', '測速中…');
             progressEl.hidden = false;
             progressEl.innerHTML = `<span class="acc-btn-spinner" aria-hidden="true"></span>${escapeHtml(progress)}`;
         } else {
@@ -9229,9 +9229,11 @@ function renderConnections(data) {
     }
     window._lastConnStats = { time: now, up: data.uploadTotal || 0, down: data.downloadTotal || 0 };
 
-    if (countEl) {
-        countEl.textContent = `活跃连接: ${list.length} 个 · 实时上传: ${formatSpeed(upSpeed)} · 实时下载: ${formatSpeed(downSpeed)}`;
-    }
+        const activeLabel = t('活跃连接', 'Active Connections', '活躍連線');
+        const uploadLabel = t('实时上传', 'Upload', '實時上傳');
+        const downloadLabel = t('实时下载', 'Download', '實時下載');
+        const unitLabel = t(' 个', '', ' 個');
+        countEl.textContent = `${activeLabel}: ${list.length}${unitLabel} · ${uploadLabel}: ${formatSpeed(upSpeed)} · ${downloadLabel}: ${formatSpeed(downSpeed)}`;
 
     // 仪表盘网速文本更新
     const dashSpeedEl = document.getElementById('acc-dash-speed-text');
@@ -9265,7 +9267,7 @@ function renderConnections(data) {
     });
 
     if (!filtered.length) {
-        tbody.innerHTML = `<tr><td colspan="8" class="acc-empty" style="text-align: center; padding: 20px; color: var(--text-secondary);">没有匹配筛选条件的活跃连接。</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="acc-empty" style="text-align: center; padding: 20px; color: var(--text-secondary);">${t('acc.conn.no_match')}</td></tr>`;
         return;
     }
 
@@ -10010,14 +10012,14 @@ window.selectGroupProxy = async function(groupName, proxyName) {
     if (!groupName || !proxyName || !window.api || !window.api.selectAccelerationProxy) return;
     await handleAccelerationResult(
         window.api.selectAccelerationProxy({ name: proxyName, group: groupName }),
-        `已切换至 ${proxyName}`
+        t('已切换至', 'Switched to', '已切換至') + ` ${proxyName}`
     );
 };
 
 function formatAccelerationLatencyText(latency) {
     if (typeof latency === 'number' && latency > 0) return `${latency} ms`;
-    if (latency === 0) return '超时';
-    return '未测';
+    if (latency === 0) return t('超时', 'Timeout', '超時');
+    return t('未测', 'Untested', '未測');
 }
 
 function paintAccelerationNodeLatency(name, latency, testing) {
@@ -10033,7 +10035,7 @@ function paintAccelerationNodeLatency(name, latency, testing) {
         if (testing) {
             el.innerHTML = '<span class="acc-node-delay-spinner" aria-hidden="true"></span>';
             el.classList.add('latency-testing');
-            el.title = '测速中';
+            el.title = t('测速中', 'Testing', '測速中');
             return;
         }
         el.textContent = formatAccelerationLatencyText(latency);
@@ -10291,15 +10293,15 @@ function startAccelerationAutoSelectCountdown(sec, generation) {
             return;
         }
         if (!(accelerationState && accelerationState.enabled)) {
-            setAccelerationAutoSelectStatus('需先启用加速');
+            setAccelerationAutoSelectStatus(t('需先启用加速', 'Enable acceleration first', '需先啟用加速'));
             return;
         }
         if (autoSelectRunInFlight || accelerationBusy) {
-            setAccelerationAutoSelectStatus('测速中…');
+            setAccelerationAutoSelectStatus(t('测速中…', 'Testing...', '測速中…'));
             return;
         }
         const left = Math.max(0, Math.ceil((autoSelectNextAt - Date.now()) / 1000));
-        setAccelerationAutoSelectStatus(left > 0 ? `下次 ${left}s` : '即将测速');
+        setAccelerationAutoSelectStatus(left > 0 ? `${t('下次', 'Next', '下次')} ${left}s` : t('即将测速', 'Testing soon', '即將測速'));
     };
     tick();
     autoSelectCountdownTimer = setInterval(tick, 500);
@@ -10309,11 +10311,11 @@ async function runBackgroundAutoSelect() {
     if (autoSelectRunInFlight || accelerationBusy) return;
     if (!isAccelerationAutoSelectEnabled()) return;
     if (!(accelerationState && accelerationState.enabled)) {
-        setAccelerationAutoSelectStatus('需先启用加速');
+        setAccelerationAutoSelectStatus(t('需先启用加速', 'Enable acceleration first', '需先啟用加速'));
         return;
     }
     autoSelectRunInFlight = true;
-    setAccelerationAutoSelectStatus('测速中…');
+    setAccelerationAutoSelectStatus(t('测速中…', 'Testing...', '測速中…'));
     try {
         await runAccelerationDelayTest({ force: true, silent: true, fromAuto: true });
     } catch (err) {
