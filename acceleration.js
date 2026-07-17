@@ -38,6 +38,8 @@ const NO_PROXY_LIST = [
 
 let appRef = null;
 let mihomoProc = null;
+let lastMihomoMemoryText = '0.0 MB';
+let mihomoMemoryTimer = null;
 let tempMihomoProc = null;
 let tempCoreProfileId = null;
 let tempCoreIdleTimer = null;
@@ -1498,6 +1500,11 @@ async function waitControllerReady(timeoutMs = 12000) {
 async function stopCore() {
     const proc = mihomoProc;
     mihomoProc = null;
+    if (mihomoMemoryTimer) {
+        clearInterval(mihomoMemoryTimer);
+        mihomoMemoryTimer = null;
+    }
+    lastMihomoMemoryText = '0.0 MB';
     if (proc) {
         const pid = proc.pid;
         try {
@@ -1580,6 +1587,10 @@ async function startCore(profileId, onProgress) {
         stdio: ['ignore', 'pipe', 'pipe']
     });
 
+    if (mihomoMemoryTimer) clearInterval(mihomoMemoryTimer);
+    mihomoMemoryTimer = setInterval(updateMihomoMemory, 3000);
+    setTimeout(updateMihomoMemory, 1000);
+
     let bootLog = '';
     const appendBootLog = (buf) => {
         try {
@@ -1592,6 +1603,11 @@ async function startCore(profileId, onProgress) {
 
     mihomoProc.on('exit', (code) => {
         mihomoProc = null;
+        if (mihomoMemoryTimer) {
+            clearInterval(mihomoMemoryTimer);
+            mihomoMemoryTimer = null;
+        }
+        lastMihomoMemoryText = '0.0 MB';
         if (state.enabled) {
             state.enabled = false;
             saveState();
@@ -2196,6 +2212,27 @@ async function setActiveProfileId(id) {
     return state.activeProfileId;
 }
 
+function updateMihomoMemory() {
+    if (!mihomoProc || mihomoProc.killed) {
+        lastMihomoMemoryText = '0.0 MB';
+        return;
+    }
+    const pid = mihomoProc.pid;
+    if (!pid) return;
+
+    // 根据 Windows 平台特性使用 Get-Process 进程查询
+    // 防御性原则：PowerShell try-catch 拦截，2>$null，静默保证零崩溃
+    const cmd = `powershell -ExecutionPolicy Bypass -NoProfile -Command "try { (Get-Process -Id ${pid}).WorkingSet64 } catch { 0 }"`;
+    const { exec } = require('child_process');
+    exec(cmd, (err, stdout) => {
+        if (err || !stdout) return;
+        const bytes = parseInt(stdout.trim(), 10);
+        if (bytes && bytes > 0) {
+            lastMihomoMemoryText = (bytes / 1024 / 1024).toFixed(1) + ' MB';
+        }
+    });
+}
+
 function getStatus() {
     const inst = (typeof global !== 'undefined' && global.nexoraInstance) ? global.nexoraInstance : null;
     return {
@@ -2211,7 +2248,8 @@ function getStatus() {
         profiles: listProfiles(),
         running: !!mihomoProc,
         instanceId: inst && inst.id ? inst.id : 1,
-        instancePrimary: !(inst && inst.id > 1)
+        instancePrimary: !(inst && inst.id > 1),
+        clashMemory: lastMihomoMemoryText
     };
 }
 

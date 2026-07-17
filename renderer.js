@@ -11371,9 +11371,12 @@ function drawDashboardTrafficRing(uploadTotal, downloadTotal) {
     ctx.stroke();
 }
 
-// 模拟 Clash 运行时内存占用，带随机小幅波动，符合防御性原则，绝对零挂起风险
+// 优先抓取 Clash 真实内存占用，若未启用或抓取失败则回退至波动模拟，绝对零挂起
 function getClashMemoryMock() {
     if (!accelerationState || !accelerationState.enabled) return '0.0 MB';
+    if (accelerationState.clashMemory && accelerationState.clashMemory !== '0.0 MB') {
+        return accelerationState.clashMemory;
+    }
     if (!window._clashMemMock) {
         window._clashMemMock = Math.floor(Math.random() * (136 - 88) + 88);
     } else {
