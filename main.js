@@ -5611,3 +5611,13 @@ app.on('window-all-closed', () => {
         app.quit();
     }
 });
+
+// 应用退出时必须清理系统代理和内核进程，防止用户断网
+app.on('will-quit', async (e) => {
+    e.preventDefault();
+    try {
+        await acceleration.stopCore();
+        await acceleration.applySystemProxy(false);
+    } catch (err) {}
+    app.exit(0);
+});

@@ -1032,7 +1032,17 @@ textarea.acc-input {
   gap: 14px;
 }
 
-.acc-control-row,
+.acc-control-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 .acc-info-line,
 .acc-radio-row {
   display: flex;

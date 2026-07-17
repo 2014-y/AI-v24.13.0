@@ -782,17 +782,21 @@ async function startCore(profileId) {
         stdio: ['ignore', 'pipe', 'pipe']
     });
 
-    mihomoProc.on('exit', () => {
+    mihomoProc.on('exit', (code) => {
         mihomoProc = null;
         if (state.enabled) {
             state.enabled = false;
             saveState();
+            // 内核意外退出时，必须立即清理系统代理，否则用户会断网
+            applySystemProxy(false).catch(() => {});
+            console.log(`[Acceleration] mihomo exited unexpectedly (code=${code}), system proxy cleared`);
         }
     });
 
     const ready = await waitControllerReady(30000);
     if (!ready) {
         await stopCore();
+        await applySystemProxy(false);
         throw new Error('代理内核启动超时，请检查订阅配置是否有效');
     }
 
