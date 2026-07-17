@@ -2503,8 +2503,8 @@ function setupIpcListeners() {
             if (currentTab !== 'console-view' && currentTab !== null) {
                 if (!window.__deferredConsoleLogs) window.__deferredConsoleLogs = [];
                 window.__deferredConsoleLogs.push(lineHtml);
-                if (window.__deferredConsoleLogs.length > 200) {
-                    window.__deferredConsoleLogs = window.__deferredConsoleLogs.slice(-120);
+                if (window.__deferredConsoleLogs.length > 300) {
+                    window.__deferredConsoleLogs = window.__deferredConsoleLogs.slice(-180);
                 }
             } else {
                 const streamList = document.getElementById('dash-activity-stream-list');
@@ -2514,17 +2514,23 @@ function setupIpcListeners() {
                         emptyTips.remove();
                     }
                     
+                    // 智能吸附：判定新追加前用户是否已经停留在底部附近（容差45px）
+                    const isAtBottom = streamList.scrollHeight - streamList.scrollTop - streamList.clientHeight < 45;
+                    
                     const item = document.createElement('div');
                     item.className = 'activity-log-line';
                     item.innerHTML = lineHtml;
                     streamList.appendChild(item);
                     
-                    // 最多保留最近 5 条
-                    while (streamList.children.length > 5) {
+                    // 最多保留最近 150 条以支持向上翻阅大量历史，不爆内存
+                    while (streamList.children.length > 150) {
                         streamList.removeChild(streamList.firstChild);
                     }
                     
-                    streamList.scrollTop = streamList.scrollHeight;
+                    // 只有当用户本来就停留在底部时，才自动滚至最新，防止打断用户的向上翻阅
+                    if (isAtBottom) {
+                        streamList.scrollTop = streamList.scrollHeight;
+                    }
                 }
             }
         });
@@ -5495,14 +5501,19 @@ function updateGatewayStatusUI(status) {
     const dashServiceStatus = document.getElementById('dash-service-status');
     const dashStatusDot = document.getElementById('dash-status-dot');
     if (dashServiceStatus && dashStatusDot) {
+        const getCleanText = (key, fallback) => {
+            const trans = t(key);
+            return (trans && !trans.includes('console.')) ? trans : fallback;
+        };
+
         if (status === 'running') {
-            dashServiceStatus.textContent = t('console.dash.running') || '运行中';
+            dashServiceStatus.textContent = getCleanText('console.dash.running', '运行中');
             dashStatusDot.className = 'status-indicator-dot running';
         } else if (status === 'starting') {
-            dashServiceStatus.textContent = t('console.dash.starting') || '正在启动...';
+            dashServiceStatus.textContent = getCleanText('console.dash.starting', '正在启动...');
             dashStatusDot.className = 'status-indicator-dot running';
         } else {
-            dashServiceStatus.textContent = t('console.dash.stopped') || '已停止';
+            dashServiceStatus.textContent = getCleanText('console.dash.stopped', '已停止');
             dashStatusDot.className = 'status-indicator-dot stopped';
         }
     }
