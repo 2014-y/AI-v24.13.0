@@ -8617,6 +8617,7 @@ async function updateWeChatStatusUI() {
 async function loadAndRenderSystemLogs() {
     const systemLogsArea = document.getElementById('system-raw-logs-area');
     if (!systemLogsArea) return;
+    systemLogsArea.value = "【正在装载历史日志，请稍候...】\n";
     try {
         const result = await window.api.readSystemLogs();
         if (result.success) {
@@ -8643,9 +8644,12 @@ async function loadAndRenderSystemLogs() {
             setTimeout(() => {
                 systemLogsArea.scrollTop = systemLogsArea.scrollHeight;
             }, 50);
+        } else {
+            systemLogsArea.value = "【无历史日志数据】\n";
         }
     } catch(err) {
         console.error('Failed to load system logs:', err);
+        systemLogsArea.value = "【历史日志加载失败】\n";
     }
 }
 
