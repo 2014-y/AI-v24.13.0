@@ -7382,6 +7382,12 @@ function sendDesktopNotification(title, message) {
 
 // 优雅的全局暗色 Toast 提示气泡
 function showToast(message) {
+    if (localStorage.getItem('setting_enable_notification') === 'false') {
+        const str = String(message || '');
+        if (/自动路由|自动切换|最低延迟|自动测速/i.test(str)) {
+            return;
+        }
+    }
     let toast = document.getElementById('custom-toast');
     if (!toast) {
         toast = document.createElement('div');
