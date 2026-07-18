@@ -5803,16 +5803,35 @@ function setupTabSwitching() {
                     // 刷回离页期间积压的控制台日志（限量，避免一次卡死）
                     try {
                         const q = window.__deferredConsoleLogs;
-                        if (q && q.length && logTerminal) {
+                        if (q && q.length) {
                             const chunk = q.splice(0, q.length).slice(-80);
-                            const frag = document.createDocumentFragment();
-                            chunk.forEach((line) => {
-                                const s = document.createElement('span');
-                                s.textContent = line + (line.endsWith('\n') ? '' : '\n');
-                                frag.appendChild(s);
-                            });
-                            logTerminal.appendChild(frag);
-                            logTerminal.scrollTop = logTerminal.scrollHeight;
+                            // 写入隐藏的原大终端
+                            if (logTerminal) {
+                                const frag = document.createDocumentFragment();
+                                chunk.forEach((lineHtml) => {
+                                    const s = document.createElement('span');
+                                    s.innerHTML = lineHtml + (lineHtml.endsWith('\n') ? '' : '<br/>');
+                                    frag.appendChild(s);
+                                });
+                                logTerminal.appendChild(frag);
+                                logTerminal.scrollTop = logTerminal.scrollHeight;
+                            }
+                            // 同步写入 Dashboard 活动监控流（修复：切菜单回来日志消失）
+                            const streamList = document.getElementById('dash-activity-stream-list');
+                            if (streamList) {
+                                const emptyTips = streamList.querySelector('.activity-item-empty');
+                                if (emptyTips) emptyTips.remove();
+                                chunk.forEach((lineHtml) => {
+                                    const item = document.createElement('div');
+                                    item.className = 'activity-log-line';
+                                    item.innerHTML = lineHtml;
+                                    streamList.appendChild(item);
+                                });
+                                while (streamList.children.length > 150) {
+                                    streamList.removeChild(streamList.firstChild);
+                                }
+                                streamList.scrollTop = streamList.scrollHeight;
+                            }
                         }
                     } catch (err) {}
                 }
