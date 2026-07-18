@@ -117,10 +117,18 @@ function resolveAppFsPath(...segments) {
 function getAvailableNodePath() {
     const sandboxPath = resolveAppFsPath('.node-sandbox', 'node.exe');
     if (fs.existsSync(sandboxPath)) {
-        return sandboxPath;
+        try {
+            // 检查内置 node.exe 是否真的能运行（防范缺少 VC++ 运行库或被安全组策略拦截）
+            const check = require('child_process').execFileSync(sandboxPath, ['-v'], { encoding: 'utf8', timeout: 1000 }).trim();
+            if (check.startsWith('v')) {
+                return sandboxPath;
+            }
+        } catch (e) {
+            console.warn(`[NodeSandbox] 内置 Node.exe 存在但无法运行 (可能缺少 VC++ 运行库或被安全策略/组策略拦截): ${e.message}`);
+        }
     }
     
-    // 如果内置沙箱不存在，尝试获取系统全局 Node 绝对路径
+    // 如果内置沙箱不存在或无法运行，尝试获取系统全局 Node 绝对路径
     try {
         const which = require('child_process').execSync('where node', { encoding: 'utf8' }).trim().split('\r\n')[0];
         if (which && fs.existsSync(which)) {
@@ -137,6 +145,7 @@ function getAvailableNodePath() {
     
     return null;
 }
+
 
 // ==========================================
 // 内置 Node 运行时（.node-sandbox）自动升级
@@ -852,7 +861,7 @@ const BUNDLED_CUSTOM_PLUGINS = [
 const BUNDLED_NPM_CHANNEL_PLUGINS = [
     { id: 'openclaw-weixin', viaLoadPaths: true, candidates: [path.join('node_modules', '@tencent-weixin', 'openclaw-weixin')] },
     { id: 'qqbot', viaLoadPaths: true, packageName: '@openclaw/qqbot', candidates: [path.join('node_modules', '@openclaw', 'qqbot')] },
-    { id: 'feishu', viaLoadPaths: false, packageName: '@openclaw/feishu', candidates: [path.join('node_modules', '@openclaw', 'feishu')] },
+    { id: 'feishu', viaLoadPaths: true, packageName: '@openclaw/feishu', candidates: [path.join('node_modules', '@openclaw', 'feishu')] },
     // voice-call 绝不能进 load.paths（trusted store）
     { id: 'voice-call', viaLoadPaths: false, packageName: '@openclaw/voice-call', candidates: [path.join('node_modules', '@openclaw', 'voice-call')] },
     { id: 'slack', viaLoadPaths: true, packageName: '@openclaw/slack', candidates: [path.join('node_modules', '@openclaw', 'slack')] },

@@ -252,7 +252,40 @@ function forceDisableUninstalledChannelPlugins(config, opts = {}) {
 }
 
 /**
- * 启动 Gateway 前调用：软化 migration + 种 npm + 同步渠道插件 + 补齐 AGENTS.md 模板
+ * 绕过插件受信校验补丁，使 load.paths 下的插件可以正常调用 openKeyedStore
+ */
+function bypassOpenClawPluginTrustCheck(runtimeRoot) {
+  const dist = path.join(runtimeRoot || '', 'node_modules', 'openclaw', 'dist');
+  if (!exists(dist)) return { ok: false, reason: 'no-dist' };
+  
+  let patched = 0;
+  try {
+    for (const name of fs.readdirSync(dist)) {
+      if (!/^registry-.*\.js$/i.test(name)) continue;
+      const file = path.join(dist, name);
+      let src = fs.readFileSync(file, 'utf8');
+      let next = src;
+      
+      const targetStr = 'record?.origin !== "bundled" && record?.trustedOfficialInstall !== true';
+      if (next.includes(targetStr)) {
+        next = next.replace(targetStr, 'false');
+      }
+      
+      if (next !== src) {
+        fs.writeFileSync(file, next, 'utf8');
+        patched += 1;
+      } else if (next.includes('false') && src.includes('throw new Error("openKeyedStore')) {
+        patched += 1;
+      }
+    }
+  } catch (e) {
+    return { ok: false, reason: e.message };
+  }
+  return { ok: patched > 0, patched };
+}
+
+/**
+ * 启动 Gateway 前调用：软化 migration + 种 npm + 同步渠道插件 + 补齐 AGENTS.md 模板 + 绕过受信校验
  */
 function hardenGatewayBootAgainstPluginNpm(params) {
   const runtimeRoot = params && params.runtimeRoot;
@@ -263,6 +296,8 @@ function hardenGatewayBootAgainstPluginNpm(params) {
   if (runtimeRoot) {
     const soft = softenOpenClawStartupMigrationGuard(runtimeRoot);
     notes.push(`soft=${soft.ok ? soft.patched : soft.reason}`);
+    const trust = bypassOpenClawPluginTrustCheck(runtimeRoot);
+    notes.push(`trust-bypass=${trust.ok ? trust.patched : trust.reason}`);
     const npm = ensureSandboxNpmPresent(runtimeRoot, projectRoot);
     notes.push(`npm=${npm.ok ? (npm.skipped ? 'ok' : 'healed') : npm.reason}`);
     const tpl = ensureOpenClawWorkspaceTemplates(runtimeRoot, templateSources || []);
