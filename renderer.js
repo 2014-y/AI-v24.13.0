@@ -7784,20 +7784,22 @@ async function handleSendMessage() {
     const providerKey = selectedOption.getAttribute('data-provider');
     const modelId = selectedOption.value;
 
-    if (!localProviders[providerKey]) {
+    const useBuiltIn = getUseBuiltIn();
+    const isAgnesBuiltIn = (providerKey === 'agnes-ai' && useBuiltIn);
+
+    if (!isAgnesBuiltIn && !localProviders[providerKey]) {
         appendChatMessage('ai', '⚠️ 所选的提供商配置不存在，请在【模型配置】中确认。');
         return;
     }
 
-    const providerConfig = localProviders[providerKey];
+    const providerConfig = localProviders[providerKey] || {};
     
     // 获取 Base URL 和 API Key
     let baseUrl = providerConfig.baseUrl || '';
     let apiKey = providerConfig.apiKey || '';
     
     // 如果启用内置模型，且当前选的是 agnes-ai 厂家
-    const useBuiltIn = getUseBuiltIn();
-    if (providerKey === 'agnes-ai' && useBuiltIn) {
+    if (isAgnesBuiltIn) {
         baseUrl = 'https://apihub.agnes-ai.com/v1';
         apiKey = AGNES_BUILT_IN_KEY;
     }
