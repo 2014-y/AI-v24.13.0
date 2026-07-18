@@ -2110,7 +2110,13 @@ function formatLogForUser(text) {
     }
 
     // 微信通道连接就绪
-    if (lowerLine.includes('weixin bound') || lowerLine.includes('wechat bound') || lowerLine.includes('ilink client ready')) {
+    if (
+        lowerLine.includes('weixin bound') || 
+        lowerLine.includes('wechat bound') || 
+        lowerLine.includes('ilink client ready') ||
+        lowerLine.includes('bot already connected') ||
+        lowerLine.includes('bot already bound')
+    ) {
         return `[💬 微信插件] 🟢 微信消息接收通道已成功连接！正在实时监听群聊与私聊消息...`;
     }
 
@@ -2120,12 +2126,24 @@ function formatLogForUser(text) {
     }
 
     // QQ 机器人通道就绪
-    if (lowerLine.includes('qqbot ready') || lowerLine.includes('qqbot connected') || lowerLine.includes('qq-bot connected')) {
+    if (
+        lowerLine.includes('qqbot ready') || 
+        lowerLine.includes('qqbot connected') || 
+        lowerLine.includes('qq-bot connected') ||
+        lowerLine.includes('gateway resumed') ||
+        lowerLine.includes('websocket connected')
+    ) {
         return `[🤖 QQ机器人] 🟢 QQ 机器人消息通道已成功上线连接！正在实时接收消息中...`;
     }
 
     // 飞书/Lark 通道就绪
-    if (lowerLine.includes('feishu ready') || lowerLine.includes('feishu connected') || lowerLine.includes('lark connected')) {
+    if (
+        lowerLine.includes('feishu ready') || 
+        lowerLine.includes('feishu connected') || 
+        lowerLine.includes('lark connected') ||
+        lowerLine.includes('websocket client started') ||
+        lowerLine.includes('starting webhook server')
+    ) {
         return `[🕊️ 飞书插件] 🟢 飞书/Lark 消息通道已成功上线连接！正在实时接收消息中...`;
     }
 
@@ -2144,9 +2162,14 @@ function formatLogForUser(text) {
         return `[⚙️ 系统核心] 📩 正在处理并分析接收到的即时聊天消息...`;
     }
 
-    // 遇到报错（非 Bonjour 的警告）
+    // 遇到报错（非 Bonjour、error-filter、model-pricing 等容易被误报的警告）
     if (lowerLine.includes('error') || lowerLine.includes('exception') || lowerLine.includes('failed')) {
-        if (lowerLine.includes('bonjour') || lowerLine.includes('probe')) return null;
+        if (
+            lowerLine.includes('bonjour') || 
+            lowerLine.includes('probe') || 
+            lowerLine.includes('error-filter') ||
+            lowerLine.includes('model-pricing')
+        ) return null;
         return `[⚠️ 系统警报] ⚠️ 系统运行警告：${cleanLine}`;
     }
 
@@ -4946,6 +4969,13 @@ function updateRightPluginsCountUI() {
     const rightPluginsCountEl = document.getElementById('right-plugins-count');
     if (!rightPluginsCountEl) return;
     const formatPluginCount = (n) => t(`${n} 个`, `${n}`, `${n} 個`);
+    
+    // 如果服务已停止，实际载入的插件数应显示为 0 个
+    if (typeof gatewayStatus !== 'undefined' && gatewayStatus === 'stopped') {
+        rightPluginsCountEl.innerText = formatPluginCount(0);
+        return;
+    }
+    
     if (__gatewayLoadedPluginCount != null) {
         rightPluginsCountEl.innerText = formatPluginCount(__gatewayLoadedPluginCount);
         return;
