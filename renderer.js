@@ -12939,11 +12939,17 @@ function startVoiceRecognition(mode) {
     };
 
     rec.onerror = (ev) => {
-        if (ev && (ev.error === 'not-allowed' || ev.error === 'service-not-allowed')) {
+        const err = ev && ev.error;
+        console.error('[Voice] SpeechRecognition error:', err);
+        if (err === 'not-allowed' || err === 'service-not-allowed') {
             showToast(voiceT('voice.toast.mic_denied', '无法访问麦克风，请在系统设置中允许'));
-            stopVoiceRecognition();
-            if (window.api && window.api.voice) window.api.voice.setListenStatus('idle');
+        } else if (err === 'network') {
+            showToast(voiceT('voice.toast.speech_network_error', '语音识别网络连接失败，请确保代理或全局加速已开启'));
+        } else {
+            showToast(voiceT('voice.toast.speech_error', `语音识别出现异常: ${err}`));
         }
+        stopVoiceRecognition();
+        if (window.api && window.api.voice) window.api.voice.setListenStatus('idle');
     };
 
     rec.onend = () => {
