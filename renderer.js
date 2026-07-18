@@ -2182,6 +2182,11 @@ function formatLogForUser(text) {
         return `[⚠️ 系统警报] ⚠️ 系统运行警告：${cleanLine}`;
     }
 
+    // 服务已停止
+    if (cleanLine.includes('Nexora Agent服务已停止') || cleanLine.includes('服务已停止')) {
+        return `[⚙️ 系统核心] 🛑 Nexora Agent服务已成功停止！`;
+    }
+
     // 其余的噪音直接过滤
     return null;
 }
@@ -2652,6 +2657,23 @@ function setupIpcListeners() {
             stopGatewayReadyProbe();
             updateGatewayStatusUI('stopped');
             updateRightPluginsCountUI();
+            
+            // 重置微信、QQ、飞书的通道状态卡片为离线
+            ['weixin', 'qqbot', 'feishu'].forEach(ch => {
+                const tile = document.getElementById(`tile-${ch}`);
+                if (tile) {
+                    tile.className = 'channel-status-tile offline';
+                    if (ch === 'weixin') tile.title = t('console.channel.wechat.disconnected') || '微信消息通道: 未连接';
+                    if (ch === 'qqbot') tile.title = t('console.channel.qq.disconnected') || 'QQ机器人通道: 未配置';
+                    if (ch === 'feishu') tile.title = t('console.channel.feishu.disconnected') || '飞书/Lark通道: 未连接';
+                }
+            });
+
+            // 重置拓扑图状态与步骤进度 UI 为已停止
+            if (typeof updateStepperUI === 'function') {
+                updateStepperUI(0);
+            }
+
             if (oldStatus === 'running') {
                 sendDesktopNotification('Nexora Agent状态变更', 'OpenClaw 本地智能Nexora Agent已停止运行。');
             }
