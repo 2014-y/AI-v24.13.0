@@ -94,15 +94,15 @@ function findGatewayRuntimeZip(app) {
     const candidates = [];
     try {
         if (process.resourcesPath) {
-            candidates.push(path.join(process.resourcesPath, 'gateway-runtime.zip'));
+            candidates.push(path.join(process.resourcesPath, 'gateway-runtime.tar'));
         }
     } catch (e) {}
     try {
         const appPath = app.getAppPath();
-        candidates.push(path.join(path.dirname(appPath), 'gateway-runtime.zip'));
-        candidates.push(path.join(appPath, 'gateway-runtime.zip'));
+        candidates.push(path.join(path.dirname(appPath), 'gateway-runtime.tar'));
+        candidates.push(path.join(appPath, 'gateway-runtime.tar'));
     } catch (e) {}
-    candidates.push(path.join(getDevProjectRoot(), 'build-resources', 'gateway-runtime.zip'));
+    candidates.push(path.join(getDevProjectRoot(), 'build-resources', 'gateway-runtime.tar'));
 
     for (const p of candidates) {
         try {
@@ -152,22 +152,22 @@ function runSpawn(cmd, args) {
 }
 
 /** 异步解压，不堵主线程事件循环 */
-async function extractZip(zipPath, destDir) {
+async function extractZip(tarPath, destDir) {
     fs.mkdirSync(destDir, { recursive: true });
     try {
-        await runSpawn('tar', ['-xf', zipPath, '-C', destDir]);
+        await runSpawn('tar', ['-xf', tarPath, '-C', destDir]);
         return;
     } catch (e) {
-        // fallback Expand-Archive
+        // 如果系统级 tar 出现偶发执行问题，通过 powershell 绕过执行策略再次尝试解包
     }
 
-    const zipLit = String(zipPath).replace(/'/g, "''");
+    const tarLit = String(tarPath).replace(/'/g, "''");
     const destLit = String(destDir).replace(/'/g, "''");
     await runSpawn('powershell', [
         '-NoProfile',
         '-ExecutionPolicy', 'Bypass',
         '-Command',
-        `Expand-Archive -LiteralPath '${zipLit}' -DestinationPath '${destLit}' -Force`
+        `tar -xf '${tarLit}' -C '${destLit}'`
     ]);
 }
 
@@ -231,7 +231,7 @@ async function ensureGatewayRuntime(app, opts = {}) {
             return { root: legacy, extracted: false, ready: true, mode: 'legacy-unpacked' };
         }
         throw new Error(
-            '缺少 gateway-runtime.zip，且本地运行时残缺（缺渠道插件/npm）。gaps=' + gaps.slice(0, 8).join('; ')
+            '缺少 gateway-runtime.tar，且本地运行时残缺（缺渠道插件/npm）。gaps=' + gaps.slice(0, 8).join('; ')
         );
     }
 

@@ -11,10 +11,10 @@ function Say($m) { Write-Host $m }
 
 $runtime = Join-Path $Base 'gateway-runtime'
 $zipCandidates = @(
-  (Join-Path $Base '..\resources\gateway-runtime.zip'),
-  (Join-Path ${env:ProgramFiles} 'Nexora Agent\resources\gateway-runtime.zip'),
-  (Join-Path ${env:ProgramFiles(x86)} 'Nexora Agent\resources\gateway-runtime.zip'),
-  'D:\Program Files\Nexora Agent\resources\gateway-runtime.zip'
+  (Join-Path $Base '..\resources\gateway-runtime.tar'),
+  (Join-Path ${env:ProgramFiles} 'Nexora Agent\resources\gateway-runtime.tar'),
+  (Join-Path ${env:ProgramFiles(x86)} 'Nexora Agent\resources\gateway-runtime.tar'),
+  'D:\Program Files\Nexora Agent\resources\gateway-runtime.tar'
 )
 $zip = $zipCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 
@@ -33,17 +33,17 @@ Remove-Item (Join-Path $runtime '.runtime-version') -Force -ErrorAction Silently
 Remove-Item (Join-Path $runtime '.runtime-stamp') -Force -ErrorAction SilentlyContinue
 Say "Removed runtime stamps"
 
-# 3) 从安装包 zip 覆盖解压
+# 3) 从安装包 tar 覆盖解压
 if ($zip) {
-  Say "Extracting zip: $zip"
+  Say "Extracting tar: $zip"
   New-Item -ItemType Directory -Force -Path $runtime | Out-Null
   tar -xf $zip -C $runtime 2>$null
   if ($LASTEXITCODE -ne 0) {
-    Say "tar failed, trying Expand-Archive..."
-    Expand-Archive -Path $zip -DestinationPath $runtime -Force
+    Say "tar failed, trying alternative tar execution..."
+    cmd.exe /c "tar -xf `"$zip`" -C `"$runtime`""
   }
 } else {
-  Say "WARN: gateway-runtime.zip not found — skip extract"
+  Say "WARN: gateway-runtime.tar not found — skip extract"
 }
 
 # 4) 校验关键文件

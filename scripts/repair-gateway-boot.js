@@ -46,22 +46,22 @@ function resolveRuntime(base) {
 function findZipCandidates(base) {
   const out = [];
   const push = (p) => { if (p && exists(p)) out.push(p); };
-  push(path.join(ROOT, 'build-resources', 'gateway-runtime.zip'));
-  push(path.join(base, 'gateway-runtime.zip'));
+  push(path.join(ROOT, 'build-resources', 'gateway-runtime.tar'));
+  push(path.join(base, 'gateway-runtime.tar'));
   // 已安装 Electron 资源
   const pf = process.env['ProgramFiles'] || 'C:\\Program Files';
   const pf86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
   for (const root of [pf, pf86, 'D:\\Program Files', 'E:\\Program Files']) {
-    push(path.join(root, 'Nexora Agent', 'resources', 'gateway-runtime.zip'));
-    push(path.join(root, 'NexoraAgent', 'resources', 'gateway-runtime.zip'));
+    push(path.join(root, 'Nexora Agent', 'resources', 'gateway-runtime.tar'));
+    push(path.join(root, 'NexoraAgent', 'resources', 'gateway-runtime.tar'));
   }
   return out;
 }
 
-/** 从完整 zip 覆盖解压到 runtime（补齐 @openclaw / npm） */
-function extractZipIntoRuntime(zipPath, runtimeRoot) {
+/** 从完整 tar 覆盖解压到 runtime（补齐 @openclaw / npm） */
+function extractZipIntoRuntime(tarPath, runtimeRoot) {
   fs.mkdirSync(runtimeRoot, { recursive: true });
-  const r = spawnSync('tar', ['-a', '-xf', zipPath, '-C', runtimeRoot], {
+  const r = spawnSync('tar', ['-xf', tarPath, '-C', runtimeRoot], {
     encoding: 'utf8',
     windowsHide: true,
     maxBuffer: 64 * 1024 * 1024

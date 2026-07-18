@@ -102,8 +102,8 @@
     },
     "extraResources": [
       {
-        "from": "build-resources/gateway-runtime.zip",
-        "to": "gateway-runtime.zip"
+        "from": "build-resources/gateway-runtime.tar",
+        "to": "gateway-runtime.tar"
       },
       {
         "from": "build-resources/acceleration-core",

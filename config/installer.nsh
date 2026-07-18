@@ -36,12 +36,12 @@
   CreateDirectory "$LOCALAPPDATA\NexoraAgent\gateway-runtime"
 
   ; 直接解压到目标目录：同名覆盖，跳过整树删除
-  nsExec::Exec '"$SYSDIR\tar.exe" -xf "$INSTDIR\resources\gateway-runtime.zip" -C "$LOCALAPPDATA\NexoraAgent\gateway-runtime"'
+  nsExec::Exec '"$SYSDIR\tar.exe" -xf "$INSTDIR\resources\gateway-runtime.tar" -C "$LOCALAPPDATA\NexoraAgent\gateway-runtime"'
   Pop $0
 
   ${If} $0 != 0
     DetailPrint "正在使用备用方式覆盖安装运行时…"
-    nsExec::Exec 'powershell.exe -NoProfile -NoLogo -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command "try { Expand-Archive -LiteralPath \"$INSTDIR\resources\gateway-runtime.zip\" -DestinationPath \"$LOCALAPPDATA\NexoraAgent\gateway-runtime\" -Force; exit 0 } catch { exit 1 }"'
+    nsExec::Exec 'powershell.exe -NoProfile -NoLogo -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command "try { tar -xf \"$INSTDIR\resources\gateway-runtime.tar\" -C \"$LOCALAPPDATA\NexoraAgent\gateway-runtime\"; exit 0 } catch { exit 1 }"'
     Pop $0
   ${EndIf}
 
@@ -51,7 +51,7 @@
     FileClose $1
     ; 与 gateway-runtime.js writeRuntimeStamp 对齐，避免首次启动再整包重解压
     FileOpen $1 "$LOCALAPPDATA\NexoraAgent\gateway-runtime\.runtime-stamp" w
-    FileWrite $1 "${VERSION}:pack-c242b538cdeb"
+    FileWrite $1 "${VERSION}:pack-f10c3ff18f59"
     FileClose $1
     DetailPrint "运行时覆盖安装完成"
   ${Else}

@@ -14,7 +14,7 @@ const { spawnSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const OUT_DIR = path.join(ROOT, 'build-resources');
-const ZIP_PATH = path.join(OUT_DIR, 'gateway-runtime.zip');
+const TAR_PATH = path.join(OUT_DIR, 'gateway-runtime.tar');
 const FP_PATH = path.join(OUT_DIR, 'gateway-runtime.fingerprint');
 const STAMP_DIR = path.join(OUT_DIR, '_runtime-stamp');
 const manifestModule = require('../runtime-pack-manifest');
@@ -147,67 +147,19 @@ function buildExcludeArgs() {
   return args;
 }
 
-/** Append paths into an existing zip. Windows tar forbids -a with -r; use .NET ZipFile there. */
+/** Append paths into an existing tar archive. */
 function zipAppendPaths(rels) {
   const list = (Array.isArray(rels) ? rels : [rels]).filter(Boolean);
   if (!list.length) return 0;
-  if (process.platform === 'win32') {
-    const normalized = list.map((r) => String(r).replace(/\\/g, '/'));
-    const payloadPath = path.join(OUT_DIR, '_zip-append-list.json');
-    fs.writeFileSync(payloadPath, JSON.stringify({ zip: ZIP_PATH, root: ROOT, rels: normalized }), 'utf8');
-    const payloadEsc = payloadPath.replace(/'/g, "''");
-    const ps = [
-      "$ErrorActionPreference = 'Stop'",
-      "Add-Type -AssemblyName System.IO.Compression",
-      "Add-Type -AssemblyName System.IO.Compression.FileSystem",
-      "$data = Get-Content -LiteralPath '" + payloadEsc + "' -Raw -Encoding UTF8 | ConvertFrom-Json",
-      "$zip = [System.IO.Compression.ZipFile]::Open($data.zip, [System.IO.Compression.ZipArchiveMode]::Update)",
-      "$added = 0",
-      "try {",
-      "  foreach ($rel in $data.rels) {",
-      "    $full = [System.IO.Path]::Combine($data.root, ($rel -replace '/', [System.IO.Path]::DirectorySeparatorChar))",
-      "    if (-not (Test-Path -LiteralPath $full)) { continue }",
-      "    if (Test-Path -LiteralPath $full -PathType Container) {",
-      "      Get-ChildItem -LiteralPath $full -Recurse -File | ForEach-Object {",
-      "        $sub = $_.FullName.Substring($data.root.Length).TrimStart([char]92, [char]47).Replace([char]92, [char]47)",
-      "        $existing = $zip.GetEntry($sub)",
-      "        if ($existing) { $existing.Delete() }",
-      "        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $_.FullName, $sub, [System.IO.Compression.CompressionLevel]::Optimal)",
-      "        $added++",
-      "      }",
-      "    } else {",
-      "      $entryName = [string]$rel",
-      "      $existing = $zip.GetEntry($entryName)",
-      "      if ($existing) { $existing.Delete() }",
-      "      [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $full, $entryName, [System.IO.Compression.CompressionLevel]::Optimal)",
-      "      $added++",
-      "    }",
-      "  }",
-      "} finally { $zip.Dispose() }",
-      "try { Remove-Item -LiteralPath '" + payloadEsc + "' -Force } catch {}",
-      "Write-Output $added"
-    ].join('; ');
-    const r = spawnSync('powershell', ['-ExecutionPolicy', 'Bypass', '-NoProfile', '-Command', ps], {
-      cwd: ROOT,
-      encoding: 'utf8',
-      windowsHide: true,
-      maxBuffer: 64 * 1024 * 1024
-    });
-    if (r.status !== 0) {
-      throw new Error('zipAppendPaths (powershell): ' + String(r.stderr || r.stdout || 'failed').slice(0, 800));
-    }
-    const n = parseInt(String(r.stdout || '').trim().split(/\r?\n/).pop(), 10);
-    return Number.isFinite(n) ? n : 0;
-  }
   let added = 0;
   for (const rel of list) {
-    const r = spawnSync('tar', ['-a', '-rf', ZIP_PATH, '-C', ROOT, rel], {
+    const r = spawnSync('tar', ['-rf', TAR_PATH, '-C', ROOT, rel], {
       cwd: ROOT,
       encoding: 'utf8',
       windowsHide: true
     });
     if (r.status !== 0) {
-      console.warn('[pack-gateway-runtime] zip append warn:', rel, String(r.stderr || r.stdout || '').slice(0, 160));
+      console.warn('[pack-gateway-runtime] tar append warn:', rel, String(r.stderr || r.stdout || '').slice(0, 160));
     } else {
       added += 1;
     }
@@ -256,7 +208,7 @@ function appendOpenClawTemplates() {
   console.log(`  + forced template md files: ${added}`);
 
   // 校验 zip 内真有 AGENTS.md
-  const check = spawnSync('tar', ['-tf', ZIP_PATH], {
+  const check = spawnSync('tar', ['-tf', TAR_PATH], {
     cwd: ROOT,
     encoding: 'utf8',
     windowsHide: true,
@@ -277,7 +229,7 @@ function appendSandboxNpm() {
       'pack-gateway-runtime: sandbox npm incomplete — need both npm-cli.js and npm-prefix.js under .node-sandbox'
     );
   }
-  const check = spawnSync('tar', ['-tf', ZIP_PATH], {
+  const check = spawnSync('tar', ['-tf', TAR_PATH], {
     cwd: ROOT,
     encoding: 'utf8',
     windowsHide: true,
@@ -297,7 +249,7 @@ function appendSandboxNpm() {
 
 /** 打包结束强制校验：渠道包 / npm / AGENTS.md 缺一不可 */
 function assertZipComplete() {
-  const check = spawnSync('tar', ['-tf', ZIP_PATH], {
+  const check = spawnSync('tar', ['-tf', TAR_PATH], {
     cwd: ROOT,
     encoding: 'utf8',
     windowsHide: true,
@@ -352,7 +304,7 @@ function main() {
   assertPackSourcesPresent();
   console.log('[pack-gateway-runtime] fingerprint', fp.slice(0, 12) + '…', 'pack=' + RUNTIME_PACK_ID);
 
-  if (!FORCE && fs.existsSync(ZIP_PATH) && fs.existsSync(FP_PATH)) {
+  if (!FORCE && fs.existsSync(TAR_PATH) && fs.existsSync(FP_PATH)) {
     const prev = fs.readFileSync(FP_PATH, 'utf8').trim();
     if (prev === fp) {
       let zipOk = false;
@@ -363,7 +315,7 @@ function main() {
         console.warn('[pack-gateway-runtime] cache zip incomplete, rebuilding…', String(e.message || e).slice(0, 160));
       }
       if (zipOk) {
-        const mb = (fs.statSync(ZIP_PATH).size / 1024 / 1024).toFixed(1);
+        const mb = (fs.statSync(TAR_PATH).size / 1024 / 1024).toFixed(1);
         console.log(`[pack-gateway-runtime] cache hit — reuse zip (${mb} MB), ${Date.now() - t0}ms`);
         console.log('  tip: PACK_RUNTIME_FORCE=1 to rebuild');
         return;
@@ -400,9 +352,9 @@ function main() {
   }
 
   console.log('[pack-gateway-runtime] compressing (direct tar, no staging)…');
-  rmrf(ZIP_PATH);
+  rmrf(TAR_PATH);
   try {
-    const args = ['-a', '-cf', ZIP_PATH, ...buildExcludeArgs(), '-C', ROOT, ...inputs];
+    const args = ['-cf', TAR_PATH, ...buildExcludeArgs(), '-C', ROOT, ...inputs];
     const r = spawnSync('tar', args, {
       cwd: ROOT,
       encoding: 'utf8',
@@ -425,8 +377,8 @@ function main() {
   }
 
   fs.writeFileSync(FP_PATH, fp, 'utf8');
-  const mb = (fs.statSync(ZIP_PATH).size / 1024 / 1024).toFixed(1);
-  console.log(`[pack-gateway-runtime] done: ${ZIP_PATH} (${mb} MB) in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+  const mb = (fs.statSync(TAR_PATH).size / 1024 / 1024).toFixed(1);
+  console.log(`[pack-gateway-runtime] done: ${TAR_PATH} (${mb} MB) in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 }
 
 main();
