@@ -8103,9 +8103,14 @@ async function handleSendMessage() {
                 roleAddon = getActiveRoleChatAddon() || '';
             }
         } catch (e) {}
+        let systemPromptToUse = systemPrompt;
+        if (file) {
+            systemPromptToUse = `你是一个具备强大视觉分析能力的智能 AI 助手。当前运行的底层模型为：【提供商: ${providerKey}, 模型ID: ${modelId}】。
+请仔细分析用户上传的这幅图像，并根据图像内容以及用户的提问，给出极其准确、客观且条理清晰的解答。`;
+        }
         messages.push({
             role: 'system',
-            content: systemPrompt + roleAddon
+            content: systemPromptToUse + roleAddon
         });
         if (file) {
             messages.push({
@@ -10136,7 +10141,7 @@ function renderMiniConnectionsFeed(list) {
     if (!container) return;
 
     if (countEl) {
-        countEl.textContent = `${list.length} 个活动`;
+        countEl.textContent = `${list.length} ${t('个活动', 'Active', '個活動')}`;
     }
 
     if (!list || !list.length) {

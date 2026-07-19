@@ -2350,6 +2350,7 @@ textarea.acc-input {
 
 /* 终端机器人科技背景底纹 */
 .terminal-bg-robot {
+  display: none; /* 移除机器人背景 */
   position: absolute;
   top: 55%;
   left: 50%;
@@ -5718,7 +5719,7 @@ input:focus, select:focus, textarea:focus {
 /* 实时活跃连接面板 */
 .acc-dash-mini-conn-card {
   flex: 1;
-  min-height: 0;
+  min-height: 150px; /* 防止在英文长文本或小屏下被挤压成一条线 */
   display: flex;
   flex-direction: column;
   gap: 10px;
