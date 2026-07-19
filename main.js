@@ -117,22 +117,26 @@ function resolveAppFsPath(...segments) {
 
 // 获取可用的 Node 可执行文件路径
 function getAvailableNodePath() {
-    const sandboxPath = resolveAppFsPath('.node-sandbox', 'node.exe');
+    const isWin = process.platform === 'win32';
+    const sandboxName = isWin ? 'node.exe' : 'node';
+    const sandboxPath = resolveAppFsPath('.node-sandbox', sandboxName);
     if (fs.existsSync(sandboxPath)) {
         try {
-            // 检查内置 node.exe 是否真的能运行（防范缺少 VC++ 运行库或被安全组策略拦截）
+            // 检查内置 node 是否真的能运行（防范缺少 VC++ 运行库或被安全组策略拦截）
             const check = require('child_process').execFileSync(sandboxPath, ['-v'], { encoding: 'utf8', timeout: 1000 }).trim();
             if (check.startsWith('v')) {
                 return sandboxPath;
             }
         } catch (e) {
-            console.warn(`[NodeSandbox] 内置 Node.exe 存在但无法运行 (可能缺少 VC++ 运行库或被安全策略/组策略拦截): ${e.message}`);
+            console.warn(`[NodeSandbox] 内置 Node 存在但无法运行: ${e.message}`);
         }
     }
     
     // 如果内置沙箱不存在或无法运行，尝试获取系统全局 Node 绝对路径
     try {
-        const which = require('child_process').execSync('where node', { encoding: 'utf8' }).trim().split('\r\n')[0];
+        const cmd = isWin ? 'where node' : 'which node';
+        const sep = isWin ? '\r\n' : '\n';
+        const which = require('child_process').execSync(cmd, { encoding: 'utf8' }).trim().split(sep)[0];
         if (which && fs.existsSync(which)) {
             // 简单校验一下系统 Node 版本是否满足要求
             const versionOutput = require('child_process').execSync(`"${which}" -v`, { encoding: 'utf8' }).trim();
@@ -235,6 +239,10 @@ function httpGetBuffer(url, { json = false, timeout = 30000 } = {}) {
 
 // 自愈升级内置的 Node.js 绿色沙箱
 async function checkAndHealSandboxNode() {
+    if (process.platform !== 'win32') {
+        console.log('[SandboxCheck] 非 Windows 平台，跳过内置 Node 沙箱检测与升级。');
+        return;
+    }
     const sandboxDir = resolveAppFsPath('.node-sandbox');
     const nodeExePath = path.join(sandboxDir, 'node.exe');
     

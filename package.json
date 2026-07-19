@@ -81,6 +81,21 @@
     "directories": {
       "output": "dist"
     },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "config/icon.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "config/icon.png"
+    },
     "win": {
       "icon": "config/icon.ico",
       "publisherName": "Nexora Agent",

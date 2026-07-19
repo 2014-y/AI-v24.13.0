@@ -241,6 +241,18 @@ async function ensureGatewayRuntime(app, opts = {}) {
     fs.mkdirSync(root, { recursive: true });
     try {
         await extractZip(zip, root);
+        if (process.platform !== 'win32') {
+            try {
+                const { execSync } = require('child_process');
+                const targetDir = path.join(root, 'node_modules', 'open-computer-use', 'dist');
+                if (fs.existsSync(targetDir)) {
+                    execSync(`chmod -R +x "${targetDir}"`);
+                    console.log('[GatewayRuntime] Automatically granted executable permissions to open-computer-use binaries.');
+                }
+            } catch (chmodErr) {
+                console.error('[GatewayRuntime] Failed to grant executable permissions:', chmodErr.message);
+            }
+        }
         onProgress({ phase: 'extract', percent: 90, message: '正在写入版本信息…' });
         writeRuntimeStamp(root, version);
     } catch (e) {
