@@ -4414,6 +4414,11 @@ function startDirectWeixinChannelLogin(spec) {
     const appNm = resolveAppFsPath('node_modules');
     env.NODE_PATH = env.NODE_PATH ? `${appNm}${path.delimiter}${env.NODE_PATH}` : appNm;
 
+    // 如果 fallback 到了 Electron 主程序，必须设置此环境变量使其以 Node 模式运行脚本，否则将弹出一个新 GUI 实例并挂死
+    if (nodeExePath === process.execPath) {
+        env.ELECTRON_RUN_AS_NODE = '1';
+    }
+
     const child = spawn(nodeExePath, [scriptPath], {
         cwd: CONFIG_DIR,
         env,
