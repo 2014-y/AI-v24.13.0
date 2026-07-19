@@ -73,6 +73,21 @@ function softenOpenClawStartupMigrationGuard(runtimeRoot) {
       patched += 1;
     }
   }
+
+  // 额外处理 startup-migration-checkpoint，强行去掉死锁检查
+  for (const name of fs.readdirSync(dist)) {
+    if (/^startup-migration-checkpoint-.*\.js$/i.test(name)) {
+      const file = path.join(dist, name);
+      let src = fs.readFileSync(file, 'utf8');
+      const reLock = /if\s*\(\s*existing\s*\)\s*throw\s+new\s+Error\s*\(\s*`OpenClaw startup migrations are already running[\s\S]*?`\s*\)\s*;/g;
+      if (reLock.test(src)) {
+        const next = src.replace(reLock, '/* NEXORA_SOFT_MIGRATION_LOCK: bypass */');
+        fs.writeFileSync(file, next, 'utf8');
+        patched += 1;
+      }
+    }
+  }
+
   return { ok: patched > 0, patched };
 }
 
