@@ -8049,7 +8049,8 @@ function addTtsToAiBubble(msgDiv, bubble) {
 
 // 往聊天窗口追加气泡消息
 function appendChatMessage(sender, content, attachment = null, isHTML = false) {
-    if (typeof content === 'string' && (content.includes('Exec failed:') || content.includes('Exec failed'))) {
+    // 🌟 前端完全干净过滤：隐藏所有底层指令产生的 Exec failed 系统框
+    if (typeof content === 'string' && content.includes('Exec failed')) {
         return null;
     }
     const container = document.getElementById('chat-messages-container');
