@@ -2847,16 +2847,57 @@ function setupIpcListeners() {
     }
 
     // 绑定一键复制授权链接
-    document.getElementById('qrcode-copy-btn').addEventListener('click', () => {
-        const urlInput = document.getElementById('qrcode-raw-url');
-        urlInput.select();
-        urlInput.setSelectionRange(0, 99999);
-        navigator.clipboard.writeText(urlInput.value);
-        const isFeishu = window.__activeQrChannel === 'feishu';
-        alert(isFeishu
-            ? '授权登录链接已成功复制到剪贴板！\n\n也可直接用飞书 App 扫描屏幕上的二维码完成绑定。'
-            : '授权登录链接已成功复制到剪贴板！\n\n您可以粘贴发给微信里的任意聊天框（如“文件传输助手”），在手机端直接点击链接即可开始授权登录。');
-    });
+    const qrcodeCopyBtn = document.getElementById('qrcode-copy-btn');
+    if (qrcodeCopyBtn) {
+        qrcodeCopyBtn.addEventListener('click', async () => {
+            const urlInput = document.getElementById('qrcode-raw-url');
+            const targetUrl = urlInput ? (urlInput.value || '').trim() : '';
+            if (!targetUrl) {
+                if (typeof showToast === 'function') showToast('⚠️ 暂无有效的授权链接可复制');
+                return;
+            }
+
+            let copied = false;
+            try {
+                if (urlInput) {
+                    urlInput.focus();
+                    urlInput.select();
+                    urlInput.setSelectionRange(0, 99999);
+                }
+                await navigator.clipboard.writeText(targetUrl);
+                copied = true;
+            } catch (err) {
+                if (urlInput) {
+                    urlInput.select();
+                    copied = document.execCommand('copy');
+                } else {
+                    const tmp = document.createElement('textarea');
+                    tmp.value = targetUrl;
+                    tmp.style.position = 'fixed';
+                    tmp.style.opacity = '0';
+                    document.body.appendChild(tmp);
+                    tmp.focus();
+                    tmp.select();
+                    copied = document.execCommand('copy');
+                    document.body.removeChild(tmp);
+                }
+            }
+
+            if (copied) {
+                const isFeishu = window.__activeQrChannel === 'feishu';
+                const msg = isFeishu
+                    ? '📋 飞书授权登录链接已成功复制到剪贴板！'
+                    : '📋 微信授权登录链接已成功复制到剪贴板！';
+                if (typeof showToast === 'function') {
+                    showToast(msg);
+                } else {
+                    alert(msg);
+                }
+            } else {
+                if (typeof showToast === 'function') showToast('⚠️ 复制失败，请手动选择框内文本按 Ctrl+C 复制');
+            }
+        });
+    }
 
     // 托盘控制触发
     window.api.onControlTriggered((action) => {
