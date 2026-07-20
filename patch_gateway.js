@@ -24,10 +24,10 @@ function isLlmProxyPath(pathOrUrl) {
 function isLocalModelRequest(model, hostOrUrl) {
     const m = String(model || '').toLowerCase();
     const h = String(hostOrUrl || '').toLowerCase();
-    const localHost = h.includes('11434') || h.includes('localhost') || h.includes('127.0.0.1') || h.includes('[::1]') || h.includes('0.0.0.0');
-    // 仅按 Ollama 前缀或本机地址判断，不按具体模型名猜测
+    // 仅针对真正运行在 Ollama (11434端口) 或者是以 ollama/ 前缀命名的本地端侧小模型
+    const isOllamaPort = h.includes('11434');
     const localName = m.includes('ollama/') || m.startsWith('ollama/');
-    return localHost || localName;
+    return isOllamaPort || localName;
 }
 
 function looksLikeRawToolCall(content) {
