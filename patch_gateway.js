@@ -37,7 +37,18 @@ function looksLikeRawToolCall(content) {
     return /^\s*\{[\s\S]*"name"\s*:[\s\S]*"arguments"\s*:/.test(t);
 }
 
+function stripDirectiveTags(text) {
+    if (typeof text !== 'string') return text;
+    return text
+        .replace(/\[\[\s*(?:reply_to_current|reply_to\s*:[^\]\n]+)\s*\]\]/gi, '')
+        .replace(/\[\s*(?:reply_to_current|reply_to\s*:[^\]\n]+)\s*\]/gi, '')
+        .trim();
+}
+
 function sanitizeRawToolCallContent(content) {
+    if (typeof content === 'string') {
+        content = stripDirectiveTags(content);
+    }
     if (!looksLikeRawToolCall(content)) return content;
     const trimmed = content.trim();
     try {
@@ -46,15 +57,15 @@ function sanitizeRawToolCallContent(content) {
             if (parsed.name === 'tts' && parsed.arguments && typeof parsed.arguments.text === 'string') {
                 return parsed.arguments.text;
             }
-            // 其它工具调用 JSON 不当聊天内容，直接清空以免污染上下文
-            return '';
+            // 其它工具调用 JSON 转换成自然语言日志说明，防范返回空字符串触发 empty content 警告
+            return `[已触发技能 ${parsed.name}]`;
         }
     } catch (e) {
         if (/"name"\s*:\s*"tts"/.test(trimmed)) {
             const textMatch = trimmed.match(/"text"\s*:\s*"([^"]*)"/);
             return (textMatch && textMatch[1]) ? textMatch[1] : '';
         }
-        return '';
+        return '[已处理内部工具指令]';
     }
     return content;
 }
