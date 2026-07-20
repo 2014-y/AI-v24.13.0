@@ -56,15 +56,27 @@ for (const [category, skills] of Object.entries(SKILL_CATEGORIES)) {
 const INTENT_KEYWORDS = {
   messaging: ['微信', 'whatsapp', 'discord', '发送', '消息', '聊天', '群', '朋友', '好友', 'contact', 'message', 'chat', 'send', 'reply'],
   browser: ['浏览器', '网页', '网站', '打开', 'chrome', 'edge', 'firefox', '搜索', 'google', 'bing', 'web', 'browse', 'url', 'link'],
-  desktop: ['屏幕', '窗口', '应用', '点击', '键盘', '鼠标', '亮度', '音量', '截图', 'control', 'screen', 'window', 'app', 'brightness', 'volume'],
+  desktop: ['屏幕', '窗口', '应用', '点击', '键盘', '鼠标', '亮度', '音量', 'control', 'screen', 'window', 'app', 'brightness', 'volume'],
   memory: ['记忆', '之前', '历史', 'remember', 'memory', 'recall', 'forget'],
   voice: ['语音', '录音', '说话', '听', 'voice', 'audio', 'speak', 'listen', 'call', '通话'],
   coding: ['代码', '编程', 'git', 'github', 'repo', 'bug', 'debug', 'file', '开发', '开发'],
   productivity: ['笔记', '待办', 'todo', '任务', '日历', 'password', '密码', 'notion', 'trello', 'obsidian'],
   emotion: ['心情', '情绪', '感情', '感觉', 'happy', 'sad', 'angry', 'mood', 'emotion'],
-  media: ['音乐', '图片', '照片', '视频', 'music', 'photo', 'picture', 'video', 'song'],
+  media: ['音乐', '图片', '照片', '视频', '画', '生成', '绘图', '生图', '生视频', '发我', '截图', 'music', 'photo', 'picture', 'video', 'song', 'draw', 'image', 'generate'],
   smart_home: ['灯', '智能家居', 'hue', 'sonos', 'smart home'],
 };
+
+/** 生图/生视频/发图相关工具一律保留，避免被意图裁剪误删 */
+const ALWAYS_KEEP_TOOLS = new Set([
+  'message', 'image', 'draw_picture', 'draw_video',
+  'exec', 'process', 'read', 'write', 'edit',
+  'memory_search', 'memory_get', 'web_search', 'web_fetch',
+  'session_status', 'sessions_list'
+]);
+
+function toolName(t) {
+  return (t && (t.name || t.function?.name || '')) || '';
+}
 
 /** 根据用户消息识别意图 */
 function detectIntent(message) {
@@ -266,21 +278,24 @@ export default function createContextRouterPlugin(runtime) {
       // 精简工具列表：只保留当前意图相关的工具
       let leanTools = originalTools;
       if (originalTools && originalTools.length > 10) {
-        // 对于 desktop/browser 意图，只保留相关工具
-        if (activeCategories.includes('desktop')) {
-          leanTools = originalTools.filter(t =>
-            t.name && (
-              t.name.includes('exec') ||
-              t.name.includes('desktop') ||
-              t.name.includes('screen') ||
-              t.name.includes('mouse') ||
-              t.name.includes('keyboard') ||
-              t.name.includes('volume') ||
-              t.name.includes('brightness') ||
-              t.name.includes('app') ||
-              t.name.includes('cache')
-            )
-          );
+        // desktop 意图会裁剪工具，但生图/生视频等 ALWAYS_KEEP 必须保留
+        if (activeCategories.includes('desktop') && !activeCategories.includes('media')) {
+          leanTools = originalTools.filter(t => {
+            const name = toolName(t);
+            if (!name) return false;
+            if (ALWAYS_KEEP_TOOLS.has(name)) return true;
+            return (
+              name.includes('exec') ||
+              name.includes('desktop') ||
+              name.includes('screen') ||
+              name.includes('mouse') ||
+              name.includes('keyboard') ||
+              name.includes('volume') ||
+              name.includes('brightness') ||
+              name.includes('app') ||
+              name.includes('cache')
+            );
+          });
         }
       }
 

@@ -2110,8 +2110,8 @@ async function init() {
         });
     }
 
-    // 自动启用Nexora Agent逻辑
-    if (localStorage.getItem('setting_auto_launch_gateway') === 'true') {
+    // 自动启用Nexora Agent逻辑（与设置开关默认一致：未写入时视为开启）
+    if (localStorage.getItem('setting_auto_launch_gateway') !== 'false') {
         setTimeout(() => {
             if (gatewayStatus === 'stopped') {
                 logTerminal.innerText += '\n[System] 正在根据系统设置自动启用本地Nexora Agent...\n';

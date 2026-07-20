@@ -1,32 +1,40 @@
 ---
 name: video-generator
-description: Generate videos using agnes-ai video API. Supports duration, resolution, fps, aspect ratio. Saves to $env:USERPROFILE/.openclaw/media-output/
+description: Generate videos using agnes-ai video API. Prefer the draw_video tool; CLI is fallback. Supports duration, resolution, fps, aspect ratio.
 ---
 
 # Video Generator
 
 Generate short videos using the agnes-ai video API.
 
-## 鈿狅笍 IMPORTANT: Always specify --duration
+## Preferred: `draw_video` tool
 
-The default duration is 5 seconds. If the user requests a specific duration, you MUST pass `--duration N`. Never omit this flag when the user specifies a length.
+When available, call the `draw_video` tool with at least `prompt`.  
+Generation often takes **2–10 minutes** — wait for completion; do not cancel early.  
+When done, include `MEDIA:<absolute filepath>` in the reply so the channel can deliver the file.
 
-## Usage
+## Fallback CLI
 
 ```bash
-node "%USERPROFILE%/.openclaw/media-cli/agnes-media-cli.js" video --prompt "鎻忚堪" [options]
+node "%USERPROFILE%/.openclaw/media-cli/agnes-media-cli.js" video --prompt "描述" [options]
 ```
+
+Use `exec` with `timeout` **≥ 600** and `process poll` until finished.
+
+## IMPORTANT: Always specify --duration when user asks
+
+The default duration is 5 seconds. If the user requests a specific duration, you MUST pass `--duration N` (or the tool `duration` param). Never omit it when the user specifies a length.
 
 ## Options
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--prompt` | Video description (required) | - |
-| `--duration` | Duration in seconds | 5 |
-| `--resolution` | 480p, 720p, or 1080p | 720p |
-| `--fps` | Frames per second | 24 |
-| `--aspect` | 16:9, 9:16, 1:1, or 4:3 | 16:9 |
-| `--model` | Model to use | agnes-video-v2.0 |
+| Flag / param | Description | Default |
+|--------------|-------------|---------|
+| `prompt` / `--prompt` | Video description (required) | - |
+| `duration` / `--duration` | Duration in seconds | 5 |
+| `resolution` / `--resolution` | 480p, 720p, or 1080p | 720p |
+| `fps` / `--fps` | Frames per second | 24 |
+| `aspect_ratio` / `--aspect` | 16:9, 9:16, 1:1, or 4:3 | 16:9 |
+| `model` / `--model` | Model to use | agnes-video-v2.0 |
 
 ## Examples
 
@@ -43,6 +51,5 @@ node "%USERPROFILE%/.openclaw/media-cli/agnes-media-cli.js" video --prompt "a be
 
 ## Output
 
-Video files are saved to `$env:USERPROFILE/.openclaw/media-output/` as `video_<timestamp>.mp4`.
-
-After generation, upload the video file to the chat.
+Plugin saves to `$env:USERPROFILE/.openclaw/video-output/` as `video_<timestamp>.mp4`.  
+CLI may save under `media-output/`. Always use the path returned by the tool/CLI in `MEDIA:`.

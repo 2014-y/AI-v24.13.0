@@ -282,7 +282,8 @@ function ensureLatencySafeConfig(config, opts = {}) {
       'group:fs',
       'group:runtime',
       'group:web',
-      'group:memory',
+      'memory_search',
+      'memory_get',
       'image',
       'draw_picture',
       'draw_video'
@@ -350,13 +351,30 @@ function ensureLatencySafeConfig(config, opts = {}) {
     changes.push('skills.limits.maxSkillsPromptChars: -> 3000');
   }
 
-  // 云端请求总超时：避免无限挂起；过短又会误杀慢生成
+  // 云端总超时：生图/生视频轮询常要几分钟；过短会报 Request timed out
   if (!cfg.agents) cfg.agents = {};
   if (!isObject(cfg.agents.defaults)) cfg.agents.defaults = {};
   const timeoutSec = Number(cfg.agents.defaults.timeoutSeconds);
-  if (!Number.isFinite(timeoutSec) || timeoutSec < 90 || timeoutSec > 240) {
-    cfg.agents.defaults.timeoutSeconds = 180;
-    changes.push('agents.defaults.timeoutSeconds: -> 180');
+  if (!Number.isFinite(timeoutSec) || timeoutSec < 300) {
+    cfg.agents.defaults.timeoutSeconds = 600;
+    changes.push('agents.defaults.timeoutSeconds: -> 600');
+  }
+  // 同步抬高 agnes-ai 请求超时，避免工具跑着模型侧先 idle Abort
+  if (isObject(cfg.models) && isObject(cfg.models.providers) && isObject(cfg.models.providers['agnes-ai'])) {
+    const prov = cfg.models.providers['agnes-ai'];
+    const pt = Number(prov.timeoutSeconds);
+    if (!Number.isFinite(pt) || pt < 300) {
+      prov.timeoutSeconds = 600;
+      changes.push('models.providers.agnes-ai.timeoutSeconds: -> 600');
+    }
+  }
+  if (isObject(cfg.models) && isObject(cfg.models.providers) && isObject(cfg.models.providers.ten)) {
+    const prov = cfg.models.providers.ten;
+    const pt = Number(prov.timeoutSeconds);
+    if (!Number.isFinite(pt) || pt < 300) {
+      prov.timeoutSeconds = 600;
+      changes.push('models.providers.ten.timeoutSeconds: -> 600');
+    }
   }
 
   // 未绑定渠道插件默认关掉，减少工具 schema 体积（用户启用通讯时再开）

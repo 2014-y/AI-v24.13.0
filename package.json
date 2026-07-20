@@ -182,6 +182,8 @@
       "workspace/skills/image-generator/**/*",
       "workspace/skills/video-generator/**/*",
       "!extensions/**/*",
+      "extensions/image-generator/**/*",
+      "extensions/video-generator/**/*",
       "!.node-sandbox/**/*"
     ]
   },

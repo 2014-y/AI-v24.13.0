@@ -930,9 +930,10 @@ const BUNDLED_EXTENSION_PLUGINS = [
     'video-generator'
 ];
 
-const MEDIA_TOOLS_MARKER = '<!-- nexora-media-tools-v1 -->';
+const MEDIA_TOOLS_MARKER = '<!-- nexora-media-tools-v2 -->';
 const MEDIA_MEMORY_MARKER = '<!-- nexora-media-memory-v1 -->';
 const MEDIA_AGENTS_MARKER = '<!-- nexora-media-agents-v1 -->';
+const MEDIA_TOOLS_MARKER_LEGACY = '<!-- nexora-media-tools-v1 -->';
 const MEDIA_IMAGE_PREFS_FILE = 'media-generator.json';
 const MEDIA_VIDEO_PREFS_FILE = 'video-generator.json';
 const DEFAULT_MEDIA_IMAGE_PREFS = {
@@ -1669,6 +1670,30 @@ function ensurePluginManifestJson(destDir, pluginId) {
         needsUpdate = true;
     }
 
+    // 媒体插件：声明 tools contract，避免 allowlist 把 draw_* 当成 unknown
+    const mediaToolContracts = {
+        'image-generator': ['draw_picture'],
+        'video-generator': ['draw_video']
+    };
+    if (mediaToolContracts[pluginId]) {
+        const want = mediaToolContracts[pluginId];
+        const have = manifest.contracts && Array.isArray(manifest.contracts.tools)
+            ? manifest.contracts.tools
+            : [];
+        if (JSON.stringify(have) !== JSON.stringify(want)) {
+            if (!manifest.contracts || typeof manifest.contracts !== 'object') manifest.contracts = {};
+            manifest.contracts.tools = want;
+            needsUpdate = true;
+        }
+        if (!manifest.activation || typeof manifest.activation !== 'object') {
+            manifest.activation = { onStartup: true };
+            needsUpdate = true;
+        } else if (manifest.activation.onStartup !== true) {
+            manifest.activation.onStartup = true;
+            needsUpdate = true;
+        }
+    }
+
     if (needsUpdate) {
         try {
             fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
@@ -1714,8 +1739,17 @@ function syncBundledPluginFiles(pluginId) {
             }
         }
         if (!pluginSrc) return;
+        // 清掉历史误拷产生的嵌套目录（extensions/image-generator/image-generator）
+        try {
+            const nestedJunk = path.join(destDir, pluginId);
+            if (fs.existsSync(nestedJunk) && fs.statSync(nestedJunk).isDirectory()) {
+                fs.rmSync(nestedJunk, { recursive: true, force: true });
+            }
+        } catch (e) {}
         for (const name of fs.readdirSync(pluginSrc)) {
             if (name === 'node_modules' || name === '.bundle-version') continue;
+            // 防止源目录里残留同名嵌套文件夹
+            if (name === pluginId) continue;
             const from = path.join(pluginSrc, name);
             const to = path.join(destDir, name);
             try {
@@ -2237,8 +2271,8 @@ function buildMediaToolsSection() {
 - 用户要生成图片或视频时，**优先**调用工具 \`draw_picture\` / \`draw_video\`
 - 若不可用，用 \`exec\`：\`node "${cliPath}" image --prompt "描述"\` 或 \`node "${cliPath}" video --prompt "描述"\`
 - **禁止**调用内置 \`image_generate\` / \`video_generate\`（默认无 Google Key，会失败）
-- 生成完成后在回复中加入 \`MEDIA:完整文件路径\`
-- 生成较慢（1-3 分钟），\`exec\` 的 \`timeout\` 至少 180，并用 \`process poll\` 等待
+- 生成完成后在回复中加入 \`MEDIA:完整文件路径\`（视频同理，发 QQ/飞书 才看得到文件）
+- 图片约 30–90 秒；**视频常需 2–10 分钟**。用 \`exec\` 时 \`timeout\` 至少 **600**，并用 \`process poll\` 等待
 `;
 }
 
@@ -2252,8 +2286,19 @@ function ensureMediaWorkspaceGuidance(wsDir) {
             console.log('[PluginSeed] Seeded workspace TOOLS.md (media guidance)');
             return;
         }
-        const cur = fs.readFileSync(toolsPath, 'utf8');
+        let cur = fs.readFileSync(toolsPath, 'utf8');
         if (cur.includes(MEDIA_TOOLS_MARKER)) return;
+        // 升级旧版 media tools 块（含 v1），避免视频超时说明过短
+        if (cur.includes(MEDIA_TOOLS_MARKER_LEGACY) || /##\s*图片\/视频生成/.test(cur)) {
+            const stripped = cur
+                .replace(/<!--\s*nexora-media-tools-v\d+\s*-->[\s\S]*?(?=\n##\s|\n<!--|\s*$)/m, '')
+                .replace(/##\s*图片\/视频生成[\s\S]*?(?=\n##\s|\n<!--|\s*$)/m, '')
+                .trim();
+            cur = section + (stripped ? '\n\n' + stripped + '\n' : '\n');
+            fs.writeFileSync(toolsPath, cur, 'utf8');
+            console.log('[PluginSeed] Upgraded workspace TOOLS.md media guidance (v2)');
+            return;
+        }
         fs.writeFileSync(toolsPath, section + '\n\n' + cur, 'utf8');
         console.log('[PluginSeed] Prepended media guidance to workspace TOOLS.md');
     } catch (e) {
@@ -2967,6 +3012,18 @@ function createWindow(existingSplash) {
         const id = (global.nexoraInstance && global.nexoraInstance.id) || 1;
         mainWindow.setTitle(id > 1 ? `Nexora Agent #${id}` : 'Nexora Agent');
     } catch (e) {}
+    // 修复：曾把「自动启动」关掉会导致开 App 无核心/无日志；纠正为开启并同步开关 UI
+    mainWindow.webContents.once('did-finish-load', () => {
+        mainWindow.webContents.executeJavaScript(`
+            try {
+              if (localStorage.getItem('setting_auto_launch_gateway') === 'false') {
+                localStorage.setItem('setting_auto_launch_gateway', 'true');
+                const el = document.getElementById('setting-auto-gateway');
+                if (el) el.checked = true;
+              }
+            } catch (e) {}
+        `).catch(() => {});
+    });
     // 当渲染进程首次绘制完成后，关闭 splash 并展示主窗口
     mainWindow.once('ready-to-show', () => {
         splash.destroy();
@@ -3031,8 +3088,15 @@ function createWindow(existingSplash) {
         mainWindow = null;
     });
 
-    // 移除硬编码自动拉起，改由前端根据设置（setting_auto_launch_gateway）自主判断并发送 IPC 触发拉起
-    // startGatewayProcess();
+    // 主进程兜底自动拉起：避免仅依赖 localStorage（用户关掉「自动启动」后会整页无日志、渠道灰点）
+    // 前端 setting_auto_launch_gateway 仍可再发一次 start（有 gatewayProcess / inFlight 防重）
+    setTimeout(() => {
+        try {
+            startGatewayProcess();
+        } catch (e) {
+            console.warn('[Gateway] boot auto-start failed:', e && e.message);
+        }
+    }, 1800);
 }
 
 // 创建系统托盘
@@ -3089,14 +3153,53 @@ function showNotification(title, body) {
     }
 }
 
-// 异步非阻塞执行命令，防止锁死主进程事件循环导致的界面卡死
-function execAsync(cmd) {
+// 异步非阻塞执行命令；默认带超时，避免启动网关时卡死在 Get-CimInstance 扫全机 node
+function execAsync(cmd, timeoutMs = 20000) {
     const { exec } = require('child_process');
     return new Promise((resolve) => {
-        exec(cmd, (err, stdout) => {
+        let settled = false;
+        const child = exec(cmd, { windowsHide: true }, (err, stdout) => {
+            if (settled) return;
+            settled = true;
             resolve(stdout || '');
         });
+        if (timeoutMs > 0) {
+            const timer = setTimeout(() => {
+                if (settled) return;
+                settled = true;
+                try { child.kill(); } catch (e) {}
+                console.warn(`[execAsync] timeout ${timeoutMs}ms: ${String(cmd).slice(0, 120)}`);
+                resolve('');
+            }, timeoutMs);
+            child.on('exit', () => clearTimeout(timer));
+        }
     });
+}
+
+/** 只杀占用指定端口的进程（快、可超时）；不要扫全机 node.exe */
+async function killPidsListeningOnPort(port, excludePids = []) {
+    const exclude = new Set((excludePids || []).map((p) => String(p)).filter(Boolean));
+    const portToken = `:${Number(port)}`;
+    try {
+        const netstatOut = await execAsync('netstat -ano', 8000);
+        const pids = new Set();
+        for (const line of String(netstatOut || '').split(/\r?\n/)) {
+            if (!line.includes(portToken) || !/LISTENING/i.test(line)) continue;
+            const parts = line.trim().split(/\s+/);
+            const pid = parts[parts.length - 1];
+            if (pid && /^\d+$/.test(pid) && !exclude.has(pid) && Number(pid) > 0) {
+                pids.add(pid);
+            }
+        }
+        for (const pid of pids) {
+            try {
+                await execAsync(`taskkill /pid ${pid} /F /T`, 8000);
+            } catch (e) {}
+        }
+        return pids.size;
+    } catch (e) {
+        return 0;
+    }
 }
 
 /** 渠道绑定/改配后热重载网关（防抖；先完整停再启，避免 setTimeout 竞态导致新凭证未加载） */
@@ -3159,29 +3262,18 @@ function scheduleGatewayReloadAfterChannelChange(reason, opts = {}) {
 async function stopGatewayProcess() {
     if (gatewayProcess) {
         gatewayProcess.isIntentionallyStopped = true; // 标记为主动停止，避免触发意外退出警报
+        const pid = gatewayProcess.pid;
         if (process.platform === 'win32') {
             try {
-                // 精准物理强杀所有可能遗留的旧沙箱 node.exe 僵尸进程，彻底杜绝多实例抢占和日志刷屏
-                const killCmd = `powershell -ExecutionPolicy Bypass -NoProfile -Command "try { Get-CimInstance Win32_Process -Filter \\"Name = 'node.exe'\\" | Where-Object { $_.ExecutablePath -like '*Nexora Agent*' -or $_.CommandLine -like '*openclaw*' -or $_.ExecutablePath -like '*.node-sandbox*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force } } catch {}; exit 0"`;
-                await execAsync(killCmd);
-                await execAsync(`taskkill /pid ${gatewayProcess.pid} /T /F`);
+                if (pid) await execAsync(`taskkill /pid ${pid} /T /F`, 8000);
             } catch (err) {
                 try { gatewayProcess.kill('SIGKILL'); } catch (e) {}
             }
-            // 保底物理清除霸占端口 18789 的残留
+            // 只清本实例端口，避免全机扫 node 卡死
             try {
-                const netstatOut = await execAsync('netstat -ano');
-                const lines = netstatOut.split('\n');
-                for (const line of lines) {
-                    if (line.includes(':18789') && line.includes('LISTENING')) {
-                        const parts = line.trim().split(/\s+/);
-                        const pid = parts[parts.length - 1];
-                        if (pid && parseInt(pid) > 0) {
-                            try { await execAsync(`taskkill /pid ${pid} /F /T`); } catch(e) {}
-                        }
-                    }
-                }
-            } catch(err) {}
+                const port = resolveConfiguredGatewayPort();
+                await killPidsListeningOnPort(port, [process.pid, process.ppid]);
+            } catch (err) {}
         } else {
             gatewayProcess.kill('SIGTERM');
         }
@@ -3244,15 +3336,30 @@ async function startGatewayProcess() {
         gatewayStartInFlight = (async () => {
         try {
         const preferredGatewayPort = resolveConfiguredGatewayPort();
+        // 先把 UI 打到 starting，避免清理端口时界面长时间假“空闲/运行中”
+        if (mainWindow) {
+            mainWindow.webContents.send('gateway-status', 'starting');
+            mainWindow.webContents.send('gateway-log', `[System] 正在准备启动 Gateway（端口 ${preferredGatewayPort}）...\n`);
+        }
+
         if (await probeGatewayPort(preferredGatewayPort)) {
-            console.log(`[Gateway] Port ${preferredGatewayPort} already listening; skip duplicate fork`);
-            if (mainWindow) {
-                mainWindow.webContents.send('gateway-status', 'running');
-                mainWindow.webContents.send('gateway-log', `[System] 检测到端口 ${preferredGatewayPort} 已有网关服务，跳过重复拉起。\n`);
+            // 本进程已 fork 过：真·跳过。外部孤儿占用端口时不能跳过，否则 UI 无 stdout、活动流空白。
+            if (gatewayProcess) {
+                console.log(`[Gateway] Port ${preferredGatewayPort} already owned by this app; skip duplicate fork`);
+                if (mainWindow) {
+                    mainWindow.webContents.send('gateway-status', 'running');
+                }
+                startGatewayHttpReadyWatch(preferredGatewayPort);
+                notifyGatewayHttpReady(preferredGatewayPort);
+                return;
             }
-            startGatewayHttpReadyWatch(preferredGatewayPort);
-            notifyGatewayHttpReady(preferredGatewayPort);
-            return;
+            console.log(`[Gateway] Port ${preferredGatewayPort} occupied by external process; reclaim then fork`);
+            if (mainWindow) {
+                mainWindow.webContents.send(
+                    'gateway-log',
+                    `[System] 检测到端口 ${preferredGatewayPort} 被外部网关占用，正在回收并重新拉起（否则界面无启动日志）...\n`
+                );
+            }
         }
 
         try {
@@ -3267,37 +3374,25 @@ async function startGatewayProcess() {
             return;
         }
 
-        // 多开时：主实例仍清理本机默认 18789 残留；第 2+ 实例绝不杀其它实例的网关
+        // 多开时：主实例仍清理本机默认端口残留；第 2+ 实例绝不杀其它实例的网关
         const instanceId = (global.nexoraInstance && global.nexoraInstance.id) || 1;
         if (process.platform === 'win32') {
             try {
                 if (instanceId <= 1) {
-                    // 精准物理强杀所有可能遗留的旧沙箱 node.exe 僵尸进程（仅主实例）
-                    const killCmd = `powershell -ExecutionPolicy Bypass -NoProfile -Command "try { Get-CimInstance Win32_Process -Filter \\"Name = 'node.exe'\\" | Where-Object { $_.ExecutablePath -like '*Nexora Agent*' -or $_.CommandLine -like '*openclaw*' -or $_.ExecutablePath -like '*.node-sandbox*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force } } catch {}; exit 0"`;
-                    await execAsync(killCmd);
-                }
-
-                const currentPid = process.pid;
-                const parentPid = process.ppid;
-                const netstatOut = await execAsync('netstat -ano');
-                const lines = netstatOut.split('\n');
-                const pidsToKill = new Set();
-                const portToken = `:${preferredGatewayPort}`;
-                for (const line of lines) {
-                    if (line.includes(portToken) && line.includes('LISTENING')) {
-                        const parts = line.trim().split(/\s+/);
-                        const pid = parts[parts.length - 1];
-                        if (pid && parseInt(pid) > 0 && pid !== currentPid.toString() && pid !== parentPid.toString()) {
-                            pidsToKill.add(pid);
-                        }
+                    const killed = await killPidsListeningOnPort(
+                        preferredGatewayPort,
+                        [process.pid, process.ppid]
+                    );
+                    if (killed > 0 && mainWindow) {
+                        mainWindow.webContents.send(
+                            'gateway-log',
+                            `[System] 已回收占用端口 ${preferredGatewayPort} 的 ${killed} 个残留进程。\n`
+                        );
                     }
+                    // 给 OS 一点时间释放 LISTEN
+                    await new Promise((r) => setTimeout(r, 400));
                 }
-                for (const pid of pidsToKill) {
-                    try {
-                        await execAsync(`taskkill /pid ${pid} /F`);
-                    } catch (e) {}
-                }
-            } catch(err) {
+            } catch (err) {
                 console.error('Failed to cleanup leftover gateway port processes:', err);
             }
         }
@@ -3499,6 +3594,7 @@ async function startGatewayProcess() {
 
             // 启动子进程运行Nexora Agent
             gatewayProcess = fork(openclawEntry, ['gateway', 'run', '--force', '--allow-unconfigured'], forkOptions);
+            global.__gatewayReclaimAttempts = 0;
 
             mainWindow.webContents.send('gateway-status', 'running');
             showNotification('Nexora Agent已成功启动', 'AI 本地Nexora Agent已在后台运行，开始监听 18789 端口。');
@@ -3579,13 +3675,33 @@ async function startGatewayProcess() {
                 stopGatewayHttpReadyWatch();
                 gatewayHttpReadyNotified = false;
                 if (!wasIntentionallyStopped && await probeGatewayPort(exitedPort)) {
-                    console.log(`[Gateway] Child exited (${code}) but port ${exitedPort} still listening; keep UI running`);
+                    // 子进程没了但端口仍被占用：绝不能假装 running（会导致活动流空白）
+                    console.warn(`[Gateway] Child exited (${code}) but port ${exitedPort} still listening; reclaim`);
                     if (mainWindow) {
-                        mainWindow.webContents.send('gateway-status', 'running');
-                        notifyGatewayHttpReady(exitedPort);
+                        mainWindow.webContents.send(
+                            'gateway-log',
+                            `\n[System] 网关子进程已退出但端口 ${exitedPort} 仍被占用，正在回收并重拉（保证界面有日志）...\n`
+                        );
+                        mainWindow.webContents.send('gateway-status', 'starting');
+                    }
+                    if ((global.__gatewayReclaimAttempts || 0) < 2) {
+                        global.__gatewayReclaimAttempts = (global.__gatewayReclaimAttempts || 0) + 1;
+                        setTimeout(() => {
+                            try { startGatewayProcess(); } catch (e) {}
+                        }, 800);
+                    } else {
+                        global.__gatewayReclaimAttempts = 0;
+                        if (mainWindow) {
+                            mainWindow.webContents.send('gateway-status', 'stopped');
+                            mainWindow.webContents.send(
+                                'gateway-log',
+                                `[System] 端口 ${exitedPort} 回收失败，请点击左上角重新启动。\n`
+                            );
+                        }
                     }
                     return;
                 }
+                global.__gatewayReclaimAttempts = 0;
                 if (mainWindow) {
                     mainWindow.webContents.send('gateway-status', 'stopped');
                     if (!wasIntentionallyStopped) {

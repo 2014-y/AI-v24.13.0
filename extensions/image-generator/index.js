@@ -34,42 +34,57 @@ const BUILTIN_API_KEYS = [
   "sk-HV5HINAfAhMJOnYxYp83ZXDLqeudt8ofLtdm9Bj5p9SUOUGh",
 ];
 
-export default function createPlugin(apiOrRuntime) {
-  const api = apiOrRuntime && typeof apiOrRuntime.registerTool === 'function' ? apiOrRuntime : null;
-  const runtime = api?.runtime ?? apiOrRuntime;
+function registerDrawPicture(api) {
+  const runtime = api?.runtime ?? api;
   const skill = createSkill(runtime);
-
-  if (api) {
-    api.registerTool({
-      name: 'draw_picture',
-      description: skill.description + ' Use when the user asks to generate, draw, or create an image.',
-      parameters: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['prompt'],
-        properties: {
-          prompt: { type: 'string', description: 'Image description (required)' },
-          model: { type: 'string', description: 'Model id, e.g. agnes-image-2.0-flash' },
-          size: { type: 'string', description: '512x512, 1024x1024, 1024x1792, 1792x1024' },
-          quality: { type: 'string', description: 'standard or hd' },
-          style: { type: 'string', description: 'vivid or natural' },
-          n: { type: 'number', description: 'Number of images (1-4)' },
-        },
-      },
-      async execute(_toolCallId, params) {
-        const result = await skill.draw_picture(params || {});
-        const files = (result.files || []).map((f) => f.filepath).filter(Boolean);
-        const mediaHint = files.length ? `\nMEDIA:${files.join('\nMEDIA:')}` : '';
-        return {
-          content: [{ type: 'text', text: JSON.stringify(result) + mediaHint }],
-          details: result,
-        };
-      },
-    });
-    return { name: skill.name };
+  if (typeof api?.registerTool !== 'function') {
+    console.warn('[image-generator] registerTool unavailable; draw_picture not registered');
+    return { name: 'image-generator' };
   }
+  // 与官方插件一致：factory + { name }，避免 register 阶段被当成 noop
+  api.registerTool((_toolCtx) => ({
+    name: 'draw_picture',
+    description: skill.description + ' Use when the user asks to generate, draw, or create an image.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['prompt'],
+      properties: {
+        prompt: { type: 'string', description: 'Image description (required)' },
+        model: { type: 'string', description: 'Model id, e.g. agnes-image-2.0-flash' },
+        size: { type: 'string', description: '512x512, 1024x1024, 1024x1792, 1792x1024' },
+        quality: { type: 'string', description: 'standard or hd' },
+        style: { type: 'string', description: 'vivid or natural' },
+        n: { type: 'number', description: 'Number of images (1-4)' },
+      },
+    },
+    async execute(_toolCallId, params) {
+      const result = await skill.draw_picture(params || {});
+      const files = (result.files || []).map((f) => f.filepath).filter(Boolean);
+      const mediaHint = files.length ? `\nMEDIA:${files.join('\nMEDIA:')}` : '';
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result) + mediaHint }],
+        details: result,
+      };
+    },
+  }), { name: 'draw_picture' });
+  try { api.logger?.info?.('[image-generator] draw_picture registered'); } catch (_) {}
+  console.log('[image-generator] draw_picture registered');
+  return { name: 'image-generator' };
+}
 
-  return skill;
+/** OpenClaw 2026.7+：优先 { id, register }；兼容旧版把 default 当 register(api) 调用 */
+const pluginEntry = {
+  id: 'image-generator',
+  name: 'Image Generator',
+  description: 'Generate images via agnes-ai image API with key rotation',
+  register: registerDrawPicture,
+};
+
+export default pluginEntry;
+// 兼容旧 loader：直接 export function 作 register
+export function activate(api) {
+  return registerDrawPicture(api);
 }
 
 export function createSkill(runtime) {

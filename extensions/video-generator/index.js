@@ -34,42 +34,56 @@ const BUILTIN_API_KEYS = [
   "sk-HV5HINAfAhMJOnYxYp83ZXDLqeudt8ofLtdm9Bj5p9SUOUGh",
 ];
 
-export default function createPlugin(apiOrRuntime) {
-  const api = apiOrRuntime && typeof apiOrRuntime.registerTool === 'function' ? apiOrRuntime : null;
-  const runtime = api?.runtime ?? apiOrRuntime;
+function registerDrawVideo(api) {
+  const runtime = api?.runtime ?? api;
   const skill = createSkill(runtime);
-
-  if (api) {
-    api.registerTool({
-      name: 'draw_video',
-      description: skill.description + ' Use when the user asks to generate or create a video.',
-      parameters: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['prompt'],
-        properties: {
-          prompt: { type: 'string', description: 'Video description (required)' },
-          image_url: { type: 'string', description: 'Optional first-frame image URL' },
-          model: { type: 'string', description: 'Model id, e.g. agnes-video-v2.0' },
-          duration: { type: 'number', description: 'Duration in seconds' },
-          resolution: { type: 'string', description: '480p, 720p, or 1080p' },
-          fps: { type: 'number', description: 'Frames per second' },
-          aspect_ratio: { type: 'string', description: '16:9, 9:16, 1:1, or 4:3' },
-        },
-      },
-      async execute(_toolCallId, params) {
-        const result = await skill.draw_video(params || {});
-        const mediaHint = result.filepath ? `\nMEDIA:${result.filepath}` : '';
-        return {
-          content: [{ type: 'text', text: JSON.stringify(result) + mediaHint }],
-          details: result,
-        };
-      },
-    });
-    return { name: skill.name };
+  if (typeof api?.registerTool !== 'function') {
+    console.warn('[video-generator] registerTool unavailable; draw_video not registered');
+    return { name: 'video-generator' };
   }
+  // 与官方插件一致：factory + { name }，避免 register 阶段被当成 noop
+  api.registerTool((_toolCtx) => ({
+    name: 'draw_video',
+    description: skill.description + ' Use when the user asks to generate or create a video. May take 2-10 minutes; wait for completion; do not cancel early.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['prompt'],
+      properties: {
+        prompt: { type: 'string', description: 'Video description (required)' },
+        image_url: { type: 'string', description: 'Optional first-frame image URL' },
+        model: { type: 'string', description: 'Model id, e.g. agnes-video-v2.0' },
+        duration: { type: 'number', description: 'Duration in seconds (default 5)' },
+        resolution: { type: 'string', description: '480p, 720p, or 1080p' },
+        fps: { type: 'number', description: 'Frames per second' },
+        aspect_ratio: { type: 'string', description: '16:9, 9:16, 1:1, or 4:3' },
+      },
+    },
+    async execute(_toolCallId, params) {
+      const result = await skill.draw_video(params || {});
+      const mediaHint = result.filepath ? `\nMEDIA:${result.filepath}` : '';
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result) + mediaHint }],
+        details: result,
+      };
+    },
+  }), { name: 'draw_video' });
+  try { api.logger?.info?.('[video-generator] draw_video registered'); } catch (_) {}
+  console.log('[video-generator] draw_video registered');
+  return { name: 'video-generator' };
+}
 
-  return skill;
+/** OpenClaw 2026.7+：优先 { id, register }；兼容旧版 activate */
+const pluginEntry = {
+  id: 'video-generator',
+  name: 'Video Generator',
+  description: 'Generate videos via agnes-ai video API with key rotation',
+  register: registerDrawVideo,
+};
+
+export default pluginEntry;
+export function activate(api) {
+  return registerDrawVideo(api);
 }
 
 export function createSkill(runtime) {
@@ -267,7 +281,7 @@ function callVideoAPI(body, apiKey, apiBaseUrl) {
         "Content-Length": Buffer.byteLength(data),
         Authorization: `Bearer ${apiKey}`,
       },
-      timeout: 60000,
+      timeout: 180000,
     }, (res) => {
       let chunks = [];
       res.on("data", (chunk) => chunks.push(chunk));

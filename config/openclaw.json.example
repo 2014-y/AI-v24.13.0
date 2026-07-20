@@ -65,7 +65,7 @@
         "primary": "agnes-ai/agnes-video-v2.0"
       },
       "maxConcurrent": 4,
-      "timeoutSeconds": 180,
+      "timeoutSeconds": 600,
       "bootstrapMaxChars": 2500,
       "bootstrapTotalMaxChars": 8000,
       "compaction": {
@@ -382,7 +382,8 @@
           "group:fs",
           "group:runtime",
           "group:web",
-          "group:memory",
+          "memory_search",
+          "memory_get",
           "image",
           "draw_picture",
           "draw_video"
