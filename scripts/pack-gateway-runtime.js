@@ -23,6 +23,25 @@ const { REQUIRED_ZIP_ENTRIES } = manifestModule;
 
 const FORCE = String(process.env.PACK_RUNTIME_FORCE || '') === '1';
 
+// 自动在打包前将本机的 VC++ 运行库拉入沙箱中，以物理层面默认解决纯净目标机器上内置 Node 无法运行的兼容性问题
+try {
+    const sandboxDir = path.join(ROOT, '.node-sandbox');
+    if (fs.existsSync(sandboxDir) && process.platform === 'win32') {
+        const sys32 = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32');
+        const vcDll = path.join(sys32, 'vcruntime140.dll');
+        const msvDll = path.join(sys32, 'msvcp140.dll');
+        if (fs.existsSync(vcDll)) {
+            fs.copyFileSync(vcDll, path.join(sandboxDir, 'vcruntime140.dll'));
+        }
+        if (fs.existsSync(msvDll)) {
+            fs.copyFileSync(msvDll, path.join(sandboxDir, 'msvcp140.dll'));
+        }
+        console.log('[pack-gateway-runtime] Automatically copied vcruntime140.dll and msvcp140.dll to .node-sandbox');
+    }
+} catch (e) {
+    console.warn('[pack-gateway-runtime] Failed to copy fallback VC++ DLLs:', e.message);
+}
+
 const SKIP_TOP_LEVEL = [
   'electron',
   'electron-builder',
