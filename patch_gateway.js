@@ -205,7 +205,6 @@ function scrubLocalModelRequestBody(parsedBody, hostOrUrl) {
             parsedBody.max_tokens = ollamaMaxTokCap;
             hasModified = true;
         }
-    }
 
     if (parsedBody.stream === true) {
         if (!parsedBody.stream_options) {
