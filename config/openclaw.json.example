@@ -58,6 +58,12 @@
       "imageModel": {
         "primary": "agnes-ai/agnes-2.0-flash"
       },
+      "imageGenerationModel": {
+        "primary": "agnes-ai/agnes-image-2.0-flash"
+      },
+      "videoGenerationModel": {
+        "primary": "agnes-ai/agnes-video-v2.0"
+      },
       "maxConcurrent": 4,
       "bootstrapMaxChars": 8000,
       "bootstrapTotalMaxChars": 24000,
@@ -150,6 +156,12 @@
         "config": {
           "httpPort": 18791
         }
+      },
+      "image-generator": {
+        "enabled": true
+      },
+      "video-generator": {
+        "enabled": true
       },
       "memory-core": {
         "enabled": false
@@ -295,6 +307,8 @@
       "health-check",
       "remote-policy",
       "voice-bridge",
+      "image-generator",
+      "video-generator",
       "role-manager",
       "ollama",
       "duckduckgo",

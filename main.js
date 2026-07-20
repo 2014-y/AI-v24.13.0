@@ -456,6 +456,7 @@ async function checkAndHealSandboxNode() {
 let mainWindow = null;
 let tray = null;
 let gatewayProcess = null;
+let gatewayStartInFlight = null;
 let gatewayHttpReadyTimer = null;
 let gatewayHttpReadyNotified = false;
 let isQuitting = false;
@@ -469,6 +470,54 @@ function stopGatewayHttpReadyWatch() {
         clearInterval(gatewayHttpReadyTimer);
         gatewayHttpReadyTimer = null;
     }
+}
+
+function probeGatewayPort(port, timeoutMs = 500) {
+    return new Promise((resolve) => {
+        const targetPort = Number(port) > 0 ? Number(port) : 18789;
+        const socket = net.connect({ host: '127.0.0.1', port: targetPort }, () => {
+            try { socket.destroy(); } catch (e) {}
+            resolve(true);
+        });
+        socket.on('error', () => {
+            try { socket.destroy(); } catch (e) {}
+            resolve(false);
+        });
+        socket.setTimeout(timeoutMs, () => {
+            try { socket.destroy(); } catch (e) {}
+            resolve(false);
+        });
+    });
+}
+
+function resolveConfiguredGatewayPort() {
+    try {
+        const cfgPath = path.join(CONFIG_DIR, 'openclaw.json');
+        if (fs.existsSync(cfgPath)) {
+            const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8').replace(/^\uFEFF/, ''));
+            if (cfg && cfg.gateway && cfg.gateway.port) return Number(cfg.gateway.port) || 18789;
+        }
+    } catch (e) {}
+    return (global.nexoraInstance && global.nexoraInstance.gatewayPortHint) || 18789;
+}
+
+/** 移除 OpenClaw 根 Schema 不接受的扩展字段，防止网关启动/热重载失败 */
+function stripNonSchemaOpenClawConfig(config) {
+    let changed = false;
+    if (!config || typeof config !== 'object') return false;
+    if (config.imageGenerator) { delete config.imageGenerator; changed = true; }
+    if (config.videoGenerator) { delete config.videoGenerator; changed = true; }
+    if (config.agents && config.agents.defaults) {
+        if (config.agents.defaults.imageGenerationModel) {
+            delete config.agents.defaults.imageGenerationModel;
+            changed = true;
+        }
+        if (config.agents.defaults.videoGenerationModel) {
+            delete config.agents.defaults.videoGenerationModel;
+            changed = true;
+        }
+    }
+    return changed;
 }
 
 function notifyGatewayHttpReady(port) {
@@ -767,7 +816,7 @@ function pruneStalePluginConfigEntries(config) {
             } catch (e) {}
         }
         // 内置渠道：必须真有包，不能“清单里写了就算存在”（否则 Doctor 会对缺失包强制 npm）
-        if (BUNDLED_CUSTOM_PLUGINS.includes(id)) return true;
+        if (BUNDLED_CUSTOM_PLUGINS.includes(id) || BUNDLED_EXTENSION_PLUGINS.includes(id)) return true;
         const bundled = BUNDLED_NPM_CHANNEL_PLUGINS.find((e) => e.id === id);
         if (bundled) {
             if (bundled.viaLoadPaths === false) {
@@ -873,6 +922,270 @@ const BUNDLED_CUSTOM_PLUGINS = [
     'remote-policy',
     'voice-bridge'
 ];
+
+/** extensions/ 下的媒体生成插件：云电脑开箱必须启用并注入 load.paths */
+const BUNDLED_EXTENSION_PLUGINS = [
+    'image-generator',
+    'video-generator'
+];
+
+const MEDIA_TOOLS_MARKER = '<!-- nexora-media-tools-v1 -->';
+const MEDIA_MEMORY_MARKER = '<!-- nexora-media-memory-v1 -->';
+const MEDIA_AGENTS_MARKER = '<!-- nexora-media-agents-v1 -->';
+const MEDIA_IMAGE_PREFS_FILE = 'media-generator.json';
+const MEDIA_VIDEO_PREFS_FILE = 'video-generator.json';
+const DEFAULT_MEDIA_IMAGE_PREFS = {
+    apiBase: 'https://apihub.agnes-ai.com/v1/images/generations',
+    apiKey: 'sk-95sX8HnNOhh8FFfAm3ccOgGFg6MA8yf7zU5PEEQdGxSuKhQY',
+    model: 'agnes-ai/agnes-image-2.0-flash'
+};
+const DEFAULT_MEDIA_VIDEO_PREFS = {
+    apiBase: 'https://apihub.agnes-ai.com/v1/videos',
+    apiKey: 'sk-95sX8HnNOhh8FFfAm3ccOgGFg6MA8yf7zU5PEEQdGxSuKhQY',
+    model: 'agnes-ai/agnes-video-v2.0'
+};
+const BUILTIN_AGNES_API_KEYS = [
+    "sk-95sX8HnNOhh8FFfAm3ccOgGFg6MA8yf7zU5PEEQdGxSuKhQY",
+    "sk-z2NHJlR99oODMYvS9C5u8qLMNf6hmc9vRm5JenvHHStTfxZn",
+    "sk-ct7MSvbC8LqL1gGqJuoVCKgjtecXwbjIUZhXQ0gITEaksCS0",
+    "sk-nZtkk9AAyZl3sbkv8Gw4R1R99NnkgUWhRGL4Cp0Dl7LSPsUu",
+    "sk-Y6ORz4nnuXHUpwjdXv2WlmLMwCfPBMtmh69iuXxZkQtZazyV",
+    "sk-GhS6TUB6W8LibJT5whDhbUvmYW3csM0HdGDdjotpgadQbd2F",
+    "sk-HV5HINAfAhMJOnYxYp83ZXDLqeudt8ofLtdm9Bj5p9SUOUGh"
+];
+function normalizeMediaApiBase(apiBase, type) {
+  const b = String(apiBase || '').trim().replace(/\/$/, '');
+  if (!b) return type === 'video' ? 'https://apihub.agnes-ai.com/v1/videos' : 'https://apihub.agnes-ai.com/v1/images/generations';
+  if (type === 'image') {
+    if (b.endsWith('/images/generations')) return b;
+    if (b.endsWith('/images')) return `${b}/generations`;
+    if (b.endsWith('/v1')) return `${b}/images/generations`;
+    return b;
+  }
+  if (b.endsWith('/videos')) return b;
+  if (b.endsWith('/v1')) return `${b}/videos`;
+  return b;
+}
+
+function migrateMediaGeneratorPrefs() {
+  for (const [file, type] of [[MEDIA_IMAGE_PREFS_FILE, 'image'], [MEDIA_VIDEO_PREFS_FILE, 'video']]) {
+    try {
+      const p = path.join(CONFIG_DIR, file);
+      if (!fs.existsSync(p)) continue;
+      const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+      if (!data || typeof data !== 'object') continue;
+      const normalized = normalizeMediaApiBase(data.apiBase, type);
+      if (normalized !== data.apiBase) {
+        data.apiBase = normalized;
+        fs.writeFileSync(p, JSON.stringify(data, null, 2), 'utf8');
+        console.log('[MediaPrefs] Migrated', file, 'apiBase ->', normalized);
+      }
+    } catch (e) {}
+  }
+}
+
+function resolveAccelerationProxyPort() {
+    try {
+        const st = acceleration.getStatus();
+        if (st && st.enabled && Number(st.mixedPort) > 0) return Number(st.mixedPort);
+    } catch (e) {}
+    return 0;
+}
+
+function requestJson(urlStr, { method = 'GET', headers = {}, body = null, timeout = 12000 } = {}) {
+    const https = require('https');
+    const http = require('http');
+    const tls = require('tls');
+    const { URL } = require('url');
+    return new Promise((resolve, reject) => {
+        let parsed;
+        try {
+            parsed = new URL(urlStr);
+        } catch (e) {
+            reject(e);
+            return;
+        }
+
+        const targetPort = Number(parsed.port) || (parsed.protocol === 'http:' ? 80 : 443);
+        const proxyPort = resolveAccelerationProxyPort();
+        const useHttpsProxy = proxyPort > 0 && parsed.protocol === 'https:';
+
+        const handleResponse = (res) => {
+            const chunks = [];
+            res.on('data', (c) => chunks.push(c));
+            res.on('end', () => {
+                const text = Buffer.concat(chunks).toString('utf8');
+                let json = null;
+                try { json = text ? JSON.parse(text) : null; } catch (e) {}
+                resolve({
+                    status: res.statusCode || 0,
+                    statusText: res.statusMessage || '',
+                    headers: res.headers || {},
+                    text,
+                    json,
+                    viaProxy: useHttpsProxy
+                });
+            });
+        };
+
+        // Clash 开着才走本地代理；关着则直连（与网关一致）
+        if (useHttpsProxy) {
+            const connectReq = http.request({
+                host: '127.0.0.1',
+                port: proxyPort,
+                method: 'CONNECT',
+                path: `${parsed.hostname}:${targetPort}`,
+                timeout,
+                headers: {
+                    Host: `${parsed.hostname}:${targetPort}`,
+                    'Proxy-Connection': 'keep-alive'
+                }
+            });
+            connectReq.on('connect', (res, socket) => {
+                if (res.statusCode !== 200) {
+                    try { socket.destroy(); } catch (e) {}
+                    reject(new Error(`代理 CONNECT 失败 HTTP ${res.statusCode}`));
+                    return;
+                }
+                const tlsSocket = tls.connect({
+                    socket,
+                    servername: parsed.hostname,
+                    rejectUnauthorized: false
+                }, () => {
+                    // TLS 已由 CONNECT 隧道完成，这里用 http 在加密套接字上发请求
+                    const req = http.request({
+                        host: parsed.hostname,
+                        port: targetPort,
+                        path: parsed.pathname + parsed.search,
+                        method,
+                        headers: {
+                            Host: parsed.host,
+                            ...headers
+                        },
+                        timeout,
+                        createConnection: () => tlsSocket
+                    }, handleResponse);
+                    req.on('error', reject);
+                    req.on('timeout', () => {
+                        req.destroy(new Error('Request Timeout'));
+                    });
+                    if (body) req.write(body);
+                    req.end();
+                });
+                tlsSocket.on('error', reject);
+            });
+            connectReq.on('error', reject);
+            connectReq.on('timeout', () => {
+                connectReq.destroy(new Error('Request Timeout'));
+            });
+            connectReq.end();
+            return;
+        }
+
+        const lib = parsed.protocol === 'http:' ? http : https;
+        const req = lib.request({
+            protocol: parsed.protocol,
+            hostname: parsed.hostname,
+            port: targetPort,
+            path: parsed.pathname + parsed.search,
+            method,
+            headers,
+            timeout,
+            rejectUnauthorized: false
+        }, handleResponse);
+        req.on('error', reject);
+        req.on('timeout', () => {
+            req.destroy(new Error('Request Timeout'));
+        });
+        if (body) req.write(body);
+        req.end();
+    });
+}
+
+function isNetworkProbeError(errOrMsg) {
+    return /timeout|超时|ETIMEDOUT|ECONNRESET|ENOTFOUND|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|socket hang up|代理 CONNECT|AbortError|aborted/i.test(String(errOrMsg || ''));
+}
+
+async function verifyBuiltInAgnesRequest(mode = 'key') {
+    const useKeyCheck = mode === 'key';
+    const viaProxy = resolveAccelerationProxyPort() > 0;
+    // /models 更轻量；密钥可用性看 HTTP 鉴权结果即可，不必打 chat/completions
+    const url = 'https://apihub.agnes-ai.com/v1/models';
+    const timeoutMs = viaProxy ? 20000 : 25000;
+
+    const attempts = [];
+    for (let i = 0; i < BUILTIN_AGNES_API_KEYS.length; i++) {
+        const apiKey = BUILTIN_AGNES_API_KEYS[i];
+        try {
+            const response = await requestJson(url, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${apiKey}`
+                },
+                body: null,
+                timeout: timeoutMs
+            });
+            const errMsg = response.json?.error?.message || '';
+            const status = response.status || 0;
+            // 401/403：这把 Key 无效，换下一把；429：限流，换下一把
+            const authFailed = status === 401 || status === 403;
+            const rateLimited = status === 429;
+            const ok = status >= 200 && status < 300;
+            attempts.push({
+                index: i + 1,
+                status,
+                statusText: response.statusText,
+                ok,
+                error: errMsg || (authFailed ? 'Unauthorized' : (rateLimited ? 'Rate limited' : null)),
+                viaProxy: !!response.viaProxy
+            });
+            if (ok) {
+                return {
+                    success: true,
+                    mode,
+                    keyIndex: i + 1,
+                    rotated: i > 0,
+                    viaProxy: !!response.viaProxy,
+                    attempts
+                };
+            }
+            // 非鉴权/限流类失败（如 5xx）也继续试下一把；纯网络问题在 catch 里快速结束
+            if (!authFailed && !rateLimited && status > 0 && status < 500) {
+                // 其它 4xx：这把 Key 多半不可用，继续轮询
+            }
+        } catch (e) {
+            const msg = e.message || String(e);
+            attempts.push({
+                index: i + 1,
+                status: 0,
+                statusText: '',
+                ok: false,
+                error: msg,
+                viaProxy
+            });
+            // 网络层超时/连不上：开不开 Clash 都一样会挂，不必把 7 把 Key 各超时一遍
+            if (isNetworkProbeError(msg)) {
+                break;
+            }
+        }
+    }
+    return {
+        success: false,
+        mode,
+        keyIndex: null,
+        rotated: attempts.length > 1,
+        viaProxy,
+        networkHint: attempts.some((a) => isNetworkProbeError(a.error))
+            ? (viaProxy ? 'proxy_or_upstream_timeout' : 'direct_timeout')
+            : null,
+        attempts
+    };
+}
+
+function allBundledManagedPluginIds() {
+    return [...BUNDLED_CUSTOM_PLUGINS, ...BUNDLED_EXTENSION_PLUGINS];
+}
 
 // 随安装包一起交付的 npm 渠道插件。
 // viaLoadPaths=false：走官方 installs（复制到本机 ~/.openclaw/npm/projects），
@@ -1388,7 +1701,9 @@ function syncBundledPluginFiles(pluginId) {
         fs.mkdirSync(destDir, { recursive: true });
         const pluginSrcCandidates = [
             path.join(__dirname, 'plugins', pluginId),
-            resolveAppFsPath('plugins', pluginId)
+            resolveAppFsPath('plugins', pluginId),
+            path.join(__dirname, 'extensions', pluginId),
+            resolveAppFsPath('extensions', pluginId)
         ];
         let pluginSrc = null;
         for (const candidate of pluginSrcCandidates) {
@@ -1507,7 +1822,11 @@ const DEFAULT_MEMORY_MD_TEMPLATE = `# MEMORY.md
 - 时区：GMT+8
 
 ## 工具使用规范
-- （常用工具与注意事项）
+${MEDIA_MEMORY_MARKER}
+- **图片生成**：优先 \`draw_picture\`；否则 \`exec\` 运行 \`node <用户目录>/.openclaw/media-cli/agnes-media-cli.js image --prompt "..."\`
+- **视频生成**：优先 \`draw_video\`；否则同一 CLI 的 \`video --prompt "..."\`
+- 输出目录：\`<用户目录>/.openclaw/media-output/\`；完成后用 \`MEDIA:文件路径\` 发给用户
+- 不要使用内置 \`image_generate\` / \`video_generate\`（默认无 Google Key）
 
 ## 重要约定
 - 本文件是长期记忆；对话压缩后仍会优先读取这里的信息。
@@ -1524,6 +1843,11 @@ Be helpful and concise. Prefer short answers.
 
 ## Tools
 - Prefer minimal tools. Skip heavy desktop actions unless asked.
+
+## 图片/视频
+${MEDIA_AGENTS_MARKER}
+- 用户要画图/视频：**优先** \`draw_picture\` / \`draw_video\`；否则 \`exec\` 运行 \`node <用户目录>/.openclaw/media-cli/agnes-media-cli.js image|video --prompt "描述"\`
+- **禁止** \`image_generate\` / \`video_generate\`；完成后回复加 \`MEDIA:文件路径\`
 `;
 
 function seedDefaultMemoryFile(memFile) {
@@ -1767,6 +2091,227 @@ function healOllamaContextOverflowOnBoot() {
     }
 }
 
+function resolveMediaCliScriptPath() {
+    return path.join(CONFIG_DIR, 'media-cli', 'agnes-media-cli.js').replace(/\\/g, '/');
+}
+
+function sanitizeMediaGeneratorPrefs(imageGenerator, videoGenerator) {
+    const sanitize = (sec, type) => {
+        if (!sec || typeof sec !== 'object') return null;
+        const out = { ...sec };
+        const rawKey = String(out.apiKey || '').trim();
+        if (!rawKey || rawKey === 'sk-builtin-agnes-key-mask' || rawKey === DEFAULT_MEDIA_IMAGE_PREFS.apiKey) {
+            delete out.apiKey;
+        }
+        if (out.apiBase) out.apiBase = normalizeMediaApiBase(out.apiBase, type);
+        return out;
+    };
+    return {
+        imageGenerator: sanitize(imageGenerator, 'image'),
+        videoGenerator: sanitize(videoGenerator, 'video')
+    };
+}
+
+function persistMediaGeneratorPrefs(imageGenerator, videoGenerator) {
+    try {
+        fs.mkdirSync(CONFIG_DIR, { recursive: true });
+        const cleaned = sanitizeMediaGeneratorPrefs(imageGenerator, videoGenerator);
+        if (cleaned.imageGenerator) {
+            fs.writeFileSync(
+                path.join(CONFIG_DIR, MEDIA_IMAGE_PREFS_FILE),
+                JSON.stringify(cleaned.imageGenerator, null, 2),
+                'utf8'
+            );
+        }
+        if (cleaned.videoGenerator) {
+            fs.writeFileSync(
+                path.join(CONFIG_DIR, MEDIA_VIDEO_PREFS_FILE),
+                JSON.stringify(cleaned.videoGenerator, null, 2),
+                'utf8'
+            );
+        }
+    } catch (e) {
+        console.warn('[MediaPrefs] persist failed:', e.message);
+    }
+}
+
+function ensureDefaultMediaGeneratorPrefs() {
+    try {
+        fs.mkdirSync(CONFIG_DIR, { recursive: true });
+        const imagePath = path.join(CONFIG_DIR, MEDIA_IMAGE_PREFS_FILE);
+        const videoPath = path.join(CONFIG_DIR, MEDIA_VIDEO_PREFS_FILE);
+        if (!fs.existsSync(imagePath)) {
+            fs.writeFileSync(imagePath, JSON.stringify(DEFAULT_MEDIA_IMAGE_PREFS, null, 2), 'utf8');
+            console.log('[MediaPrefs] Seeded default', MEDIA_IMAGE_PREFS_FILE);
+        }
+        if (!fs.existsSync(videoPath)) {
+            fs.writeFileSync(videoPath, JSON.stringify(DEFAULT_MEDIA_VIDEO_PREFS, null, 2), 'utf8');
+            console.log('[MediaPrefs] Seeded default', MEDIA_VIDEO_PREFS_FILE);
+        }
+    } catch (e) {
+        console.warn('[MediaPrefs] ensureDefaultMediaGeneratorPrefs:', e.message);
+    }
+}
+
+function buildMediaAgentsSection() {
+    const cliPath = resolveMediaCliScriptPath();
+    return `
+## 图片/视频
+${MEDIA_AGENTS_MARKER}
+- 用户要画图/视频：**优先** \`draw_picture\` / \`draw_video\`；否则 \`exec\` 运行 \`node "${cliPath}" image|video --prompt "描述"\`
+- **禁止** \`image_generate\` / \`video_generate\`；完成后回复加 \`MEDIA:文件路径\`
+- **禁止**复用历史里的旧 \`MEDIA:\` 路径；只能发送本次生成命令刚返回的新文件
+`;
+}
+
+function ensureMediaAgentsGuidance(wsDir) {
+    try {
+        fs.mkdirSync(wsDir, { recursive: true });
+        const agentsPath = path.join(wsDir, 'AGENTS.md');
+        const section = buildMediaAgentsSection().trim() + '\n';
+        if (!fs.existsSync(agentsPath)) return;
+        const cur = fs.readFileSync(agentsPath, 'utf8');
+        if (cur.includes(MEDIA_AGENTS_MARKER)) return;
+        fs.appendFileSync(agentsPath, '\n' + section, 'utf8');
+        console.log('[PluginSeed] Appended media guidance to workspace AGENTS.md');
+    } catch (e) {
+        console.warn('[PluginSeed] ensureMediaAgentsGuidance:', e.message);
+    }
+}
+
+function buildMediaToolsSection() {
+    const cliPath = resolveMediaCliScriptPath();
+    return `${MEDIA_TOOLS_MARKER}
+## 图片/视频生成（必须遵守）
+- 用户要生成图片或视频时，**优先**调用工具 \`draw_picture\` / \`draw_video\`
+- 若不可用，用 \`exec\`：\`node "${cliPath}" image --prompt "描述"\` 或 \`node "${cliPath}" video --prompt "描述"\`
+- **禁止**调用内置 \`image_generate\` / \`video_generate\`（默认无 Google Key，会失败）
+- 生成完成后在回复中加入 \`MEDIA:完整文件路径\`
+- 生成较慢（1-3 分钟），\`exec\` 的 \`timeout\` 至少 180，并用 \`process poll\` 等待
+`;
+}
+
+function ensureMediaWorkspaceGuidance(wsDir) {
+    try {
+        fs.mkdirSync(wsDir, { recursive: true });
+        const toolsPath = path.join(wsDir, 'TOOLS.md');
+        const section = buildMediaToolsSection();
+        if (!fs.existsSync(toolsPath)) {
+            fs.writeFileSync(toolsPath, section + '\n', 'utf8');
+            console.log('[PluginSeed] Seeded workspace TOOLS.md (media guidance)');
+            return;
+        }
+        const cur = fs.readFileSync(toolsPath, 'utf8');
+        if (cur.includes(MEDIA_TOOLS_MARKER)) return;
+        fs.writeFileSync(toolsPath, section + '\n\n' + cur, 'utf8');
+        console.log('[PluginSeed] Prepended media guidance to workspace TOOLS.md');
+    } catch (e) {
+        console.warn('[PluginSeed] ensureMediaWorkspaceGuidance:', e.message);
+    }
+}
+
+function ensureMediaMemoryGuidance(memFile) {
+    try {
+        const dir = path.dirname(memFile);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        const block = `
+## 图片/视频生成
+${MEDIA_MEMORY_MARKER}
+- 优先 \`draw_picture\` / \`draw_video\`；否则 \`exec\` + \`node ${resolveMediaCliScriptPath()} image|video --prompt "..."\`
+- 输出：\`${path.join(CONFIG_DIR, 'media-output').replace(/\\/g, '/')}/\`；回复里加 \`MEDIA:路径\`
+- 不要用 \`image_generate\` / \`video_generate\`
+`;
+        if (!fs.existsSync(memFile)) return;
+        const cur = fs.readFileSync(memFile, 'utf8');
+        if (cur.includes(MEDIA_MEMORY_MARKER)) return;
+        fs.appendFileSync(memFile, block, 'utf8');
+        console.log('[PluginSeed] Appended media guidance to MEMORY.md');
+    } catch (e) {
+        console.warn('[PluginSeed] ensureMediaMemoryGuidance:', e.message);
+    }
+}
+
+function syncMediaCliBundle() {
+    try {
+        const destDir = path.join(CONFIG_DIR, 'media-cli');
+        const srcCandidates = [
+            path.join(__dirname, 'media-cli'),
+            resolveAppFsPath('media-cli')
+        ];
+        const src = srcCandidates.find((p) => p && fs.existsSync(path.join(p, 'agnes-media-cli.js')));
+        if (!src) {
+            console.warn('[PluginSeed] media-cli source not found in app bundle');
+            return;
+        }
+        fs.mkdirSync(destDir, { recursive: true });
+        for (const name of fs.readdirSync(src)) {
+            const from = path.join(src, name);
+            const to = path.join(destDir, name);
+            const st = fs.statSync(from);
+            if (st.isDirectory()) {
+                fs.cpSync(from, to, { recursive: true, force: true });
+            } else {
+                fs.copyFileSync(from, to);
+            }
+        }
+        console.log('[PluginSeed] Synced media-cli to', destDir);
+    } catch (e) {
+        console.warn('[PluginSeed] syncMediaCliBundle failed:', e.message);
+    }
+}
+
+function forceSyncWorkspaceSkill(skillName) {
+    try {
+        const srcCandidates = [
+            path.join(__dirname, 'workspace', 'skills', skillName),
+            resolveAppFsPath('workspace', 'skills', skillName)
+        ];
+        const src = srcCandidates.find((p) => p && fs.existsSync(path.join(p, 'SKILL.md')));
+        if (!src) return;
+        const dest = path.join(CONFIG_DIR, 'workspace', 'skills', skillName);
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.cpSync(src, dest, { recursive: true, force: true });
+        console.log(`[PluginSeed] Force-synced workspace skill: ${skillName}`);
+    } catch (e) {
+        console.warn(`[PluginSeed] forceSyncWorkspaceSkill(${skillName}):`, e.message);
+    }
+}
+
+function seedWorkspaceMediaSkills() {
+    for (const skillName of ['image-generator', 'video-generator']) {
+        forceSyncWorkspaceSkill(skillName);
+    }
+}
+
+function ensureMediaOutputDirs() {
+    for (const sub of ['media-output', 'image-output', 'video-output']) {
+        try {
+            fs.mkdirSync(path.join(CONFIG_DIR, sub), { recursive: true });
+        } catch (e) {}
+    }
+}
+
+function ensureMediaAgentDefaults(config) {
+    // 图片/视频模型配置走侧车文件 media-generator.json，不写 openclaw.json（Schema 不接受）
+    return stripNonSchemaOpenClawConfig(config);
+}
+
+function seedMediaRuntimeArtifacts(appVersion) {
+    try {
+        syncMediaCliBundle();
+        ensureMediaOutputDirs();
+        ensureDefaultMediaGeneratorPrefs();
+        migrateMediaGeneratorPrefs();
+        seedWorkspaceMediaSkills();
+        const wsDir = path.join(CONFIG_DIR, 'workspace');
+        ensureMediaWorkspaceGuidance(wsDir);
+        ensureMediaAgentsGuidance(wsDir);
+        ensureMediaMemoryGuidance(path.join(wsDir, 'MEMORY.md'));
+    } catch (e) {
+        console.warn('[PluginSeed] seedMediaRuntimeArtifacts failed:', e.message);
+    }
+}
+
 function seedBundledPlugins() {
     try {
         const destRoot = path.join(CONFIG_DIR, 'extensions');
@@ -1840,6 +2385,10 @@ function seedBundledPlugins() {
         syncRoleManagerSharedModules();
         // voice-bridge 钩子实现变更必须立即覆盖用户目录，避免旧 onAfterResponse 卡死朗读
         syncBundledPluginFiles('voice-bridge');
+        for (const name of BUNDLED_EXTENSION_PLUGINS) {
+            syncBundledPluginFiles(name);
+        }
+        seedMediaRuntimeArtifacts(appVersion);
     } catch (e) {
         console.error('[PluginSeed] seedBundledPlugins failed:', e.message);
     }
@@ -2626,6 +3175,21 @@ async function startGatewayProcess() {
             }
             return;
         }
+        if (gatewayStartInFlight) return gatewayStartInFlight;
+
+        gatewayStartInFlight = (async () => {
+        try {
+        const preferredGatewayPort = resolveConfiguredGatewayPort();
+        if (await probeGatewayPort(preferredGatewayPort)) {
+            console.log(`[Gateway] Port ${preferredGatewayPort} already listening; skip duplicate fork`);
+            if (mainWindow) {
+                mainWindow.webContents.send('gateway-status', 'running');
+                mainWindow.webContents.send('gateway-log', `[System] 检测到端口 ${preferredGatewayPort} 已有网关服务，跳过重复拉起。\n`);
+            }
+            startGatewayHttpReadyWatch(preferredGatewayPort);
+            notifyGatewayHttpReady(preferredGatewayPort);
+            return;
+        }
 
         try {
             await checkAndHealSandboxNode();
@@ -2641,7 +3205,6 @@ async function startGatewayProcess() {
 
         // 多开时：主实例仍清理本机默认 18789 残留；第 2+ 实例绝不杀其它实例的网关
         const instanceId = (global.nexoraInstance && global.nexoraInstance.id) || 1;
-        const preferredGatewayPort = (global.nexoraInstance && global.nexoraInstance.gatewayPortHint) || 18789;
         if (process.platform === 'win32') {
             try {
                 if (instanceId <= 1) {
@@ -2876,13 +3439,9 @@ async function startGatewayProcess() {
             mainWindow.webContents.send('gateway-status', 'running');
             showNotification('Nexora Agent已成功启动', 'AI 本地Nexora Agent已在后台运行，开始监听 18789 端口。');
 
-            let watchPort = 18789;
+            let watchPort = preferredGatewayPort;
             try {
-                const cfgPath = path.join(CONFIG_DIR, 'openclaw.json');
-                if (fs.existsSync(cfgPath)) {
-                    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8').replace(/^\uFEFF/, ''));
-                    if (cfg && cfg.gateway && cfg.gateway.port) watchPort = Number(cfg.gateway.port) || 18789;
-                }
+                watchPort = resolveConfiguredGatewayPort();
             } catch (e) {}
             startGatewayHttpReadyWatch(watchPort);
 
@@ -2948,12 +3507,21 @@ async function startGatewayProcess() {
             gatewayProcess.stderr.on('data', handleLogData);
 
             // 监听退出
-            gatewayProcess.on('exit', (code) => {
+            gatewayProcess.on('exit', async (code) => {
                 console.log(`Gateway exited with code ${code}`);
                 const wasIntentionallyStopped = gatewayProcess && gatewayProcess.isIntentionallyStopped;
+                const exitedPort = watchPort;
                 gatewayProcess = null;
                 stopGatewayHttpReadyWatch();
                 gatewayHttpReadyNotified = false;
+                if (!wasIntentionallyStopped && await probeGatewayPort(exitedPort)) {
+                    console.log(`[Gateway] Child exited (${code}) but port ${exitedPort} still listening; keep UI running`);
+                    if (mainWindow) {
+                        mainWindow.webContents.send('gateway-status', 'running');
+                        notifyGatewayHttpReady(exitedPort);
+                    }
+                    return;
+                }
                 if (mainWindow) {
                     mainWindow.webContents.send('gateway-status', 'stopped');
                     if (!wasIntentionallyStopped) {
@@ -2968,6 +3536,12 @@ async function startGatewayProcess() {
                 mainWindow.webContents.send('gateway-log', `[System] [ERROR] 无法找到内置Nexora Agent模块: ${e.message}\n`);
             }
         }
+        } finally {
+            gatewayStartInFlight = null;
+        }
+        })();
+
+        return gatewayStartInFlight;
 }
 
 ipcMain.on('gateway-action', (event, action) => {
@@ -3218,6 +3792,26 @@ function ensureOpenClawConfigInitialized() {
 
         if (!config.plugins.allow) { config.plugins.allow = []; needsSave = true; }
 
+        // 媒体生成插件：任意电脑开箱必须启用（不受版本 stamp 影响）
+        for (const name of BUNDLED_EXTENSION_PLUGINS) {
+            if (!config.plugins.entries[name]) {
+                config.plugins.entries[name] = {};
+                needsSave = true;
+            }
+            if (config.plugins.entries[name].enabled !== true) {
+                config.plugins.entries[name].enabled = true;
+                needsSave = true;
+            }
+            if (!config.plugins.allow.includes(name)) {
+                config.plugins.allow.push(name);
+                needsSave = true;
+            }
+        }
+
+        if (ensureMediaAgentDefaults(config)) {
+            needsSave = true;
+        }
+
         // 默认启用全部内置自定义插件 (含别人电脑首次安装 / 升级迁移)
         let appVersion = '0.0.0';
         try { appVersion = app.getVersion(); } catch (e) {}
@@ -3225,7 +3819,7 @@ function ensureOpenClawConfigInitialized() {
         let enableStamp = '';
         try { if (fs.existsSync(stampPath)) enableStamp = fs.readFileSync(stampPath, 'utf8').trim(); } catch (e) {}
         if (enableStamp !== appVersion) {
-            for (const name of BUNDLED_CUSTOM_PLUGINS) {
+            for (const name of allBundledManagedPluginIds()) {
                 if (!config.plugins.entries[name]) config.plugins.entries[name] = {};
                 config.plugins.entries[name].enabled = true;
                 if (!config.plugins.allow.includes(name)) config.plugins.allow.push(name);
@@ -3236,10 +3830,10 @@ function ensureOpenClawConfigInitialized() {
             }
             try { fs.writeFileSync(stampPath, appVersion, 'utf8'); } catch (e) {}
             needsSave = true;
-            console.log(`[PluginSeed] Enabled ${BUNDLED_CUSTOM_PLUGINS.length} bundled plugins for v${appVersion}`);
+            console.log(`[PluginSeed] Enabled ${allBundledManagedPluginIds().length} bundled plugins for v${appVersion}`);
         } else {
             // 版本内: 缺失条目仍默认开启; 已有条目尊重用户开关, 但启用态必须进 allow
-            for (const name of BUNDLED_CUSTOM_PLUGINS) {
+            for (const name of allBundledManagedPluginIds()) {
                 if (!config.plugins.entries[name]) {
                     config.plugins.entries[name] = { enabled: true };
                     needsSave = true;
@@ -3322,7 +3916,7 @@ function ensureOpenClawConfigInitialized() {
                 for (const name of fs.readdirSync(extensionsRoot)) {
                     const pluginDir = path.join(extensionsRoot, name);
                     if (!fs.statSync(pluginDir).isDirectory()) continue;
-                    if (BUNDLED_CUSTOM_PLUGINS.includes(name)) continue; // 已在上面处理
+                    if (BUNDLED_CUSTOM_PLUGINS.includes(name) || BUNDLED_EXTENSION_PLUGINS.includes(name)) continue; // 已在上面处理
                     if (!config.plugins.entries[name]) {
                         config.plugins.entries[name] = { enabled: false };
                         needsSave = true;
@@ -3335,7 +3929,7 @@ function ensureOpenClawConfigInitialized() {
         try {
             if (!config.plugins.load) config.plugins.load = {};
             if (!Array.isArray(config.plugins.load.paths)) config.plugins.load.paths = [];
-            const mustLoad = [...BUNDLED_CUSTOM_PLUGINS, 'role-manager'];
+            const mustLoad = [...allBundledManagedPluginIds(), 'role-manager'];
             for (const name of mustLoad) {
                 const pluginDir = path.join(CONFIG_DIR, 'extensions', name);
                 if (!fs.existsSync(path.join(pluginDir, 'index.js'))) continue;
@@ -3884,12 +4478,42 @@ ipcMain.handle('role-config-save', async (event, payload) => {
     }
 });
 
+ipcMain.handle('persist-media-prefs', async (event, payload) => {
+    try {
+        const p = payload && typeof payload === 'object' ? payload : {};
+        persistMediaGeneratorPrefs(p.imageGenerator, p.videoGenerator);
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('verify-builtin-agnes', async (event, payload) => {
+    try {
+        const mode = payload && payload.mode === 'connection' ? 'connection' : 'key';
+        return await verifyBuiltInAgnesRequest(mode);
+    } catch (e) {
+        return {
+            success: false,
+            mode: (payload && payload.mode) || 'key',
+            keyIndex: null,
+            rotated: false,
+            attempts: [{ index: 0, status: 0, statusText: '', ok: false, error: e.message || String(e) }]
+        };
+    }
+});
+
 ipcMain.handle('config-save', async (event, newConfig) => {
     try {
         let cleanConfig = JSON.parse(JSON.stringify(newConfig));
-        // 关键防护：移除不在 OpenClaw 网关根 Schema 中的扩展顶层字段，防止网关启动抛出 Unrecognized keys
+        // 图片/视频配置写入侧车文件，供 media-cli 与插件读取（openclaw.json 不接受这些顶层字段）
+        try {
+            persistMediaGeneratorPrefs(newConfig.imageGenerator, newConfig.videoGenerator);
+        } catch (e) {}
+        // 关键防护：移除不在 OpenClaw 网关根 Schema 中的扩展字段，防止网关启动抛出 Unrecognized keys
         delete cleanConfig.videoGenerator;
         delete cleanConfig.imageGenerator;
+        stripNonSchemaOpenClawConfig(cleanConfig);
 
         // 启用插件必须进 allow，保证别人电脑上开关真能加载
         try {

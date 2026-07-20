@@ -26,23 +26,53 @@ const BUILTIN_API_KEYS = [
 ];
 
 function loadUserConfig(type) {
+  const prefsFile = type === 'video' ? 'video-generator.json' : 'media-generator.json';
+  const defaults = type === 'video'
+    ? { apiBase: 'https://apihub.agnes-ai.com/v1/videos', apiKey: null, model: 'agnes-ai/agnes-video-v2.0' }
+    : { apiBase: 'https://apihub.agnes-ai.com/v1/images/generations', apiKey: null, model: 'agnes-ai/agnes-image-2.0-flash' };
+  const normalizeApiBase = (apiBase, kind) => {
+    const b = String(apiBase || '').trim().replace(/\/$/, '');
+    if (!b) return defaults.apiBase;
+    if (kind === 'image') {
+      if (b.endsWith('/images/generations')) return b;
+      if (b.endsWith('/images')) return `${b}/generations`;
+      if (b.endsWith('/v1')) return `${b}/images/generations`;
+      return b;
+    }
+    if (b.endsWith('/videos')) return b;
+    if (b.endsWith('/v1')) return `${b}/videos`;
+    return b;
+  };
+  const normalize = (sec) => {
+    if (!sec || typeof sec !== 'object') return null;
+    const rawKey = (sec.apiKey || '').trim();
+    const isBuiltInKey = !rawKey
+      || rawKey === 'sk-builtin-agnes-key-mask'
+      || BUILTIN_API_KEYS.includes(rawKey);
+    const apiKey = isBuiltInKey ? null : rawKey;
+    return {
+      apiBase: normalizeApiBase(sec.apiBase, type),
+      apiKey,
+      model: sec.model || defaults.model
+    };
+  };
+  try {
+    const sidecarPath = path.join(STATE_DIR, prefsFile);
+    if (fs.existsSync(sidecarPath)) {
+      const fromSidecar = normalize(JSON.parse(fs.readFileSync(sidecarPath, 'utf8')));
+      if (fromSidecar) return fromSidecar;
+    }
+  } catch (e) {}
   try {
     const configPath = path.join(STATE_DIR, 'openclaw.json');
     if (fs.existsSync(configPath)) {
       const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       const sec = type === 'video' ? cfg.videoGenerator : cfg.imageGenerator;
-      if (sec) {
-        const rawKey = (sec.apiKey || '').trim();
-        const apiKey = (rawKey && rawKey !== 'sk-builtin-agnes-key-mask') ? rawKey : null;
-        return {
-          apiBase: sec.apiBase || null,
-          apiKey: apiKey,
-          model: sec.model || null
-        };
-      }
+      const fromConfig = normalize(sec);
+      if (fromConfig) return fromConfig;
     }
   } catch (e) {}
-  return { apiBase: null, apiKey: null, model: null };
+  return { apiBase: defaults.apiBase, apiKey: null, model: defaults.model };
 }
 
 function ensureDir(dir) {
@@ -68,13 +98,27 @@ function downloadFile(url, destPath) {
   });
 }
 
+function resolveApiUrl(customBaseUrl, endpoint, defaultBase) {
+  const ep = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const base = String(customBaseUrl || defaultBase || DEFAULT_API_BASE).trim().replace(/\/$/, '');
+  if (base.endsWith(ep)) return base;
+  if (ep === '/images/generations') {
+    if (base.endsWith('/images/generations')) return base;
+    if (base.endsWith('/images')) return `${base}/generations`;
+    if (base.endsWith('/v1')) return `${base}/images/generations`;
+  }
+  if (ep === '/videos') {
+    if (base.endsWith('/videos')) return base;
+    if (base.endsWith('/v1')) return `${base}/videos`;
+  }
+  if (base.includes(ep)) return base;
+  return `${base}${ep}`;
+}
+
 function apiPost(endpoint, body, apiKey, customBaseUrl) {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(body);
-    let fullUrl = (customBaseUrl || DEFAULT_API_BASE);
-    if (!fullUrl.endsWith(endpoint) && !fullUrl.includes(endpoint)) {
-      fullUrl = fullUrl.replace(/\/$/, '') + endpoint;
-    }
+    const fullUrl = resolveApiUrl(customBaseUrl, endpoint, DEFAULT_API_BASE);
     const urlObj = new URL(fullUrl);
     const transport = urlObj.protocol === "https:" ? https : http;
     const req = transport.request({

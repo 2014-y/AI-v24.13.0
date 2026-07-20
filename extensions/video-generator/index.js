@@ -14,6 +14,15 @@ const STATE_DIR = process.env.OPENCLAW_STATE_DIR
   || path.join(process.env.OPENCLAW_HOME || process.env.USERPROFILE || process.env.HOME || os.homedir(), '.openclaw');
 const SAVE_DIR = path.join(STATE_DIR, 'video-output');
 
+function loadMediaPrefs(kind) {
+  try {
+    const fname = kind === 'video' ? 'video-generator.json' : 'media-generator.json';
+    const p = path.join(STATE_DIR, fname);
+    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8'));
+  } catch (e) {}
+  return {};
+}
+
 // 内置 7 API keys 轮询
 const BUILTIN_API_KEYS = [
   "sk-95sX8HnNOhh8FFfAm3ccOgGFg6MA8yf7zU5PEEQdGxSuKhQY",
@@ -25,8 +34,42 @@ const BUILTIN_API_KEYS = [
   "sk-HV5HINAfAhMJOnYxYp83ZXDLqeudt8ofLtdm9Bj5p9SUOUGh",
 ];
 
-export default function createPlugin(runtime) {
-  return createSkill(runtime);
+export default function createPlugin(apiOrRuntime) {
+  const api = apiOrRuntime && typeof apiOrRuntime.registerTool === 'function' ? apiOrRuntime : null;
+  const runtime = api?.runtime ?? apiOrRuntime;
+  const skill = createSkill(runtime);
+
+  if (api) {
+    api.registerTool({
+      name: 'draw_video',
+      description: skill.description + ' Use when the user asks to generate or create a video.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['prompt'],
+        properties: {
+          prompt: { type: 'string', description: 'Video description (required)' },
+          image_url: { type: 'string', description: 'Optional first-frame image URL' },
+          model: { type: 'string', description: 'Model id, e.g. agnes-video-v2.0' },
+          duration: { type: 'number', description: 'Duration in seconds' },
+          resolution: { type: 'string', description: '480p, 720p, or 1080p' },
+          fps: { type: 'number', description: 'Frames per second' },
+          aspect_ratio: { type: 'string', description: '16:9, 9:16, 1:1, or 4:3' },
+        },
+      },
+      async execute(_toolCallId, params) {
+        const result = await skill.draw_video(params || {});
+        const mediaHint = result.filepath ? `\nMEDIA:${result.filepath}` : '';
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result) + mediaHint }],
+          details: result,
+        };
+      },
+    });
+    return { name: skill.name };
+  }
+
+  return skill;
 }
 
 export function createSkill(runtime) {
@@ -34,7 +77,10 @@ export function createSkill(runtime) {
     fs.mkdirSync(SAVE_DIR, { recursive: true });
   }
 
-  const customConfig = runtime?.config?.videoGenerator || {};
+  const customConfig = {
+    ...(runtime?.config?.videoGenerator || {}),
+    ...loadMediaPrefs('video'),
+  };
   const rawKey = (customConfig.apiKey || '').trim();
   const userApiKey = (rawKey && rawKey !== 'sk-builtin-agnes-key-mask') ? rawKey : null;
   const userApiBase = customConfig.apiBase || DEFAULT_API_BASE;

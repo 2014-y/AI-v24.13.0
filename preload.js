@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('api', {
     // 配置读写
     readConfig: () => ipcRenderer.invoke('config-read'),
     saveConfig: (newConfig) => ipcRenderer.invoke('config-save', newConfig),
+    persistMediaPrefs: (payload) => ipcRenderer.invoke('persist-media-prefs', payload),
+    verifyBuiltInAgnes: (payload) => ipcRenderer.invoke('verify-builtin-agnes', payload || {}),
     readRoleConfig: () => ipcRenderer.invoke('role-config-read'),
     saveRoleConfig: (payload) => ipcRenderer.invoke('role-config-save', payload),
     onRoleConfigUpdated: (callback) => {

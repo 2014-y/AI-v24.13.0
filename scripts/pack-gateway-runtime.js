@@ -122,6 +122,9 @@ function computeFingerprint() {
     '.node-sandbox/node_modules/npm/bin/npm-prefix.js',
     'plugins',
     'extensions',
+    'media-cli',
+    path.join('workspace', 'skills', 'image-generator'),
+    path.join('workspace', 'skills', 'video-generator'),
     'scripts/pack-gateway-runtime.js'
   ];
   for (const rel of keys) h.update(rel + '=' + pathMeta(path.join(ROOT, rel)) + ';');
@@ -365,6 +368,13 @@ function main() {
   if (fs.existsSync(path.join(ROOT, 'node_modules'))) inputs.push('node_modules');
   if (fs.existsSync(path.join(ROOT, 'plugins'))) inputs.push('plugins');
   if (fs.existsSync(path.join(ROOT, 'extensions'))) inputs.push('extensions');
+  if (fs.existsSync(path.join(ROOT, 'media-cli'))) inputs.push('media-cli');
+  if (fs.existsSync(path.join(ROOT, 'workspace', 'skills', 'image-generator'))) {
+    inputs.push(path.join('workspace', 'skills', 'image-generator'));
+  }
+  if (fs.existsSync(path.join(ROOT, 'workspace', 'skills', 'video-generator'))) {
+    inputs.push(path.join('workspace', 'skills', 'video-generator'));
+  }
   if (fs.existsSync(path.join(ROOT, 'config', 'openclaw-templates'))) inputs.push(path.join('config', 'openclaw-templates'));
   if (fs.existsSync(path.join(ROOT, '.node-sandbox', 'node.exe'))) inputs.push('.node-sandbox');
   for (const f of ROOT_FILES) {

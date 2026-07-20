@@ -213,6 +213,33 @@ function formatNumberWithUnit(num, isApprox = false) {
     }
 }
 
+/** 把毫秒转成可读时分秒，如 13666 → 13秒；72500 → 1分12秒 */
+function formatElapsedMs(ms) {
+    const n = Math.max(0, Math.round(Number(ms) || 0));
+    const lang = localStorage.getItem('setting_language') || 'zh-CN';
+    const totalSec = Math.floor(n / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    const msPart = n % 1000;
+
+    if (lang === 'en-US') {
+        if (h > 0) return `${h}h ${m}m ${s}s`;
+        if (m > 0) return `${m}m ${s}s`;
+        if (totalSec > 0) return msPart >= 100 ? `${totalSec}.${Math.floor(msPart / 100)}s` : `${totalSec}s`;
+        return `${n}ms`;
+    }
+
+    const isTw = lang === 'zh-TW';
+    const uH = isTw ? '小時' : '小时';
+    const uM = '分';
+    const uS = '秒';
+    if (h > 0) return `${h}${uH}${m}${uM}${s}${uS}`;
+    if (m > 0) return `${m}${uM}${s}${uS}`;
+    if (totalSec > 0) return msPart >= 100 ? `${totalSec}.${Math.floor(msPart / 100)}${uS}` : `${totalSec}${uS}`;
+    return `${n}毫秒`;
+}
+
 function formatTokenUsageLog(tokenUsage) {
     if (!tokenUsage) return '';
     const currentLang = localStorage.getItem('setting_language') || 'zh-CN';
@@ -2105,6 +2132,7 @@ async function init() {
 let __activityLogQueue = [];
 let __isProcessingLogQueue = false;
 let __seenPluginLogsThisStartup = new Set();
+const ACTIVITY_LOG_QUEUE_HARD_CAP = 40;
 
 function resetPluginLogDedupe() {
     __seenPluginLogsThisStartup.clear();
@@ -2123,6 +2151,10 @@ function enqueueActivityLog(lineHtml) {
     }
 
     __activityLogQueue.push(lineHtml);
+    // 积压过多时丢掉最旧的，避免打字机动画把界面拖死
+    while (__activityLogQueue.length > ACTIVITY_LOG_QUEUE_HARD_CAP) {
+        __activityLogQueue.shift();
+    }
     if (!__isProcessingLogQueue) {
         processActivityLogQueue();
     }
@@ -2136,6 +2168,7 @@ function processActivityLogQueue() {
 
     __isProcessingLogQueue = true;
     const lineHtml = __activityLogQueue.shift();
+    const backlog = __activityLogQueue.length;
 
     const streamList = document.getElementById('dash-activity-stream-list');
     if (streamList) {
@@ -2152,13 +2185,21 @@ function processActivityLogQueue() {
             streamList.removeChild(streamList.firstChild);
         }
 
+        // 积压严重时跳过打字机，直接落盘，防止 setInterval 刷爆导致卡死
+        if (backlog > 12) {
+            item.style.clipPath = 'none';
+            item.classList.remove('typing');
+            streamList.scrollTop = streamList.scrollHeight;
+            setTimeout(() => processActivityLogQueue(), backlog > 25 ? 8 : 20);
+            return;
+        }
+
         // 打字机渐显动画： clip-path 从左往右逐帧优雅平滑揭开
         const temp = document.createElement('span');
         temp.innerHTML = lineHtml;
         const textLen = (temp.textContent || '').length;
 
-        const queueLen = __activityLogQueue.length;
-        const stepInterval = queueLen > 15 ? 8 : (queueLen > 5 ? 12 : 16);
+        const stepInterval = backlog > 5 ? 12 : 16;
         const totalSteps = Math.min(textLen, 40);
         let step = 0;
         
@@ -2177,12 +2218,14 @@ function processActivityLogQueue() {
                 item.classList.remove('typing');
 
                 // 🌟 严格规范：前一条日志 100% 打字/揭开完成后，暂停一小会，再启动下一条！
-                const nextPause = queueLen > 15 ? 40 : (queueLen > 5 ? 90 : 160);
+                const nextPause = backlog > 5 ? 90 : 160;
                 setTimeout(() => {
                     processActivityLogQueue();
                 }, nextPause);
             }
         }, stepInterval);
+    } else {
+        setTimeout(() => processActivityLogQueue(), 0);
     }
 }
 
@@ -2194,6 +2237,7 @@ function formatLogForUser(text) {
     const lowerLine = cleanLine.toLowerCase();
 
     // 1. 过滤完全无需展示给小白的日志 (底层噪音调试日志)
+    // 模型空闲超时 / Abort / rotate_profile 属于网关自愈过程，刷屏会导致活动流卡死
     if (
         cleanLine.includes('AGENTS.md') ||
         cleanLine.includes('SOUL.md') ||
@@ -2201,6 +2245,13 @@ function formatLogForUser(text) {
         cleanLine.includes('TokenGuard Cleaned') ||
         cleanLine.includes('tool policy') ||
         cleanLine.includes('provider-transport-fetch start') ||
+        (cleanLine.includes('provider-transport-fetch') && (lowerLine.includes('error') || lowerLine.includes('abort'))) ||
+        cleanLine.includes('[model-fetch] error') ||
+        cleanLine.includes('failover decision') ||
+        cleanLine.includes('rotate_profile') ||
+        cleanLine.includes('LLM idle timeout') ||
+        cleanLine.includes('This operation was aborted') ||
+        cleanLine.includes('AbortError') ||
         cleanLine.includes('log file:') ||
         cleanLine.includes('allow is empty') ||
         cleanLine.includes('discovered non-bundled') ||
@@ -2266,7 +2317,7 @@ function formatLogForUser(text) {
     // 模型推理响应成功
     if (cleanLine.includes('[model-fetch] response') && cleanLine.includes('status=200')) {
         const elapsedMatch = cleanLine.match(/elapsedMs=([0-9]+)/);
-        const elapsed = elapsedMatch ? `${elapsedMatch[1]}ms` : '';
+        const elapsed = elapsedMatch ? formatElapsedMs(elapsedMatch[1]) : '';
         return `[🧠 大模型服务] 智能回复生成成功！已安全投递至通讯通道 ${elapsed ? `(耗时: ${elapsed})` : ''}`;
     }
 
@@ -2353,7 +2404,7 @@ function formatLogForUser(text) {
         return `[⚙️ 系统核心] 📩 正在处理并分析接收到的即时聊天消息...`;
     }
 
-    // 遇到报错（非 Bonjour、error-filter、model-pricing、voice-bridge、sessions.delete 等容易被误报的警告）
+    // 遇到报错（非 Bonjour、超时自愈、error-filter 等容易被误报的警告）
     if (lowerLine.includes('error') || lowerLine.includes('exception') || lowerLine.includes('failed')) {
         if (
             lowerLine.includes('bonjour') || 
@@ -2365,7 +2416,14 @@ function formatLogForUser(text) {
             lowerLine.includes('econnrefused') ||
             lowerLine.includes('18791') ||
             lowerLine.includes('cannot delete the main session') ||
-            lowerLine.includes('sessions.delete')
+            lowerLine.includes('sessions.delete') ||
+            lowerLine.includes('provider-transport-fetch') ||
+            lowerLine.includes('model-fetch') ||
+            lowerLine.includes('failover') ||
+            lowerLine.includes('rotate_profile') ||
+            lowerLine.includes('idle timeout') ||
+            lowerLine.includes('aborted') ||
+            lowerLine.includes('aborterror')
         ) return null;
         return `[⚠️ 系统警报] ⚠️ 系统运行警告：${cleanLine}`;
     }
@@ -3011,6 +3069,32 @@ function setupIpcListeners() {
 let localProviders = {};
 const AGNES_BUILT_IN_KEY = 'sk-95sX8HnNOhh8FFfAm3ccOgGFg6MA8yf7zU5PEEQdGxSuKhQY';
 const KEY_MASK = '••••••••••••••••••••••••••••••••••••••••••••••••';
+
+async function syncMediaGeneratorPrefsToDisk(cfg) {
+    if (!window.api || !window.api.persistMediaPrefs) return;
+    const useBuiltIn = getUseBuiltIn();
+    let imageGenerator = cfg && cfg.imageGenerator ? { ...cfg.imageGenerator } : null;
+    let videoGenerator = cfg && cfg.videoGenerator ? { ...cfg.videoGenerator } : null;
+    if (useBuiltIn || (!imageGenerator && !videoGenerator)) {
+        imageGenerator = imageGenerator || {
+            apiBase: 'https://apihub.agnes-ai.com/v1/images/generations',
+            apiKey: '',
+            model: localStorage.getItem('client_pref_image_model') || 'agnes-ai/agnes-image-2.0-flash'
+        };
+        videoGenerator = videoGenerator || {
+            apiBase: 'https://apihub.agnes-ai.com/v1/videos',
+            apiKey: '',
+            model: localStorage.getItem('client_pref_video_model') || 'agnes-ai/agnes-video-v2.0'
+        };
+    }
+    if (useBuiltIn) {
+        imageGenerator.apiBase = 'https://apihub.agnes-ai.com/v1/images/generations';
+        videoGenerator.apiBase = 'https://apihub.agnes-ai.com/v1/videos';
+        imageGenerator.apiKey = '';
+        videoGenerator.apiKey = '';
+    }
+    await window.api.persistMediaPrefs({ imageGenerator, videoGenerator });
+}
 /** JSON 预览里展示的脱敏占位（勿写入真实 configData） */
 const JSON_PREVIEW_SECRET_MASK = '********';
 
@@ -3245,6 +3329,13 @@ async function loadAndRenderConfig() {
     } else {
         document.getElementById('image-api-base').value = 'https://apihub.agnes-ai.com/v1/images';
         document.getElementById('image-api-key').value = '';
+    }
+
+    // 同步到 ~/.openclaw 侧车文件，供 media-cli / draw_picture / draw_video 读取（任意电脑开箱）
+    try {
+        await syncMediaGeneratorPrefsToDisk(configData);
+    } catch (e) {
+        console.warn('[MediaPrefs] sync on load failed:', e);
     }
 
     if (configData.gateway) {
@@ -4055,8 +4146,7 @@ function bindProviderEvents() {
             }
 
             if (statusSpan) {
-                statusSpan.innerText = t('🔄 正在获取模型...', '🔄 Fetching models...', '🔄 正在獲取模型...');
-                statusSpan.style.color = '#ffd54f';
+                statusSpan.innerText = t('🔄 正在获取模型...', '🔄 Fetching models...', '🔄 正在獲取模型...');                statusSpan.style.color = '#ffd54f';
                 statusSpan.style.display = 'inline-block';
             }
 
@@ -4190,11 +4280,45 @@ function bindProviderEvents() {
             }
             const apiType = apiSelect ? apiSelect.value : '';
 
-            // 如果是 agnes-ai 并且启用了内置模型
+            // 内置模式：走主进程真实探活（含内置 Key 轮询）
             const useBuiltIn = getUseBuiltIn();
             if (provider === 'agnes-ai' && useBuiltIn) {
-                baseUrl = 'https://apihub.agnes-ai.com/v1';
-                apiKey = AGNES_BUILT_IN_KEY;
+                if (resultSpan) {
+                    resultSpan.innerText = t('⚡ 正在检验内置服务...', '⚡ Verifying built-in service...', '⚡ 正在檢驗內置服務...');
+                    resultSpan.style.color = '#ffd54f';
+                    resultSpan.style.display = 'inline-block';
+                }
+                btn.disabled = true;
+                try {
+                    const res = await window.api.verifyBuiltInAgnes({ mode: 'connection' });
+                    if (res && res.success) {
+                        const tip = res.rotated
+                            ? t(`✅ 内置服务可用，已轮询到第 ${res.keyIndex} 把 Key`, `✅ Built-in service available, rotated to key #${res.keyIndex}`, `✅ 內置服務可用，已輪詢到第 ${res.keyIndex} 把 Key`)
+                            : t(`✅ 内置服务可用，当前命中第 ${res.keyIndex} 把 Key`, `✅ Built-in service available, using key #${res.keyIndex}`, `✅ 內置服務可用，當前命中第 ${res.keyIndex} 把 Key`);
+                        resultSpan.textContent = tip;
+                        resultSpan.style.color = '#00e676';
+                        showToast(tip);
+                    } else {
+                        const last = (res && res.attempts && res.attempts[res.attempts.length - 1]) || {};
+                        let tip = t(`❌ 内置服务不可用 (${last.error || last.status || '未知错误'})`, `❌ Built-in service unavailable (${last.error || last.status || 'unknown'})`, `❌ 內置服務不可用 (${last.error || last.status || '未知錯誤'})`);
+                        if (res && (res.networkHint === 'direct_timeout' || res.networkHint === 'proxy_or_upstream_timeout')) {
+                            tip = t('❌ 网络超时：当前直连/加速都连不上上游，可稍后重试或临时开启 Nexora Clash', '❌ Network timeout: cannot reach upstream via current path; retry later or temporarily enable Nexora Clash', '❌ 網路超時：當前直連/加速都連不上上游，可稍後重試或臨時開啟 Nexora Clash');
+                        }
+                        resultSpan.textContent = tip;
+                        resultSpan.style.color = '#ff5252';
+                        showToast(tip);
+                    }
+                } catch (error) {
+                    const tip = t(`❌ 内置服务检验失败 (${error.message || error})`, `❌ Built-in service verification failed (${error.message || error})`, `❌ 內置服務檢驗失敗 (${error.message || error})`);
+                    if (resultSpan) {
+                        resultSpan.textContent = tip;
+                        resultSpan.style.color = '#ff5252';
+                    }
+                    showToast(tip);
+                } finally {
+                    btn.disabled = false;
+                }
+                return;
             }
 
             if (!baseUrl) {
@@ -4203,8 +4327,7 @@ function bindProviderEvents() {
             }
 
             if (resultSpan) {
-                resultSpan.innerText = t('⚡ 正在检验连接...', '⚡ Verifying connection...', '⚡ 正在檢驗連接...');
-                resultSpan.style.color = '#ffd54f';
+                resultSpan.innerText = t('⚡ 正在检验连接...', '⚡ Verifying connection...', '⚡ 正在檢驗連接...');                resultSpan.style.color = '#ffd54f';
                 resultSpan.style.display = 'inline-block';
             }
 
@@ -4297,11 +4420,45 @@ function bindProviderEvents() {
             }
             const apiType = apiSelect ? apiSelect.value : '';
 
-            // 如果是 agnes-ai 并且启用了内置模型
+            // 内置模式：走主进程真实验钥（含内置 Key 轮询）
             const useBuiltIn = getUseBuiltIn();
             if (provider === 'agnes-ai' && useBuiltIn) {
-                baseUrl = 'https://apihub.agnes-ai.com/v1';
-                apiKey = AGNES_BUILT_IN_KEY;
+                if (resultSpan) {
+                    resultSpan.innerText = t('🔑 正在验证内置密钥...', '🔑 Validating built-in keys...', '🔑 正在驗證內置金鑰...');
+                    resultSpan.style.color = '#ffd54f';
+                    resultSpan.style.display = 'inline-block';
+                }
+                btn.disabled = true;
+                try {
+                    const res = await window.api.verifyBuiltInAgnes({ mode: 'key' });
+                    if (res && res.success) {
+                        const tip = res.rotated
+                            ? t(`✅ 内置密钥可用，轮询已生效，当前命中第 ${res.keyIndex} 把 Key`, `✅ Built-in keys available, rotation worked, using key #${res.keyIndex}`, `✅ 內置金鑰可用，輪詢已生效，當前命中第 ${res.keyIndex} 把 Key`)
+                            : t(`✅ 内置密钥可用，当前命中第 ${res.keyIndex} 把 Key`, `✅ Built-in keys available, using key #${res.keyIndex}`, `✅ 內置金鑰可用，當前命中第 ${res.keyIndex} 把 Key`);
+                        resultSpan.textContent = tip;
+                        resultSpan.style.color = '#00e676';
+                        showToast(tip);
+                    } else {
+                        const last = (res && res.attempts && res.attempts[res.attempts.length - 1]) || {};
+                        let tip = t(`❌ 内置密钥不可用 (${last.error || last.status || '未知错误'})`, `❌ Built-in keys unavailable (${last.error || last.status || 'unknown'})`, `❌ 內置金鑰不可用 (${last.error || last.status || '未知錯誤'})`);
+                        if (res && (res.networkHint === 'direct_timeout' || res.networkHint === 'proxy_or_upstream_timeout')) {
+                            tip = t('❌ 网络超时：当前连不上上游（与是否开 Clash 无关时也可先重试）', '❌ Network timeout: cannot reach upstream (retry first; Clash is optional)', '❌ 網路超時：當前連不上上游（與是否開 Clash 無關時也可先重試）');
+                        }
+                        resultSpan.textContent = tip;
+                        resultSpan.style.color = '#ff5252';
+                        showToast(tip);
+                    }
+                } catch (error) {
+                    const tip = t(`❌ 内置密钥验证失败 (${error.message || error})`, `❌ Built-in key verification failed (${error.message || error})`, `❌ 內置金鑰驗證失敗 (${error.message || error})`);
+                    if (resultSpan) {
+                        resultSpan.textContent = tip;
+                        resultSpan.style.color = '#ff5252';
+                    }
+                    showToast(tip);
+                } finally {
+                    btn.disabled = false;
+                }
+                return;
             }
 
             if (!baseUrl) {
@@ -4319,8 +4476,7 @@ function bindProviderEvents() {
             }
 
             if (resultSpan) {
-                resultSpan.innerText = t('🔑 正在验证密钥有效性...', '🔑 Validating key...', '🔑 正在驗證金鑰有效性...');
-                resultSpan.style.color = '#ffd54f';
+                resultSpan.innerText = t('🔑 正在验证密钥有效性...', '🔑 Validating key...', '🔑 正在驗證金鑰有效性...');                resultSpan.style.color = '#ffd54f';
                 resultSpan.style.display = 'inline-block';
             }
 
@@ -5111,11 +5267,11 @@ const handleSaveConfigAction = async () => {
         localStorage.setItem('client_pref_image_model', 'agnes-ai/agnes-image-2.0-flash');
         localStorage.setItem('client_pref_video_model', 'agnes-ai/agnes-video-v2.0');
 
-        configData.imageGenerator.apiBase = 'https://apihub.agnes-ai.com/v1/images';
-        configData.imageGenerator.apiKey = AGNES_BUILT_IN_KEY;
+        configData.imageGenerator.apiBase = 'https://apihub.agnes-ai.com/v1/images/generations';
+        configData.imageGenerator.apiKey = '';
 
         configData.videoGenerator.apiBase = 'https://apihub.agnes-ai.com/v1/videos';
-        configData.videoGenerator.apiKey = AGNES_BUILT_IN_KEY;
+        configData.videoGenerator.apiKey = '';
     } else {
         const imageVal = document.getElementById('model-image').value.trim();
         localStorage.setItem('client_pref_image_model', imageVal);

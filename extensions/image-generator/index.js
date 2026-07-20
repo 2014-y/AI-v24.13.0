@@ -14,6 +14,15 @@ const STATE_DIR = process.env.OPENCLAW_STATE_DIR
   || path.join(process.env.OPENCLAW_HOME || process.env.USERPROFILE || process.env.HOME || os.homedir(), '.openclaw');
 const SAVE_DIR = path.join(STATE_DIR, 'image-output');
 
+function loadMediaPrefs(kind) {
+  try {
+    const fname = kind === 'video' ? 'video-generator.json' : 'media-generator.json';
+    const p = path.join(STATE_DIR, fname);
+    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8'));
+  } catch (e) {}
+  return {};
+}
+
 // 内置 7 API keys 轮询
 const BUILTIN_API_KEYS = [
   "sk-95sX8HnNOhh8FFfAm3ccOgGFg6MA8yf7zU5PEEQdGxSuKhQY",
@@ -25,8 +34,42 @@ const BUILTIN_API_KEYS = [
   "sk-HV5HINAfAhMJOnYxYp83ZXDLqeudt8ofLtdm9Bj5p9SUOUGh",
 ];
 
-export default function createPlugin(runtime) {
-  return createSkill(runtime);
+export default function createPlugin(apiOrRuntime) {
+  const api = apiOrRuntime && typeof apiOrRuntime.registerTool === 'function' ? apiOrRuntime : null;
+  const runtime = api?.runtime ?? apiOrRuntime;
+  const skill = createSkill(runtime);
+
+  if (api) {
+    api.registerTool({
+      name: 'draw_picture',
+      description: skill.description + ' Use when the user asks to generate, draw, or create an image.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['prompt'],
+        properties: {
+          prompt: { type: 'string', description: 'Image description (required)' },
+          model: { type: 'string', description: 'Model id, e.g. agnes-image-2.0-flash' },
+          size: { type: 'string', description: '512x512, 1024x1024, 1024x1792, 1792x1024' },
+          quality: { type: 'string', description: 'standard or hd' },
+          style: { type: 'string', description: 'vivid or natural' },
+          n: { type: 'number', description: 'Number of images (1-4)' },
+        },
+      },
+      async execute(_toolCallId, params) {
+        const result = await skill.draw_picture(params || {});
+        const files = (result.files || []).map((f) => f.filepath).filter(Boolean);
+        const mediaHint = files.length ? `\nMEDIA:${files.join('\nMEDIA:')}` : '';
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result) + mediaHint }],
+          details: result,
+        };
+      },
+    });
+    return { name: skill.name };
+  }
+
+  return skill;
 }
 
 export function createSkill(runtime) {
@@ -34,9 +77,15 @@ export function createSkill(runtime) {
     fs.mkdirSync(SAVE_DIR, { recursive: true });
   }
 
-  const customConfig = runtime?.config?.imageGenerator || {};
+  const customConfig = {
+    ...(runtime?.config?.imageGenerator || {}),
+    ...loadMediaPrefs('image'),
+  };
   const rawKey = (customConfig.apiKey || '').trim();
-  const userApiKey = (rawKey && rawKey !== 'sk-builtin-agnes-key-mask') ? rawKey : null;
+  const isBuiltInKey = !rawKey
+    || rawKey === 'sk-builtin-agnes-key-mask'
+    || BUILTIN_API_KEYS.includes(rawKey);
+  const userApiKey = isBuiltInKey ? null : rawKey;
   const userApiBase = customConfig.apiBase || null;
   const customModel = customConfig.model || null;
 
@@ -116,10 +165,7 @@ export function createSkill(runtime) {
 async function callImageAPIWithRetry(body, count, userApiKey, userApiBase) {
   if (userApiKey) {
     try {
-      let targetBase = userApiBase || DEFAULT_API_BASE;
-      if (!targetBase.includes('/generations')) {
-        targetBase = targetBase.replace(/\/$/, '') + '/generations';
-      }
+      const targetBase = resolveImageApiUrl(userApiBase);
       return await callImageAPI(body, userApiKey, count, targetBase);
     } catch (err) {
       console.warn(`[image-generator] Custom API key failed: ${err.message}, falling back to built-in keys`);
@@ -137,6 +183,15 @@ async function callImageAPIWithRetry(body, count, userApiKey, userApiBase) {
   }
 
   throw new Error(`All image API keys failed. Last error: ${lastError?.message}`);
+}
+
+function resolveImageApiUrl(userApiBase) {
+  const base = String(userApiBase || DEFAULT_API_BASE).trim().replace(/\/$/, '');
+  if (base.endsWith('/images/generations')) return base;
+  if (base.endsWith('/images')) return `${base}/generations`;
+  if (base.endsWith('/v1')) return `${base}/images/generations`;
+  if (!base.includes('/generations')) return `${base}/generations`;
+  return base;
 }
 
 function callImageAPI(body, apiKey, count, apiBaseUrl) {

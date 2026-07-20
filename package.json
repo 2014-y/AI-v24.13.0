@@ -177,6 +177,9 @@
       "!node_modules/**/LICENCE*",
       "plugins/**/*",
       "builtin-asr/**/*",
+      "media-cli/**/*",
+      "workspace/skills/image-generator/**/*",
+      "workspace/skills/video-generator/**/*",
       "!extensions/**/*",
       "!.node-sandbox/**/*"
     ]
