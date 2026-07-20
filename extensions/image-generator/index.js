@@ -1,6 +1,6 @@
 /**
  * image-generator Skill
- * 通过 agnes-ai 图像 API 生成图片，支持完整参数控制和 key 轮询
+ * 支持自定义配置优先 + 内置 7 key 自动平滑降级
  */
 
 import path from "node:path";
@@ -9,20 +9,20 @@ import fs from "node:fs";
 import https from "node:https";
 import http from "node:http";
 
-const API_BASE = "https://apihub.agnes-ai.com/v1/images/generations";
+const DEFAULT_API_BASE = "https://apihub.agnes-ai.com/v1/images/generations";
 const STATE_DIR = process.env.OPENCLAW_STATE_DIR
   || path.join(process.env.OPENCLAW_HOME || process.env.USERPROFILE || process.env.HOME || os.homedir(), '.openclaw');
 const SAVE_DIR = path.join(STATE_DIR, 'image-output');
 
-// 7 API keys 轮询
-const API_KEYS = [
-  "sk-95sX8HnNOhh8FFfAm3ccOgGFg6MA8yf7zU5PEEQdGxSuKhQY", // agnes-ai-7
-  "sk-z2NHJlR99oODMYvS9C5u8qLMNf6hmc9vRm5JenvHHStTfxZn", // agnes-ai-1
-  "sk-ct7MSvbC8LqL1gGqJuoVCKgjtecXwbjIUZhXQ0gITEaksCS0", // agnes-ai-2
-  "sk-nZtkk9AAyZl3sbkv8Gw4R1R99NnkgUWhRGL4Cp0Dl7LSPsUu", // agnes-ai-3
-  "sk-Y6ORz4nnuXHUpwjdXv2WlmLMwCfPBMtmh69iuXxZkQtZazyV", // agnes-ai-4
-  "sk-GhS6TUB6W8LibJT5whDhbUvmYW3csM0HdGDdjotpgadQbd2F", // agnes-ai-5
-  "sk-HV5HINAfAhMJOnYxYp83ZXDLqeudt8ofLtdm9Bj5p9SUOUGh", // agnes-ai-6
+// 内置 7 API keys 轮询
+const BUILTIN_API_KEYS = [
+  "sk-95sX8HnNOhh8FFfAm3ccOgGFg6MA8yf7zU5PEEQdGxSuKhQY",
+  "sk-z2NHJlR99oODMYvS9C5u8qLMNf6hmc9vRm5JenvHHStTfxZn",
+  "sk-ct7MSvbC8LqL1gGqJuoVCKgjtecXwbjIUZhXQ0gITEaksCS0",
+  "sk-nZtkk9AAyZl3sbkv8Gw4R1R99NnkgUWhRGL4Cp0Dl7LSPsUu",
+  "sk-Y6ORz4nnuXHUpwjdXv2WlmLMwCfPBMtmh69iuXxZkQtZazyV",
+  "sk-GhS6TUB6W8LibJT5whDhbUvmYW3csM0HdGDdjotpgadQbd2F",
+  "sk-HV5HINAfAhMJOnYxYp83ZXDLqeudt8ofLtdm9Bj5p9SUOUGh",
 ];
 
 export default function createPlugin(runtime) {
@@ -34,30 +34,28 @@ export function createSkill(runtime) {
     fs.mkdirSync(SAVE_DIR, { recursive: true });
   }
 
+  const customConfig = runtime?.config?.imageGenerator || {};
+  const rawKey = (customConfig.apiKey || '').trim();
+  const userApiKey = (rawKey && rawKey !== 'sk-builtin-agnes-key-mask') ? rawKey : null;
+  const userApiBase = customConfig.apiBase || null;
+  const customModel = customConfig.model || null;
+
   return {
     name: "image-generator",
-    description: "Generate images via agnes-ai with full parameter control and key rotation",
+    description: "Generate images via agnes-ai or user-customized API with parameter control and key rotation",
 
     instruction: `当用户要求生成图片时使用此技能。支持以下参数控制：
 
 - prompt (必填): 图片描述文本
-- model (默认 "agnes-image-2.0-flash"): 模型名称，可选 "agnes-image-2.0-flash" 或 "agnes-image-2.1-flash"
-- size (默认 "1024x1024"): 尺寸，可选 "512x512"、"1024x1024"、"1024x1792"、"1792x1024"
-- quality (默认 "standard"): 质量，可选 "standard" 或 "hd"
-- style (默认 "vivid"): 风格，可选 "vivid"（写实）或 "natural"（自然）
-- n (默认 1): 生成数量，1-4
-- output_dir (默认本地目录): 保存路径
-
-API key 自动轮询 7 个密钥，失败自动切换下一个。
-
-示例场景：
-- "帮我画一只猫"
-- "生成一张风景图，16:9 宽屏"
-- "用 2.1 模型画一张高清照片"`,
+- model: 模型名称
+- size (默认 "1024x1024"): 尺寸
+- quality (默认 "standard"): 质量
+- style (默认 "vivid"): 风格
+- n (默认 1): 生成数量，1-4`,
 
     async draw_picture({
       prompt,
-      model = "agnes-image-2.0-flash",
+      model,
       size = "1024x1024",
       quality = "standard",
       style = "vivid",
@@ -69,10 +67,11 @@ API key 自动轮询 7 个密钥，失败自动切换下一个。
         fs.mkdirSync(dir, { recursive: true });
       }
 
+      const selectedModel = model || customModel || "agnes-image-2.0-flash";
       const timestamp = Date.now();
       const results = [];
 
-      const cleanModel = model.includes('/') ? model.split('/').pop() : model;
+      const cleanModel = selectedModel.includes('/') ? selectedModel.split('/').pop() : selectedModel;
       const body = {
         model: cleanModel,
         prompt,
@@ -82,10 +81,9 @@ API key 自动轮询 7 个密钥，失败自动切换下一个。
       if (quality) body.quality = quality;
       if (style) body.style = style;
 
-      console.log(`[image-generator] Generating: ${prompt} | model=${model} | size=${size} | count=${n}`);
+      console.log(`[image-generator] Generating: ${prompt} | model=${selectedModel} | size=${size} | count=${n}`);
 
-      // 调用 API（带 key 轮询）
-      const images = await callImageAPIWithRetry(body, n);
+      const images = await callImageAPIWithRetry(body, n, userApiKey, userApiBase);
 
       for (let i = 0; i < images.length; i++) {
         const img = images[i];
@@ -107,7 +105,7 @@ API key 自动轮询 7 个密钥，失败自动切换下一个。
         success: true,
         files: results,
         prompt,
-        model,
+        model: selectedModel,
         size,
         count: results.length,
       };
@@ -115,40 +113,43 @@ API key 自动轮询 7 个密钥，失败自动切换下一个。
   };
 }
 
-/**
- * 带 key 轮询重试的 image API 调用
- */
-async function callImageAPIWithRetry(body, count) {
-  let lastError = null;
-
-  for (let attempt = 0; attempt < API_KEYS.length; attempt++) {
-    const apiKey = API_KEYS[attempt % API_KEYS.length];
+async function callImageAPIWithRetry(body, count, userApiKey, userApiBase) {
+  if (userApiKey) {
     try {
-      return await callImageAPI(body, apiKey, count);
+      let targetBase = userApiBase || DEFAULT_API_BASE;
+      if (!targetBase.includes('/generations')) {
+        targetBase = targetBase.replace(/\/$/, '') + '/generations';
+      }
+      return await callImageAPI(body, userApiKey, count, targetBase);
     } catch (err) {
-      lastError = err;
-      // [suppressed] key rotation failure
+      console.warn(`[image-generator] Custom API key failed: ${err.message}, falling back to built-in keys`);
     }
   }
 
-  throw new Error(`All ${API_KEYS.length} API keys failed. Last error: ${lastError?.message}`);
+  let lastError = null;
+  for (let attempt = 0; attempt < BUILTIN_API_KEYS.length; attempt++) {
+    const apiKey = BUILTIN_API_KEYS[attempt % BUILTIN_API_KEYS.length];
+    try {
+      return await callImageAPI(body, apiKey, count, DEFAULT_API_BASE);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw new Error(`All image API keys failed. Last error: ${lastError?.message}`);
 }
 
-/**
- * 调用 agnes-ai 图像生成 API
- */
-function callImageAPI(body, apiKey, count) {
+function callImageAPI(body, apiKey, count, apiBaseUrl) {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(body);
-    const urlObj = new URL(API_BASE);
-
+    const urlObj = new URL(apiBaseUrl);
     const transport = urlObj.protocol === "https:" ? https : http;
 
     const req = transport.request(
       {
         hostname: urlObj.hostname,
         port: urlObj.port,
-        path: urlObj.pathname,
+        path: urlObj.pathname + urlObj.search,
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -158,81 +159,61 @@ function callImageAPI(body, apiKey, count) {
       },
       (res) => {
         let responseData = "";
-        res.on("data", (chunk) => (responseData += chunk));
+        res.on("data", (chunk) => {
+          responseData += chunk;
+        });
         res.on("end", () => {
           try {
-            const result = JSON.parse(responseData);
-            if (result.error) {
-              reject(new Error(`API Error: ${result.error.message}`));
-              return;
+            const parsed = JSON.parse(responseData);
+            if (res.statusCode >= 200 && res.statusCode < 300 && parsed.data) {
+              resolve(parsed.data);
+            } else {
+              const msg = parsed.error?.message || parsed.message || `HTTP ${res.statusCode}`;
+              reject(new Error(msg));
             }
-            // 支持 url 或 b64_json 两种格式
-            const images = [];
-            if (result.data) {
-              for (const item of result.data) {
-                if (item.url) {
-                  images.push({ url: item.url, b64_json: null });
-                } else if (item.b64_json) {
-                  images.push({ url: null, b64_json: item.b64_json });
-                }
-              }
-            }
-            if (images.length === 0) {
-              reject(
-                new Error(
-                  `No images in response: ${JSON.stringify(result).substring(0, 500)}`
-                )
-              );
-              return;
-            }
-            resolve(images);
           } catch (e) {
-            reject(new Error(`Failed to parse API response: ${e.message}`));
+            reject(new Error(`Response parse error: ${e.message}`));
           }
         });
       }
     );
 
-    req.on("error", (e) => reject(e));
+    req.on("error", (err) => reject(err));
     req.write(data);
     req.end();
   });
 }
 
-/**
- * 下载远程图片或解析 base64
- */
-function downloadImage(url, destPath, b64Json) {
+function downloadImage(urlOrB64, filepath, b64Data) {
   return new Promise((resolve, reject) => {
-    if (b64Json) {
-      // base64 直接写入
-      const fs = require("node:fs");
-      fs.writeFileSync(destPath, b64Json, "base64");
-      resolve();
+    if (b64Data) {
+      fs.writeFile(filepath, Buffer.from(b64Data, 'base64'), (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
       return;
     }
 
-    const transport = url.startsWith("https:") ? https : http;
-    const fileStream = fs.createWriteStream(destPath);
+    const transport = urlOrB64.startsWith("https:") ? https : http;
+    const file = fs.createWriteStream(filepath);
 
-    transport
-      .get(url, (res) => {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          resolve(downloadImage(res.headers.location, destPath, null));
-          return;
-        }
-
-        if (res.statusCode !== 200) {
-          reject(new Error(`HTTP ${res.statusCode} downloading image`));
-          return;
-        }
-
-        res.pipe(fileStream);
-        fileStream.on("finish", () => {
-          fileStream.close();
-          resolve();
-        });
-      })
-      .on("error", reject);
+    transport.get(urlOrB64, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        resolve(downloadImage(res.headers.location, filepath));
+        return;
+      }
+      if (res.statusCode !== 200) {
+        reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+        return;
+      }
+      res.pipe(file);
+      file.on("finish", () => {
+        file.close();
+        resolve();
+      });
+    }).on("error", (err) => {
+      fs.unlink(filepath, () => {});
+      reject(err);
+    });
   });
 }

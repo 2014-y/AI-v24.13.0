@@ -3887,8 +3887,7 @@ ipcMain.handle('role-config-save', async (event, payload) => {
 ipcMain.handle('config-save', async (event, newConfig) => {
     try {
         let cleanConfig = JSON.parse(JSON.stringify(newConfig));
-        delete cleanConfig.videoGenerator;
-        delete cleanConfig.imageGenerator;
+        // 保留用户在界面配置的生图与生视频服务参数
 
         // 启用插件必须进 allow，保证别人电脑上开关真能加载
         try {
@@ -4930,8 +4929,6 @@ function sleepMs(ms) {
 
 function writeOpenClawConfigObject(config) {
     const cleanConfig = JSON.parse(JSON.stringify(config));
-    delete cleanConfig.videoGenerator;
-    delete cleanConfig.imageGenerator;
     const originalBytes = fs.existsSync(CONFIG_PATH) ? fs.statSync(CONFIG_PATH).size : 39500;
     let newJson = JSON.stringify(cleanConfig, null, 2);
     const newBytes = Buffer.byteLength(newJson, 'utf8');

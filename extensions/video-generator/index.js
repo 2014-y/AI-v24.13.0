@@ -1,6 +1,6 @@
 /**
  * video-generator Skill
- * 通过 agnes-ai 视频 API 生成视频，支持完整参数控制和 key 轮询
+ * 支持自定义配置优先 + 内置 7 key 自动平滑降级
  */
 
 import path from "node:path";
@@ -9,29 +9,21 @@ import fs from "node:fs";
 import https from "node:https";
 import http from "node:http";
 
-const API_BASE = "https://apihub.agnes-ai.com/v1/videos";
+const DEFAULT_API_BASE = "https://apihub.agnes-ai.com/v1/videos";
 const STATE_DIR = process.env.OPENCLAW_STATE_DIR
   || path.join(process.env.OPENCLAW_HOME || process.env.USERPROFILE || process.env.HOME || os.homedir(), '.openclaw');
 const SAVE_DIR = path.join(STATE_DIR, 'video-output');
 
-// 7 API keys 轮询
-const API_KEYS = [
-  "sk-95sX8HnNOhh8FFfAm3ccOgGFg6MA8yf7zU5PEEQdGxSuKhQY", // agnes-ai-7
-  "sk-z2NHJlR99oODMYvS9C5u8qLMNf6hmc9vRm5JenvHHStTfxZn", // agnes-ai-1
-  "sk-ct7MSvbC8LqL1gGqJuoVCKgjtecXwbjIUZhXQ0gITEaksCS0", // agnes-ai-2
-  "sk-nZtkk9AAyZl3sbkv8Gw4R1R99NnkgUWhRGL4Cp0Dl7LSPsUu", // agnes-ai-3
-  "sk-Y6ORz4nnuXHUpwjdXv2WlmLMwCfPBMtmh69iuXxZkQtZazyV", // agnes-ai-4
-  "sk-GhS6TUB6W8LibJT5whDhbUvmYW3csM0HdGDdjotpgadQbd2F", // agnes-ai-5
-  "sk-HV5HINAfAhMJOnYxYp83ZXDLqeudt8ofLtdm9Bj5p9SUOUGh", // agnes-ai-6
+// 内置 7 API keys 轮询
+const BUILTIN_API_KEYS = [
+  "sk-95sX8HnNOhh8FFfAm3ccOgGFg6MA8yf7zU5PEEQdGxSuKhQY",
+  "sk-z2NHJlR99oODMYvS9C5u8qLMNf6hmc9vRm5JenvHHStTfxZn",
+  "sk-ct7MSvbC8LqL1gGqJuoVCKgjtecXwbjIUZhXQ0gITEaksCS0",
+  "sk-nZtkk9AAyZl3sbkv8Gw4R1R99NnkgUWhRGL4Cp0Dl7LSPsUu",
+  "sk-Y6ORz4nnuXHUpwjdXv2WlmLMwCfPBMtmh69iuXxZkQtZazyV",
+  "sk-GhS6TUB6W8LibJT5whDhbUvmYW3csM0HdGDdjotpgadQbd2F",
+  "sk-HV5HINAfAhMJOnYxYp83ZXDLqeudt8ofLtdm9Bj5p9SUOUGh",
 ];
-
-let keyIndex = 0;
-
-function nextApiKey() {
-  const key = API_KEYS[keyIndex % API_KEYS.length];
-  keyIndex++;
-  return key;
-}
 
 export default function createPlugin(runtime) {
   return createSkill(runtime);
@@ -42,36 +34,30 @@ export function createSkill(runtime) {
     fs.mkdirSync(SAVE_DIR, { recursive: true });
   }
 
-  const defaultVideoModel = runtime?.config?.agents?.defaults?.videoGenerationModel?.primary || "agnes-video-v2.0";
-  const userApiBase = runtime?.config?.videoGenerator?.apiBase || "https://apihub.agnes-ai.com/v1/videos";
-  const userApiKey = runtime?.config?.videoGenerator?.apiKey;
+  const customConfig = runtime?.config?.videoGenerator || {};
+  const rawKey = (customConfig.apiKey || '').trim();
+  const userApiKey = (rawKey && rawKey !== 'sk-builtin-agnes-key-mask') ? rawKey : null;
+  const userApiBase = customConfig.apiBase || DEFAULT_API_BASE;
+  const customModel = customConfig.model || runtime?.config?.agents?.defaults?.videoGenerationModel?.primary || "agnes-video-v2.0";
 
   return {
     name: "video-generator",
-    description: "Generate videos via agnes-ai with full parameter control",
+    description: "Generate videos via agnes-ai or user-customized API with full parameter control",
 
     instruction: `当用户要求生成视频时使用此技能。支持以下参数控制：
 
 - prompt (必填): 视频描述文本
-- image_url (可选): 首帧图片 URL，用于图生视频
-- model (默认 "agnes-video-v2.0"): 模型名称
-- duration (默认 5): 视频时长（秒），支持 5-30
-- resolution (默认 "720p"): 分辨率，可选 "480p"、"720p"、"1080p"
-- fps (默认 24): 帧率，可选 15、24、30
-- aspect_ratio (默认 "16:9"): 宽高比，可选 "16:9"、"9:16"、"1:1"、"4:3"
-- output_dir (默认本地目录): 保存路径
-
-API key 自动轮询 7 个密钥，失败自动切换下一个。
-
-示例场景：
-- "帮我生成一个10秒的海浪视频"
-- "生成一个9:16竖版的猫咪视频"
-- "把这个图片变成1080p的视频"`,
+- image_url (可选): 首帧图片 URL
+- model: 模型名称
+- duration (默认 5): 视频时长（秒）
+- resolution (默认 "720p"): 分辨率
+- fps (默认 24): 帧率
+- aspect_ratio (默认 "16:9"): 宽高比`,
 
     async draw_video({
       prompt,
       image_url,
-      model = defaultVideoModel,
+      model,
       duration = 5,
       resolution = "720p",
       fps = 24,
@@ -83,10 +69,11 @@ API key 自动轮询 7 个密钥，失败自动切换下一个。
         fs.mkdirSync(dir, { recursive: true });
       }
 
+      const selectedModel = model || customModel;
       const filename = `video_${Date.now()}.mp4`;
       const filepath = path.join(dir, filename);
 
-      const cleanModel = model.includes('/') ? model.split('/').pop() : model;
+      const cleanModel = selectedModel.includes('/') ? selectedModel.split('/').pop() : selectedModel;
       const body = {
         model: cleanModel,
         prompt,
@@ -99,9 +86,8 @@ API key 自动轮询 7 个密钥，失败自动切换下一个。
         body.image_url = image_url;
       }
 
-      console.log(`[video-generator] Generating: ${prompt} | duration=${duration}s | ${resolution} | ${fps}fps | ${aspect_ratio}`);
+      console.log(`[video-generator] Generating: ${prompt} | model=${selectedModel} | duration=${duration}s | ${resolution}`);
 
-      // 带 key 轮询的 API 调用
       const videoUrl = await callVideoAPIWithRetry(body, userApiBase, userApiKey);
 
       await downloadFile(videoUrl, filepath);
@@ -117,15 +103,12 @@ API key 自动轮询 7 个密钥，失败自动切换下一个。
         resolution,
         fps: Number(fps),
         aspect_ratio,
-        model,
+        model: selectedModel,
       };
     },
   };
 }
 
-/**
- * 带 key 轮询重试的 API 调用
- */
 async function callVideoAPIWithRetry(body, apiBase, userApiKey) {
   let lastError = null;
 
@@ -134,109 +117,152 @@ async function callVideoAPIWithRetry(body, apiBase, userApiKey) {
       return await callVideoAPI(body, userApiKey, apiBase);
     } catch (err) {
       lastError = err;
-      console.warn(`[video-generator] User API Key failed, falling back to built-in keys...`);
+      console.warn(`[video-generator] Custom API key failed: ${err.message}, falling back to built-in keys...`);
     }
   }
 
-  for (let attempt = 0; attempt < API_KEYS.length; attempt++) {
-    const apiKey = API_KEYS[attempt % API_KEYS.length];
+  for (let attempt = 0; attempt < BUILTIN_API_KEYS.length; attempt++) {
+    const apiKey = BUILTIN_API_KEYS[attempt % BUILTIN_API_KEYS.length];
     try {
-      return await callVideoAPI(body, apiKey, apiBase);
+      return await callVideoAPI(body, apiKey, DEFAULT_API_BASE);
     } catch (err) {
       lastError = err;
-      // [suppressed] key rotation failure
     }
   }
 
-  throw new Error(`All API keys failed. Last error: ${lastError?.message}`);
+  throw new Error(`All video API keys failed. Last error: ${lastError?.message}`);
 }
 
-/**
- * 调用 agnes-ai 视频生成 API
- */
-function callVideoAPI(body, apiKey, apiBase) {
+function callVideoAPI(body, apiKey, apiBaseUrl) {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(body);
-    const urlObj = new URL(apiBase || API_BASE);
-
+    const urlObj = new URL(apiBaseUrl);
     const transport = urlObj.protocol === "https:" ? https : http;
 
-    const req = transport.request(
-      {
-        hostname: urlObj.hostname,
-        port: urlObj.port,
-        path: urlObj.pathname,
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(data),
-          Authorization: `Bearer ${apiKey}`,
-        },
+    const req = transport.request({
+      hostname: urlObj.hostname,
+      port: urlObj.port,
+      path: urlObj.pathname + urlObj.search,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(data),
+        Authorization: `Bearer ${apiKey}`,
       },
-      (res) => {
-        let responseData = "";
-        res.on("data", (chunk) => (responseData += chunk));
-        res.on("end", () => {
-          try {
-            const result = JSON.parse(responseData);
-            if (result.error) {
-              reject(new Error(`API Error: ${result.error.message}`));
-              return;
-            }
-            const videoUrl =
-              result.video_url ||
-              result.url ||
-              result.output_url ||
-              result.data?.url ||
-              result.data?.video_url;
-            if (!videoUrl) {
-              reject(
-                new Error(
-                  `No video URL in response: ${JSON.stringify(result).substring(0, 500)}`
-                )
-              );
-              return;
-            }
-            resolve(videoUrl);
-          } catch (e) {
-            reject(new Error(`Failed to parse API response: ${e.message}`));
+    }, (res) => {
+      let chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", async () => {
+        try {
+          const raw = Buffer.concat(chunks).toString();
+          const result = JSON.parse(raw);
+          if (res.statusCode < 200 || res.statusCode >= 300 || result.error) {
+            reject(new Error(result.error?.message || `HTTP ${res.statusCode}`));
+            return;
           }
-        });
-      }
-    );
 
-    req.on("error", (e) => reject(e));
+          if (result.status === "processing" || result.id) {
+            const taskId = result.id || result.task_id;
+            if (taskId) {
+              try {
+                const finalUrl = await pollVideoResult(taskId, apiKey, apiBaseUrl);
+                resolve(finalUrl);
+                return;
+              } catch (pollErr) {
+                reject(pollErr);
+                return;
+              }
+            }
+          }
+
+          const videoUrl = result.video_url || result.url || result.output_url || result.data?.[0]?.url;
+          if (videoUrl) {
+            resolve(videoUrl);
+          } else {
+            reject(new Error(`No video URL in response`));
+          }
+        } catch (e) {
+          reject(new Error(`Response parse error: ${e.message}`));
+        }
+      });
+    });
+
+    req.on("error", reject);
     req.write(data);
     req.end();
   });
 }
 
-/**
- * 下载远程文件到本地
- */
+async function pollVideoResult(taskId, apiKey, apiBaseUrl) {
+  const maxAttempts = 120;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    await new Promise((r) => setTimeout(r, 5000));
+    try {
+      const result = await checkVideoTaskStatus(taskId, apiKey, apiBaseUrl);
+      if (result.status === "succeeded" || result.status === "completed" || result.status === "success") {
+        const videoUrl = result.video_url || result.url || result.output_url || result.data?.[0]?.url;
+        if (videoUrl) return videoUrl;
+      }
+      if (result.status === "failed" || result.status === "error") {
+        throw new Error(`Video generation failed: ${result.error || 'Unknown error'}`);
+      }
+    } catch (e) {
+      if (e.message.includes("failed")) throw e;
+    }
+  }
+  throw new Error("Video generation timed out after 10 minutes");
+}
+
+function checkVideoTaskStatus(taskId, apiKey, apiBaseUrl) {
+  return new Promise((resolve, reject) => {
+    const pollUrl = `${apiBaseUrl.replace(/\/$/, '')}/${taskId}`;
+    const urlObj = new URL(pollUrl);
+    const transport = urlObj.protocol === "https:" ? https : http;
+
+    const req = transport.request({
+      hostname: urlObj.hostname,
+      port: urlObj.port,
+      path: urlObj.pathname + urlObj.search,
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    }, (res) => {
+      let chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => {
+        try {
+          const result = JSON.parse(Buffer.concat(chunks).toString());
+          resolve(result);
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+
+    req.on("error", reject);
+    req.end();
+  });
+}
+
 function downloadFile(url, destPath) {
   return new Promise((resolve, reject) => {
     const transport = url.startsWith("https:") ? https : http;
     const fileStream = fs.createWriteStream(destPath);
-
-    transport
-      .get(url, (res) => {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          resolve(downloadFile(res.headers.location, destPath));
-          return;
-        }
-
-        if (res.statusCode !== 200) {
-          reject(new Error(`HTTP ${res.statusCode} downloading video`));
-          return;
-        }
-
-        res.pipe(fileStream);
-        fileStream.on("finish", () => {
-          fileStream.close();
-          resolve();
-        });
-      })
-      .on("error", reject);
+    transport.get(url, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        resolve(downloadFile(res.headers.location, destPath));
+        return;
+      }
+      if (res.statusCode !== 200) {
+        reject(new Error(`Download failed HTTP ${res.statusCode}`));
+        return;
+      }
+      res.pipe(fileStream);
+      fileStream.on("finish", () => { fileStream.close(); resolve(); });
+    }).on("error", (err) => {
+      fs.unlink(destPath, () => {});
+      reject(err);
+    });
   });
 }

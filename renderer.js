@@ -3206,8 +3206,6 @@ function updateConfigJsonPreview(force = false) {
     // 只有当用户当前没有聚焦在 JSON 编辑框输入时，才自动用表单最新状态覆盖内容，防止打字时光标位移
     if (previewEl && (force || document.activeElement !== previewEl)) {
         const previewConfig = JSON.parse(JSON.stringify(configData));
-        delete previewConfig.videoGenerator;
-        delete previewConfig.imageGenerator;
         if (previewConfig.agents && previewConfig.agents.defaults) {
             delete previewConfig.agents.defaults.imageGenerationModel;
             delete previewConfig.agents.defaults.videoGenerationModel;
@@ -4975,10 +4973,12 @@ const handleSaveConfigAction = async () => {
         localStorage.setItem('client_pref_video_model', videoVal);
 
         configData.imageGenerator.apiBase = document.getElementById('image-api-base').value.trim();
+        configData.imageGenerator.model = imageVal;
         const imgKey = document.getElementById('image-api-key').value.trim();
         configData.imageGenerator.apiKey = (imgKey === KEY_MASK || imgKey === AGNES_BUILT_IN_KEY) ? '' : imgKey;
 
         configData.videoGenerator.apiBase = document.getElementById('video-api-base').value.trim();
+        configData.videoGenerator.model = videoVal;
         const vidKey = document.getElementById('video-api-key').value.trim();
         configData.videoGenerator.apiKey = (vidKey === KEY_MASK || vidKey === AGNES_BUILT_IN_KEY) ? '' : vidKey;
     }

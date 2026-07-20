@@ -1,9 +1,7 @@
 /**
  * agnes-media-cli.js
- * 命令行工具：通过 agnes-ai API 生成图片和视频
- * 用法:
- *   node agnes-media-cli.js video --prompt "描述" [--duration 10] [--resolution 1080p] [--fps 24] [--aspect 16:9] [--model agnes-video-v2.0]
- *   node agnes-media-cli.js image --prompt "描述" [--model agnes-image-2.0-flash] [--size 1024x1024] [--quality standard] [--style vivid] [--count 1]
+ * 命令行工具：通过 agnes-ai API 或用户自定义 API 生成图片和视频
+ * 支持用户自定义配置优先 + 内置 7 key 自动平滑降级
  */
 
 import path from "node:path";
@@ -12,12 +10,12 @@ import fs from "node:fs";
 import https from "node:https";
 import http from "node:http";
 
-const API_BASE = "https://apihub.agnes-ai.com/v1";
+const DEFAULT_API_BASE = "https://apihub.agnes-ai.com/v1";
 const STATE_DIR = process.env.OPENCLAW_STATE_DIR
   || path.join(process.env.OPENCLAW_HOME || process.env.USERPROFILE || process.env.HOME || os.homedir(), '.openclaw');
 const SAVE_DIR = path.join(STATE_DIR, 'media-output');
 
-const API_KEYS = [
+const BUILTIN_API_KEYS = [
   "sk-95sX8HnNOhh8FFfAm3ccOgGFg6MA8yf7zU5PEEQdGxSuKhQY",
   "sk-z2NHJlR99oODMYvS9C5u8qLMNf6hmc9vRm5JenvHHStTfxZn",
   "sk-ct7MSvbC8LqL1gGqJuoVCKgjtecXwbjIUZhXQ0gITEaksCS0",
@@ -27,7 +25,25 @@ const API_KEYS = [
   "sk-HV5HINAfAhMJOnYxYp83ZXDLqeudt8ofLtdm9Bj5p9SUOUGh",
 ];
 
-// --- Helpers ---
+function loadUserConfig(type) {
+  try {
+    const configPath = path.join(STATE_DIR, 'openclaw.json');
+    if (fs.existsSync(configPath)) {
+      const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      const sec = type === 'video' ? cfg.videoGenerator : cfg.imageGenerator;
+      if (sec) {
+        const rawKey = (sec.apiKey || '').trim();
+        const apiKey = (rawKey && rawKey !== 'sk-builtin-agnes-key-mask') ? rawKey : null;
+        return {
+          apiBase: sec.apiBase || null,
+          apiKey: apiKey,
+          model: sec.model || null
+        };
+      }
+    }
+  } catch (e) {}
+  return { apiBase: null, apiKey: null, model: null };
+}
 
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -52,50 +68,23 @@ function downloadFile(url, destPath) {
   });
 }
 
-function apiPost(endpoint, body, apiKey) {
+function apiPost(endpoint, body, apiKey, customBaseUrl) {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(body);
-    const urlObj = new URL(API_BASE + endpoint);
+    let fullUrl = (customBaseUrl || DEFAULT_API_BASE);
+    if (!fullUrl.endsWith(endpoint) && !fullUrl.includes(endpoint)) {
+      fullUrl = fullUrl.replace(/\/$/, '') + endpoint;
+    }
+    const urlObj = new URL(fullUrl);
     const transport = urlObj.protocol === "https:" ? https : http;
     const req = transport.request({
       hostname: urlObj.hostname,
-      port: urlObj.port,
-      path: urlObj.pathname,
+      port: urlObj.port || (urlObj.protocol === "https:" ? 443 : 80),
+      path: urlObj.pathname + urlObj.search,
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Content-Length": Buffer.byteLength(data),
-        Authorization: `Bearer ${apiKey}`,
-      },
-    }, (res) => {
-      let chunks = [];
-      res.on("data", (c) => chunks.push(c));
-      res.on("end", () => {
-        try {
-          const result = JSON.parse(Buffer.concat(chunks).toString());
-          if (result.error) reject(new Error(`API Error: ${result.error.message}`));
-          else resolve(result);
-        } catch (e) {
-          reject(new Error(`Parse error: ${e.message}`));
-        }
-      });
-    });
-    req.on("error", reject);
-    req.write(data);
-    req.end();
-  });
-}
-
-function apiGet(endpoint, apiKey) {
-  return new Promise((resolve, reject) => {
-    const urlObj = new URL(API_BASE + endpoint);
-    const transport = urlObj.protocol === "https:" ? https : http;
-    const req = transport.request({
-      hostname: urlObj.hostname,
-      port: urlObj.port,
-      path: urlObj.pathname,
-      method: "GET",
-      headers: {
         Authorization: `Bearer ${apiKey}`,
       },
     }, (res) => {
@@ -112,6 +101,7 @@ function apiGet(endpoint, apiKey) {
       });
     });
     req.on("error", reject);
+    req.write(data);
     req.end();
   });
 }
@@ -146,20 +136,26 @@ function apiGetRaw(urlStr, apiKey) {
   });
 }
 
-function apiWithRetry(endpoint, body, maxRetries = API_KEYS.length) {
-  let lastErr = null;
-  for (let i = 0; i < maxRetries; i++) {
+async function apiWithRetry(endpoint, body, userConfig) {
+  if (userConfig && userConfig.apiKey) {
     try {
-      return apiPost(endpoint, body, API_KEYS[i % API_KEYS.length]);
+      return await apiPost(endpoint, body, userConfig.apiKey, userConfig.apiBase);
+    } catch (e) {
+      console.error(`[media-cli] User API Key failed: ${e.message}, falling back to built-in keys`);
+    }
+  }
+
+  let lastErr = null;
+  for (let i = 0; i < BUILTIN_API_KEYS.length; i++) {
+    try {
+      return await apiPost(endpoint, body, BUILTIN_API_KEYS[i % BUILTIN_API_KEYS.length], DEFAULT_API_BASE);
     } catch (e) {
       lastErr = e;
-      console.error(`[retry] Key ${i + 1}/${maxRetries} failed: ${e.message}`);
+      console.error(`[retry] Built-in Key ${i + 1}/${BUILTIN_API_KEYS.length} failed: ${e.message}`);
     }
   }
   throw lastErr;
 }
-
-// --- Parse simple args ---
 
 function getArg(name, argv) {
   const idx = argv.indexOf(`--${name}`);
@@ -170,88 +166,64 @@ function getArg(name, argv) {
 // --- Video ---
 
 async function genVideo(argv) {
+  const userConfig = loadUserConfig('video');
   const prompt = getArg("prompt", argv);
   if (!prompt) throw new Error("Missing --prompt");
 
-  const duration = Number(getArg("duration", argv)) || 5;
+  const model = getArg("model", argv) || userConfig.model || "agnes-video-v2.0";
+  const duration = getArg("duration", argv) || 5;
   const resolution = getArg("resolution", argv) || "720p";
-  const fps = Number(getArg("fps", argv)) || 24;
+  const fps = getArg("fps", argv) || 24;
   const aspect_ratio = getArg("aspect", argv) || "16:9";
-  const model = getArg("model", argv) || "agnes-video-v2.0";
-
-  // Resolution to width/height mapping
-  const resMap = { "480p": { w: 854, h: 480 }, "720p": { w: 1280, h: 720 }, "1080p": { w: 1920, h: 1080 } };
-  const res = resMap[resolution] || resMap["720p"];
-
-  // Aspect ratio to width/height adjustment
-  const arMap = { "16:9": 16/9, "9:16": 9/16, "1:1": 1, "4:3": 4/3, "3:4": 3/4 };
-  const targetAR = arMap[aspect_ratio] || 16/9;
-
-  // Adjust width/height to match aspect ratio while keeping resolution class
-  let width = res.w;
-  let height = res.h;
-  const currentAR = width / height;
-  if (Math.abs(currentAR - targetAR) > 0.01) {
-    if (targetAR > 1) {
-      // Wider (16:9, 4:3): landscape orientation
-      height = res.h;
-      width = Math.round(height * targetAR);
-    } else if (targetAR < 1) {
-      // Taller (9:16, 3:4): portrait orientation - swap width/height
-      width = res.h;
-      height = res.w;
-    }
-    // targetAR === 1 (1:1): keep square-ish by using smaller dimension for both
-    // The API will normalize anyway, so leaving as-is is fine
-  }
-
-  // Convert duration to num_frames: seconds = num_frames / frame_rate
-  // num_frames = duration * fps, must satisfy 8n+1 and <= 441
-  let numFrames = Math.round(duration * fps);
-  // Round to nearest 8n+1 value
-  numFrames = Math.max(1, numFrames - ((numFrames - 1) % 8));
-  // Clamp to max
-  numFrames = Math.min(numFrames, 441);
-  // Ensure 8n+1
-  if ((numFrames - 1) % 8 !== 0) numFrames -= ((numFrames - 1) % 8);
-  numFrames = Math.max(numFrames, 1);
+  const image_url = getArg("image_url", argv);
 
   ensureDir(SAVE_DIR);
-  const ts = Date.now();
-  const filename = `video_${ts}.mp4`;
-  const filepath = path.join(SAVE_DIR, filename);
+  const filepath = path.join(SAVE_DIR, `video_${Date.now()}.mp4`);
+  const filename = path.basename(filepath);
 
-  console.error(`[video] prompt="${prompt}" duration=${duration}s (${numFrames} frames @ ${fps}fps) resolution=${resolution} aspect=${aspect_ratio} model=${model}`);
-  if (duration > 18) {
-    // [suppressed] duration warning. Clamped to ${numFrames/fps}s.`);
-  }
+  const cleanModel = model.includes('/') ? model.split('/').pop() : model;
+  const body = {
+    model: cleanModel,
+    prompt,
+    duration: Number(duration),
+    resolution,
+    fps: Number(fps),
+    aspect_ratio,
+  };
+  if (image_url) body.image_url = image_url;
 
-  const result = await apiWithRetry("/videos", {
-    model, prompt, height, width, num_frames: numFrames, frame_rate: fps,
-  });
+  console.error(`[video] prompt="${prompt}" model=${model} duration=${duration}s resolution=${resolution} fps=${fps} aspect=${aspect_ratio}`);
 
-  // 异步任务模式：轮询 video_id
-  if (result.status === "queued" || result.status === "processing" || result.status === "in_progress") {
-    const videoId = result.video_id || result.id;
-    if (!videoId) throw new Error("No video_id in response");
-    console.error(`[video] Task queued: ${videoId}, polling...`);
+  const result = await apiWithRetry("/videos", body, userConfig);
 
-    for (let attempt = 0; attempt < 120; attempt++) {
-      await new Promise((r) => setTimeout(r, 5000)); // 每5秒轮询
+  let numFrames = undefined;
+
+  if (result.status === "processing" || result.id) {
+    const taskId = result.id || result.task_id;
+    console.error(`[video] Task submitted, ID: ${taskId}, polling status...`);
+    const activeKey = userConfig.apiKey || BUILTIN_API_KEYS[0];
+    const activeBase = userConfig.apiBase || DEFAULT_API_BASE;
+    const pollBase = activeBase.endsWith('/videos') ? activeBase : activeBase.replace(/\/$/, '') + '/videos';
+
+    const startTime = Date.now();
+    const maxPollTime = 10 * 60 * 1000;
+    while (Date.now() - startTime < maxPollTime) {
+      await new Promise((r) => setTimeout(r, 5000));
       try {
-        // GET /agnesapi?video_id={video_id} 查询状态（官方推荐）
-        const videoId = result.video_id || result.id;
-        const pollUrl = `https://apihub.agnes-ai.com/agnesapi?video_id=${videoId}`;
-        const pollResult = await apiGetRaw(pollUrl, API_KEYS[0]);
-        console.error(`[video] Poll attempt ${attempt + 1}: status=${pollResult.status || "unknown"}`);
-        if (pollResult.status === "completed") {
-          const videoUrl = pollResult.url || pollResult.remixed_from_video_id;
-          if (!videoUrl) throw new Error(`No video URL in completed response: ${JSON.stringify(pollResult).substring(0, 500)}`);
+        const pollResult = await apiGetRaw(`${pollBase}/${taskId}`, activeKey);
+        const st = pollResult.status || (pollResult.data && pollResult.data.status);
+        console.error(`[video] Poll status: ${st}`);
+        if (st === "succeeded" || st === "completed" || st === "success") {
+          const videoUrl = pollResult.video_url || pollResult.url || pollResult.output_url
+            || (pollResult.data && (pollResult.data.video_url || pollResult.data.url));
+          if (pollResult.num_frames) numFrames = pollResult.num_frames;
+          if (!videoUrl) throw new Error("Video succeeded but no video URL in response");
+
           await downloadFile(videoUrl, filepath);
           console.error(`[video] Saved: ${filepath}`);
           return { success: true, filepath, filename, prompt, duration: Number(duration), resolution, fps: Number(fps), aspect_ratio, model, num_frames: numFrames };
         }
-        if (pollResult.status === "failed" || pollResult.status === "error") {
+        if (st === "failed" || st === "error") {
           throw new Error(`Video generation failed: ${pollResult.error || JSON.stringify(pollResult).substring(0, 200)}`);
         }
       } catch (e) {
@@ -262,7 +234,6 @@ async function genVideo(argv) {
     throw new Error("Video generation timed out after 10 minutes");
   }
 
-  // 同步模式（直接返回视频URL）
   const videoUrl = result.video_url || result.url || result.output_url || result.remixed_from_video_id;
   if (!videoUrl) throw new Error(`No video URL in response: ${JSON.stringify(result).substring(0, 500)}`);
 
@@ -275,10 +246,11 @@ async function genVideo(argv) {
 // --- Image ---
 
 async function genImage(argv) {
+  const userConfig = loadUserConfig('image');
   const prompt = getArg("prompt", argv);
   if (!prompt) throw new Error("Missing --prompt");
 
-  const model = getArg("model", argv) || "agnes-image-2.0-flash";
+  const model = getArg("model", argv) || userConfig.model || "agnes-image-2.0-flash";
   const size = getArg("size", argv) || "1024x1024";
   const quality = getArg("quality", argv) || "standard";
   const count = Number(getArg("count", argv)) || 1;
@@ -289,10 +261,11 @@ async function genImage(argv) {
 
   console.error(`[image] prompt="${prompt}" model=${model} size=${size} quality=${quality} count=${count}`);
 
-  const body = { model, prompt, size, n: Number(count) };
+  const cleanModel = model.includes('/') ? model.split('/').pop() : model;
+  const body = { model: cleanModel, prompt, size, n: Number(count) };
   if (quality) body.quality = quality;
 
-  const result = await apiWithRetry("/images/generations", body);
+  const result = await apiWithRetry("/images/generations", body, userConfig);
 
   if (result.data) {
     for (let i = 0; i < result.data.length; i++) {
@@ -324,8 +297,6 @@ async function main() {
 
   if (!cmd || !["video", "image"].includes(cmd)) {
     console.error("Usage: node agnes-media-cli.js video|image --prompt \"...\" [options]");
-    console.error("  video options: --duration N --resolution 480p|720p|1080p --fps N --aspect 16:9|9:16|1:1|4:3 --model agnes-video-v2.0");
-    console.error("  image options: --size 512x512|1024x1024|1024x1792|1792x1024 --quality standard|hd --style vivid|natural --count 1-4 --model agnes-image-2.0-flash|agnes-image-2.1-flash");
     process.exit(1);
   }
 
@@ -344,8 +315,3 @@ async function main() {
 }
 
 main();
-
-
-
-
-
