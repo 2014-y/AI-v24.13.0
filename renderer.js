@@ -9,6 +9,34 @@ function escapeHtml(unsafe) {
          .replace(/'/g, '&#039;');
 }
 
+// 🌟 跨环境通用高可靠剪贴板复制工具
+async function copyToClipboard(text) {
+    if (!text) return false;
+    try {
+        if (window.api && typeof window.api.copyText === 'function') {
+            const res = await window.api.copyText(text);
+            if (res && res.success) return true;
+        }
+    } catch (e) {}
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch (e) {}
+    try {
+        const tmp = document.createElement('textarea');
+        tmp.value = text;
+        tmp.style.position = 'fixed';
+        tmp.style.opacity = '0';
+        document.body.appendChild(tmp);
+        tmp.focus();
+        tmp.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(tmp);
+        return ok;
+    } catch (e) {}
+    return false;
+}
+
 function renderFlag(flag) {
     if (!flag) return '🌐';
     const cleanFlag = String(flag).trim().toLowerCase();
