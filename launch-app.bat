@@ -1,3 +1,3 @@
 @echo off
-cd /d "c:\Users\Yuan\Desktop\ClawAI\NexoraAgent"
+cd /d "%~dp0"
 npm run app:start
