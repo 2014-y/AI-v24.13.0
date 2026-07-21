@@ -1,17 +1,18 @@
-# Nexora Agent
+# Nexora Agent 智能助手桌面控制台
 
 <p align="center">
-  <img src="config/icon.ico" width="96" height="96" alt="Nexora Agent Logo" />
+  <img src="config/icon.ico" width="128" height="128" alt="Nexora Agent Logo" />
 </p>
 
 <p align="center">
   <strong>专为普通用户与独立开发者打造的本地 AI 智能助手桌面版</strong><br/>
-  一键安装 · 零代码基础 · 多通讯渠道无缝接入 · 本地安全代理 · 离线语音与物理控制
+  一键安装 · 零代码基础 · 多通讯渠道无缝托管 · 本地安全网络代理 · 离线语音与物理级桌面控制
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Windows-0078d7?style=flat-square&logo=windows" alt="Windows" />
   <img src="https://img.shields.io/badge/Framework-Electron-47848f?style=flat-square&logo=electron" alt="Electron" />
+  <img src="https://img.shields.io/badge/Node.js-v24.15.0_Sandbox-339933?style=flat-square&logo=nodedotjs" alt="Node.js" />
   <img src="https://img.shields.io/badge/Language-JavaScript-f7df1e?style=flat-square&logo=javascript&logoColor=black" alt="JavaScript" />
   <img src="https://img.shields.io/badge/License-MIT-ff69b4?style=flat-square" alt="License" />
   <img src="https://img.shields.io/badge/Status-Active_Maint-33cd56?style=flat-square" alt="Status" />
@@ -19,334 +20,476 @@
 </p>
 
 <p align="center">
-  <a href="docs/getting-started.md">新手入门指南</a> ·
-  <a href="docs/install-guide.md">安装说明手册</a> ·
-  <a href="docs/wechat-guide.md">微信渠道接入</a> ·
-  <a href="docs/technical-spec.md">技术架构 Specification</a>
+  <a href="#-小白零门槛一键指南小白流用户必看">小白入门指南</a> ·
+  <a href="#-系统功能与底层技术解密-whitepaper">技术架构白皮书</a> ·
+  <a href="#-多平台即时通讯托管系统-channel-connectors">通讯渠道接入</a> ·
+  <a href="#-故障排除与常见问题自愈诊断手册-troubleshooting">故障自愈诊断</a> ·
+  <a href="#-开发者二次开发与插件生态-developer-guide">开发者 SDK Guide</a>
 </p>
 
 ---
 
-## 🌟 它是做什么的？
+## 📖 目录 (Table of Contents)
 
-**Nexora Agent** 是一个部署在您本地 Windows 操作系统上的 **智能化多渠道 AI 助手控制台**。
-
-许多开发者都梦想拥有一个专属的 AI 助理，能帮您在**微信、QQ、飞书**等平台上自动托管回复客户咨询，做社群气氛活跃组，甚至能记住您和好友的日常偏好与设定，越用越聪明。传统的开源 AI 机器人方案通常需要您去租用云服务器、配置 Node.js/Python 深度学习环境、编写通道适配逻辑、并手工处理复杂的 API 代理设置，这极易因为版本不匹配或环境报错被挡在门外。
-
-**Nexora Agent 实现了完全的图形化开箱即用，无需任何代码基础与复杂的系统配置！**
-您只需：
-1. **双击安装** 本客户端程序。
-2. 点击主界面上的 **「启动 Nexora Agent」** 按钮。
-3. 填入大模型厂商的 API Key（支持 DeepSeek、阿里云百炼、智谱 AI、OpenAI 等标准兼容端点）。
-4. 掏出手机扫码授权。
-一切就已就绪，您的本地 AI 助手便会即刻在对应的通讯软件中替您自动托管日常对话！
+1. [🌟 它是做什么的？（项目介绍与定位）](#-它是做什么的项目介绍与定位)
+2. [🐣 小白零门槛一键指南（小白流用户必看）](#-小白零门槛一键指南小白流用户必看)
+   - [第一步：一键下载与安装](#第一步一键下载与安装)
+   - [第二步：启动软件与识别状态指示灯](#第二步启动软件与识别状态指示灯)
+   - [第三步：填写大模型“大脑”密钥 (API Key)](#第三步填写大模型大脑密钥-api-key)
+   - [第四步：手机扫码，一键托管微信/QQ/飞书](#第四步手机扫码一键托管微信qq飞书)
+3. [📋 系统功能与底层技术解密 (Whitepaper)](#-系统功能与底层技术解密-whitepaper)
+   - [1. 多进程拓扑与系统消息路由架构](#1-多进程拓扑与系统消息路由架构)
+   - [2. 微信断网无限自动重连 (High Availability Reconnect v3)](#2-微信断网无限自动重连-high-availability-reconnect-v3)
+   - [3. 崩塌阻断器自愈复位 (Crash-Loop Breaker Bypass)](#3-崩塌阻断器自愈复位-crash-loop-breaker-bypass)
+   - [4. 本地 Markdown 增量长期记忆中枢 (MEMORY.md)](#4-本地-markdown-增量长期记忆中枢-memorymd)
+   - [5. 智能网络代理加速与防封直连路由 (Mihomo Core)](#5-智能网络代理加速与防封直连路由-mihomo-core)
+   - [6. 全离线神经网络语音运行时 (Voice Runtime)](#6-全离线神经网络语音运行时-voice-runtime)
+   - [7. 物理级桌面控制与自动化 (Computer Use via Win32)](#7-物理级桌面控制与自动化-computer-use-via-win32)
+   - [8. 零环境依赖自愈式 Node.js 沙箱 (Node Sandbox v24.15)](#8-零环境依赖自愈式-nodejs-沙箱-node-sandbox-v2415)
+4. [💬 多平台即时通讯托管系统 (Channel Connectors)](#-多平台即时通讯托管系统-channel-connectors)
+   - [微信渠道 (WeChat) 托管指南](#微信渠道-wechat-托管指南)
+   - [飞书渠道 (Feishu) 托管指南](#飞书渠道-feishu-托管指南)
+   - [QQ 机器人 (QQBot) 托管指南](#qq-机器人-qqbot-托管指南)
+5. [🛠️ 故障排除与常见问题自愈诊断手册 (Troubleshooting)](#-故障排除与常见问题自愈诊断手册-troubleshooting)
+   - [故障一：提示“通讯插件未加载 / crash-loop breaker tripped”](#故障一提示通讯插件未加载--crash-loop-breaker-tripped)
+   - [故障二：微信连上后，网络不好就不回复了](#故障二微信连上后网络不好就不回复了)
+   - [故障三：语音网桥报错 ECONNREFUSED 127.0.0.1:18791](#故障三语音网桥报错-econnrefused-12700118791)
+   - [故障四：点击“开启网络加速”提示 17890 端口冲突](#故障四点击开启网络加速提示-17890-端口冲突)
+6. [👨‍💻 开发者二次开发与插件生态 (Developer Guide)](#-开发者二次开发与插件生态-developer-guide)
+   - [1. 开发调试环境搭建](#1-开发调试环境搭建)
+   - [2. 开发你的第一个 OpenClaw 通讯插件](#2-开发你的第一个-openclaw-通讯插件)
+7. [⚙️ 完整配置文件参考 (OpenClaw.json Spec)](#️-完整配置文件参考-openclawjson-spec)
+8. [📄 许可证协议 (License)](#-许可证协议-license)
 
 ---
 
-## 📋 详尽系统功能与底层技术解密 (Whitepaper)
+## 🌟 它是做什么的？（项目介绍与定位）
 
-为了帮助广大普通用户和开发者深度理解 Nexora Agent 的运行原理，我们在此列出详尽的功能设计清单，并对每个模块在底层**物理硬件层**、**操作系统层**和**网络协议层**的运行原理进行深度解密：
+**Nexora Agent** 是一个部署在您本地 Windows 操作系统上的 **智能化多渠道 AI 助手控制台**。
+
+### 💡 解决的核心痛点
+
+许多个人开发者、微商客服、社群运营者或独立创业者都梦想拥有一个专属的 AI 助理：
+* 能帮您在 **微信、QQ、飞书、Slack** 等平台上全天候自动托管回复客户咨询；
+* 能活跃社群氛围，解答技术问题；
+* 甚至能**记住您和好友的日常偏好与专属约定**，越用越懂您。
+
+然而，传统的开源 AI 机器人部署方案极为繁琐：需要租用云服务器、配置 Node.js/Python 复杂环境、编写通道适配代码、手工解决科学上网代理，还容易因为 IP 跳变导致微信账号被风控封号。
+
+**Nexora Agent 实现了完全的图形化开箱即用，无需任何代码基础与复杂的系统配置！**
+
+### 📊 方案对比一览表
+
+| 维度 | 传统开源 AI 机器人方案 | 腾讯/字节云端搭建方案 | **Nexora Agent 本地控制台** |
+| :--- | :--- | :--- | :--- |
+| **安装门槛** | 极高（需命令行、配置环境、租服务器） | 中等（需购买云函数、绑定域名） | **零门槛（双击安装程序，图形化点击）** |
+| **数据隐私** | 数据存在云端或第三方服务器 | 数据存在云端服务器 | **100% 本地存储，数据不离本机** |
+| **微信防封号**| 容易因云服务器异地 IP 被封 | 容易被检测为机器人封号 | **本地真实 IP 直连，智能防封路由** |
+| **断网自动恢复**| 常常挂掉后需要手动重启 | 需配置健康检查与自动重启脚本 | **无限退避算法，45 秒内断网自动重连** |
+| **长期记忆** | 无记忆或需昂贵的向量数据库 | 依赖云端数据库 | **本地 Markdown 增量长期记忆库** |
+| **运行成本** | 需持续支付云服务器月租 | 需按次支付云函数费用 | **完全免费（仅消耗大模型 API 少量 Token）** |
+
+---
+
+## 🐣 小白零门槛一键指南（小白流用户必看）
+
+哪怕您完全不懂电脑编程、不懂代码、从来没有接触过服务器，只需跟着以下 4 个简单步骤，即可在 3 分钟内拥有您的专属 AI 助手！
+
+```mermaid
+flowchart LR
+    A[1. 双击安装客户端] --> B[2. 点击「启动 Nexora Agent」]
+    B --> C[3. 填入大模型 API Key]
+    C --> D[4. 手机微信/飞书扫码绑定]
+    D --> E[🎉 助手自动在微信中替您回复！]
+```
+
+### 第一步：一键下载与安装
+1. 在仓库的 Release 页面下载最新的安装包 `Nexora.Agent.Setup.exe`。
+2. 双击运行安装程序，一路点击「下一步」，软件会自动完成安装并在桌面生成图标。
+
+### 第二步：启动软件与识别状态指示灯
+1. 双击桌面上的 **「Nexora Agent」** 图标打开软件。
+2. 在软件主界面的左上角，点击大号的 **「启动 Nexora Agent」** 按钮。
+3. 观察左上角的状态指示灯变化：
+   * 🔴 **红色（已停止）**：软件尚未开启服务。
+   * 🟡 **黄色（正在启动...）**：系统正在自动初始化绿色沙箱、加载网络内核。
+   * 🟢 **绿色（运行中 / 已就绪）**：核心服务就绪！代表 AI 大脑已在后台安静监听。
+
+### 第三步：填写大模型“大脑”密钥 (API Key)
+AI 助手需要一个“智慧大脑”来思考和生成回答。软件支持 **DeepSeek、阿里云百炼、智谱 AI、OpenAI** 等所有主流厂商。
+
+以当前性价比极高、回答极其聪明的 **DeepSeek** / **阿里云百炼** 为例：
+1. 打开软件左侧菜单的 **「模型配置」** 页面。
+2. 在供应商列表中选择您使用的厂商（例如 `agnes-ai` 或 `DeepSeek`）。
+3. 填入您申请到的 **API Key**（格式通常为 `sk-xxxxxxxxx`）。
+4. 点击 **「保存配置」**。
+5. *(测试)* 点击左侧 **「模型会话」** 菜单，发一句“你好”，如果 AI 能正常回复您，说明大脑已完美连通！
+
+### 第四步：手机扫码，一键托管微信/QQ/飞书
+1. 点击软件左侧菜单的 **「通讯管理」**。
+2. 在 **「微信渠道」** 卡片上，点击 **「扫码绑定」** 按钮。
+3. 页面上会弹出一个干净的二维码，掏出您的手机，使用微信扫一扫该二维码，并在手机上点击 **「确认登录」**。
+4. 扫码成功后，卡片状态会立刻变成 **🟢 已绑定 (运行中)**。
+5. **恭喜您！** 现在拿另外一台手机给您的微信发消息，您的 AI 助手就会立刻以智能的方式为您自动回复对话了！
+
+---
+
+## 📋 系统功能与底层技术解密 (Whitepaper)
+
+本白皮书章节深入解密 Nexora Agent 在底层**物理硬件层**、**操作系统层**和**网络协议层**的运行原理。
 
 ### 1. 多进程拓扑与系统消息路由架构
-Nexora Agent 在运行时并非单一的单线程进程，而是采用了解耦的多进程拓扑架构设计。为了保障桌面界面的流畅（UI 高帧率）以及避免重型 IO/网络处理导致客户端假死，主进程将各个服务拆分为独立的子进程进行生命周期维护和状态同步：
+
+Nexora Agent 采用解耦的**多进程拓扑架构**设计。为了保障桌面界面的流畅（UI 高帧率渲染）以及避免重型 IO / 网络阻塞导致客户端假死，主进程将各个服务拆分为独立的子进程进行生命周期维护和状态同步：
 
 ```mermaid
 graph TD
     %% 进程定义
-    EP[Electron 主进程 main.js]
-    RP[Electron 渲染进程 renderer.js]
-    OC[OpenClaw 本地网关子进程]
-    VR[Voice Runtime 语音运行时进程]
-    MH[Mihomo 代理内核子进程]
+    EP["Electron 主进程 (main.js)"]
+    RP["Electron 渲染进程 (renderer.js)"]
+    OC["OpenClaw 本地网关子进程"]
+    VR["Voice Runtime 语音运行时进程"]
+    MH["Mihomo 代理内核子进程"]
 
     %% 通信拓扑
-    EP <-->|IPC 桥梁 preload.js| RP
-    EP <-->|PTY 伪终端双向数据管道| OC
-    EP <-->|方法调用 & 状态广播| VR
-    EP <-->|生命周期管理 child_process.spawn| MH
+    EP <-->|IPC 安全桥梁 preload.js| RP
+    EP <-->|PTY 双向管道 / stdin stdio| OC
+    EP <-->|HTTP POST 18791 / 状态广播| VR
+    EP <-->|child_process.spawn 生命周期管理| MH
 
     %% 外部数据流转
     OC <-->|内部代理端口 17890| MH
-    MH <-->|安全防封 NO_PROXY 直连| WX[微信/飞书/QQ 官方服务器]
-    MH <-->|代理规则路由加密转发| API[大模型供应商云端 API]
-    WX <-->|Websocket/长轮询数据交换| OC
-    OC <-->|本地语音网桥 HTTP POST 18791| VR
+    MH <-->|NO_PROXY 直连域名白名单| WX["微信/飞书/QQ 官方服务器"]
+    MH <-->|代理规则路由加密转发| API["大模型云端 API (DeepSeek/GPT)"]
+    WX <-->|Websocket / 长轮询数据交换| OC
+    OC <-->|语音网桥 HTTP POST 18791| VR
 ```
 
-- **Electron 主进程 ([main.js](file:///c:/Users/Yuan/Desktop/ClawAI/NexoraAgent/main.js))**：作为系统的最高管理者，拥有操作系统的完整访问权限。它负责管理应用生命周期、冷启动本地 Node 沙箱、调起 OpenClaw 子进程、运行本地语音运行时及管理 Mihomo 代理内核进程；同时负责捕获未处理的异常并输出到 `main_error.log` 中。
-- **Electron 渲染进程 ([renderer.js](file:///c:/Users/Yuan/Desktop/ClawAI/NexoraAgent/renderer.js))**：在完全隔离的 Chromium 容器沙箱中运行，无法直接访问系统资源，必须通过 [preload.js](file:///c:/Users/Yuan/Desktop/ClawAI/NexoraAgent/preload.js) 暴露的 IPC 安全通道与主进程进行通信，负责前端交互逻辑的呈现、设置模型 API 配置以及终端日志显示。
+#### 核心进程职责划定
+* **Electron 主进程 ([main.js](file:///c:/Users/Yuan/Desktop/ClawAI/NexoraAgent/main.js))**：拥有操作系统的最高权限。负责管理应用生命周期、初始化绿色 Node.js 沙箱环境、拉起 OpenClaw 网关子进程、自愈解封崩溃锁、运行离线语音运行时，以及管理 Mihomo 代理内核。
+* **Electron 渲染进程 ([renderer.js](file:///c:/Users/Yuan/Desktop/ClawAI/NexoraAgent/renderer.js))**：在完全隔离的 Chromium 沙箱中运行，负责绘制高颜值的 UI 界面、管理前端状态、呈现终端实时日志流。必须通过 [preload.js](file:///c:/Users/Yuan/Desktop/ClawAI/NexoraAgent/preload.js) 暴露的受控 IPC 通道与主进程通信。
 
 ---
 
-### 2. 💬 多平台即时通讯托管系统 (Channel Connectors)
-本系统提供了统一的即时通讯通道适配层，允许将大模型的能力无缝分流至多个即时通讯软件，提供全自动的对话接管服务。
+### 2. 微信断网无限自动重连 (High Availability Reconnect v3)
 
-#### 微信渠道托管 (WeChat Integration)
-*   **极简扫码绑定设计**：通道插件在启动后自动向远端微信服务器发起鉴权握手，并在内存中构建登录 UUID 凭证。网关捕获该凭证，将其转换为 Base64 二维码二进制流，通过 IPC 投递到 Electron 前端绘制。用户仅需使用个人微信扫码确认，通道即在数秒内建立。
-*   **会话持久化与静默热重连**：扫码成功后，微信通道在本地隔离沙箱内序列化保存 Session 安全令牌（包含授权 Token、客户端标识与加密 Cookie 集合）。当遇到局域网瞬断或客户端重启时，系统将尝试利用本地凭证进行静默“热重连（Hot Reconnect）”，在 1 秒内自适应恢复在线状态，规避了频繁扫码的繁琐。
-*   **陌生人安全配对与前置防火墙**：为防止非授权好友或大量微信群聊无限制刷爆用户的 AI 模型 Token 额度，网关内置了安全拦截层。未授权的微信号发信时，网关会拦截请求，并反向自动回复：“您好，我是主人的 AI 助手。为了防止额度滥用，请向主人申请加白，配对码为：`[XXXX]`”。主人可在客户端「通讯管理」中一键审核同意，将其加入白名单，保障账户额度安全。
+在现实网络环境中，局域网波动、Wi-Fi 切换或网关网络闪断是不可避免的。传统的微信机器人插件在遇到网络断开时，往往直接抛出致命异常并彻底退出，导致 AI 助手静默“关机不回复”。
 
-#### 飞书渠道托管 (Feishu Integration)
-*   **企业自建应用 API 挂载**：主要面向办公流程、智能排班与流程自动化的托管。支持对接飞书开放平台企业自建应用，通过 WebSocket 事件长连接监听来自单聊和群聊的 `@` 发言。
-*   **异步富文本卡片交互**：本模块深度解析飞书的富文本格式，并支持大模型异步向飞书群内推送精美的交互卡片（Action Cards），支持在卡片上直接点击执行特定回调，适合对接本地自动化工具链。
+Nexora Agent 研发了 **v3 高可用指数退避重连算法 ([plugins/weixin-reconnect/index.js](file:///c:/Users/Yuan/Desktop/ClawAI/NexoraAgent/plugins/weixin-reconnect/index.js))**：
 
-#### QQ 渠道托管 (QQBot Integration)
-*   支持官方 QQ 机器人 API 接入（配置 AppID、令牌等安全信息），同时兼容主流的扫码热绑定，满足日常 QQ 群运营和粉丝互动托管。
+```mermaid
+stateDiagram-v2
+    [*] --> 在线检测中
+    在线检测中 --> 心跳正常: 每 15 秒心跳探测
+    心跳正常 --> 在线检测中
+    在线检测中 --> 网络闪断: 连续 45 秒无响应
+    网络闪断 --> 静默热重连: 触发指数退避重连
+    静默热重连 --> 重连成功: 利用本地 Session 令牌恢复
+    重连成功 --> 在线检测中
+    静默热重连 --> 指数退避重试: 15s -> 30s -> 60s (无上限重试)
+    指数退避重试 --> 静默热重连
+```
 
----
-
-### 3. 🧠 智能网关路由与长期记忆中枢 (LLM & Memory)
-
-#### 统一大模型路由中枢 (OpenClaw Hub)
-大模型供应商的接口字段千差万别，如果直接在每个渠道里编写适配代码，会导致代码极度臃肿且难以维护。OpenClaw 路由层将国内外各大主流 API 服务商（DeepSeek、GPT、通义千问、智谱清言、火山引擎等）的非标准请求接口，在本地全部封装转换为标准的 **OpenAI Chat Completions** 格式。用户只需在界面「模型配置」中填入 Key，即可一键在各渠道中切换当前使用的大脑模型，实现快速的分发路由。
-
-#### 本地 Markdown 增量长期记忆库 (MEMORY.md)
-传统的 AI 助手每次对话都是“断忆”的。如果每次请求都带上漫长的前序历史，不仅会导致 API 消费额度呈指数级上涨，还会因为上下文太长而产生“注意力分散（Attention Decay）”。
-Nexora Agent 自研了长期记忆沉淀机制。当每次对话结束时，网关会在后台启动异步抽取线程，识别该次对话中用户的偏好、特定设定或重大事实，以独占锁定写锁的方式，将新事实增量合并至本地 `%USERPROFILE%\.openclaw\MEMORY.md` 文件中。
-
-为了避免条目堆积造成“记忆污染”，记忆引擎会解析 Markdown 的列表结构，并在语义层面进行相似度对比去重：
-*   **增量构建与去重**：每次合并都会提取 Markdown 的标题与列表项，在语义层面进行对比去重，防止重复条目污染记忆。在下一次对话启动时，网关会检索该记忆库并将高相关性的记忆切片注入大模型的 System Prompt 顶部，实现跨越会话周期的“长期人格与记忆”。
-
-#### MCP (Model Context Protocol) 插件整合
-网关集成了 Model Context Protocol，支持挂载外部的本地 MCP 插件服务（例如本地文件读写器、网页爬虫、Google 搜索服务）。这允许大模型根据需要主动发起工具调用（Tool Call），读取本地文件或查询最新网页信息，突破了其固有的训练知识边界，让本地助手具备物理文件感知与实时检索能力。
+#### 技术突破点：
+1. **缩短检测周期**：将健康检测间隔由传统的 30s 缩短至 **15s**，失联判定门槛由 3分钟 缩短至 **45s**，能够在网络发生故障的瞬间极速感知。
+2. **取消重试上限**：废除了原有的 `MAX_RECONNECT_ATTEMPTS = 3` 限制，改为**无限指数退避重试循环**（15s $\rightarrow$ 30s $\rightarrow$ 60s $\rightarrow$ 最大 120s）。
+3. **Session 热补丁恢复**：重连时优先使用本地加密存储的 Session 令牌（包含 Cookie 集合与 Auth Token），无需用户重新扫码即可在网络恢复后 45 秒内实现无感热连。
 
 ---
 
-### 4. 🗣️ 全离线神经网络语音运行时 (Voice Runtime)
-为了在无网环境或对隐私保护有极高要求的场景下提供语音交互，系统内置了强大的全离线语音运行时（[voice-runtime.js](file:///c:/Users/Yuan/Desktop/ClawAI/NexoraAgent/voice-runtime.js)）：
+### 3. 崩塌阻断器自愈复位 (Crash-Loop Breaker Bypass)
+
+#### 问题背景
+在 OpenClaw 原生引擎中，内置了一套保护机制：如果用户频繁重启或强制杀进程，网关检测到 5 分钟内发生了 3 次 `unclean boot`（非正常关闭），就会触发 `restart-loop breaker tripped`，并**自动封锁拦截所有的通讯通道**，在日志中打印：
+`[openclaw-weixin] channel autostart suppressed by crash-loop breaker`。
+
+#### 本系统的物理级自愈机制
+为了避免用户因为强行关闭软件而被挡在门外，Nexora Agent 在多层维度构建了自愈通道：
+
+1. **配置文件永久禁用 ([openclaw.json](file:///c:/Users/Yuan/Desktop/ClawAI/NexoraAgent/openclaw.json#L372-L379))**：
+   在配置文件中注入官方级闭环控制：
+   ```json
+   "gateway": {
+     "crashLoopBreaker": {
+       "enabled": false
+     },
+     "autoStartChannels": true
+   }
+   ```
+2. **环境变量免疫注入 ([main.js](file:///c:/Users/Yuan/Desktop/ClawAI/NexoraAgent/main.js#L3679-L3684))**：
+   在 fork 子进程时注入 `OPENCLAW_IGNORE_UNCLEAN_BOOTS = 'true'`，强行让网关忽略非正常关闭计数。
+3. **主进程日志捕获与 RPC 强行解封 ([main.js](file:///c:/Users/Yuan/Desktop/ClawAI/NexoraAgent/main.js#L3820-L3846))**：
+   主进程实时解析 stdout。一旦捕捉到 `suppressed by crash-loop breaker` 关键字，会在网关就绪 1.2 秒内自动向 `http://127.0.0.1:18789/v1/channels/start` 投递解锁指令，强制唤醒所有通道！
+
+---
+
+### 4. 本地 Markdown 增量长期记忆中枢 (MEMORY.md)
+
+传统的 AI 每次对话都是“失忆”的。如果每次对话都带上庞大的历史记录，API 消费额度会呈指数级上升，且容易引发大模型的“注意力分散 (Attention Decay)”。
+
+```mermaid
+flowchart TD
+    A[单次对话结束] --> B[后台启动异步记忆抽取线程]
+    B --> C[识别用户偏好/设定/重大事实]
+    C --> D[读取本地 MEMORY.md]
+    D --> E{语义相似度对比去重}
+    E -- 存在重复设定 --> F[更新覆盖原有条目]
+    E -- 全新记忆条目 --> G[增量追加合并]
+    F & G --> H[写入 %USERPROFILE%\.openclaw\MEMORY.md]
+    H --> I[下一次对话时自动检索注入 System Prompt]
+```
+
+Nexora Agent 实现了本地 **Markdown 增量长期记忆库**。
+* **文件位置**：`%USERPROFILE%\.openclaw\MEMORY.md`。
+* **去重算法**：记忆抽取引擎解析 Markdown 列表语法，并在语义层面进行相似度比对，自动剔除重复事实。
+* **零成本检索**：在发起新对话时，网关检索与当前话题相关的记忆切片，并将其贴在大模型 System Prompt 顶部，实现跨越会话周期的“长期人格与记忆”。
+
+---
+
+### 5. 智能网络代理加速与防封直连路由 (Mihomo Core)
+
+大模型 API（如 OpenAI、Claude 等）往往需要代理加速，但若微信、飞书等通讯软件的连接也走了海外代理，会瞬间触发腾讯/字节服务器的风控（判定为异地 IP 登录封号）。
+
+系统研发了 **“双路网络分离” 防封路由** 技术：
+
+```mermaid
+flowchart TD
+    SubGraph1[Nexora Agent 网络流量]
+    SubGraph1 --> PacketFilter{流量目标域名匹配}
+    
+    PacketFilter -- 匹配 NO_PROXY 域名白名单<br/>(微信 *.qpic.cn / 飞书 *.feishu.cn) --> Direct[物理网卡真实 IP 直连<br/>(安全零风控)]
+    PacketFilter -- 匹配 LLM 大模型 API<br/>(api.openai.com / api.anthropic.com) --> Proxy[本地 17890 代理端口<br/>(Mihomo 内核加密加速)]
+```
+
+#### 白名单保护清单包括：
+* 微信服务器域名：`*.weixin.qq.com` / `*.qpic.cn` / `*.weixinbridge.com`
+* 飞书服务器域名：`*.feishu.cn` / `*.larksuite.com`
+* QQ 机器人域名：`*.qq.com` / `*.tencent.com`
+
+**效果**：微信握手与心跳包 100% 走本地物理网卡直连，大模型请求走代理加速，技术上彻底切断了因“异地 IP 跳变登录”引发的封号隐患。
+
+---
+
+### 6. 全离线神经网络语音运行时 (Voice Runtime)
+
+为满足全离线或隐私敏感场景，系统集成了全离线语音运行时 ([voice-runtime.js](file:///c:/Users/Yuan/Desktop/ClawAI/NexoraAgent/voice-runtime.js))：
 
 #### 离线 ASR 与 VAD 静音判定滑窗算法
-启动后，系统调用本机物理声卡捕获 16000Hz 原始 PCM 字节流。
-利用内置的 VAD（语音活动检测）模型进行滑窗概率计算，以 $10ms$ 帧长实时计算输入信号的“有人声概率”。
+启动后，系统调用本机物理声卡捕获 16000Hz 原始 PCM 字节流，利用 VAD（语音活动检测）模型进行滑窗概率计算，以 $10\text{ms}$ 帧长实时计算“有人声概率” $P(f_t)$。
 
-在 VAD 判定逻辑中，系统维护一个音频概率滑动窗口。设当前分析的音频帧为 $f_t$，经过 VAD 模型推理得出的有人声概率为 $P(f_t)$。系统通过以下机制检测用户的说话状态：
-- **开启录音**：当连续 $N_{\text{start}}$ 帧满足 $P(f_t) > \theta_{\text{start}}$（阈值一般设为 `0.55`）时，判定用户开始说话，触发 ASR 录制：
+* **开启录音**：当连续 $N_{\text{start}}$ 帧满足 $P(f_t) > \theta_{\text{start}}$（设为 `0.55`）时，判定用户开始说话：
   $$ \sum_{i=t-N_{\text{start}}}^{t} \mathbb{I}\left(P(f_i) > \theta_{\text{start}}\right) = N_{\text{start}} $$
-- **静音截断**：当系统处于录音状态，且检测到连续 $N_{\text{end}}$ 帧（对应持续约 `800` 毫秒）的概率满足 $P(f_t) < \theta_{\text{end}}$（阈值一般为 `0.35`）时，判定用户说话结束，立即截断录音缓存：
+* **静音截断**：当连续 $N_{\text{end}}$ 帧（对应持续约 `800` 毫秒）满足 $P(f_t) < \theta_{\text{end}}$（设为 `0.35`）时，判定说话结束，立即截断音频送入本地 Sherpa-Onnx 编码器：
   $$ \sum_{i=t-N_{\text{end}}}^{t} \mathbb{I}\left(P(f_i) < \theta_{\text{end}}\right) = N_{\text{end}} $$
 
-音频被截断后，直接送入本地的 Sherpa-Onnx 声学编码器翻译为文本。整个过程**没有任何一字节的语音数据上传至云端**，彻底保护谈话隐私。
-
-#### 离线中英混合 TTS 语音合成与 Windows SAPI 降级兜底
-*   **VITS 神经网络离线合成**：本模块直接加载本地的 VITS 神经网络语音生成模型（预设为中英混合男声音色包 `fanchen-wnj-zh-en`）。TTS 引擎将 LLM 输出的 Markdown 文本通过字音转换器转换为拼音与音素，利用 CPU 进行多线程 ONNX 推理生成 PCM 格式的物理音频流并输出给声卡播放。
-*   **SAPI (Speech API) 降级兜底**：为了兼容低端电脑和未下载庞大语音包的用户，系统会自动降级调用 Windows 系统原生的 `SAPI` COM 组件。它通过加载内存 COM 组件，以零网络依赖、零硬件开销的方式实现稳定朗读。
-
-#### 本地 18791 语音网桥服务 (Voice Bridge HTTP Port)
-为了解决多通道网关进程与主进程之间的跨进程语音调用，主进程在本地监听 `18791` 端口，提供局域网语音桥接服务。
-- 当在微信、QQ 或飞书渠道启用了 `voice-bridge` 插件后，子进程每当收到 AI 的回复文本，就会将该文本通过 HTTP POST 发送到 `http://127.0.0.1:18791/voice/speak`。
-- 语音运行时在接收到请求后，会先对文本进行 Markdown 净化（剥离 `#`、`*`、超链接和代码块等），然后按照标点符号和最大字数限制将长文本切割为短片段，依次推入单队列播放缓冲区（FIFO 播放队列）中。
-- 语音运行时提供了物理级的静音接口，一旦用户点击主界面上的「静音」，系统会立刻清空队列并中断当前的音频物理输出进程。
+#### VITS 离线合成与 Windows SAPI 降级双保险
+* **VITS 神经网络**：加载本地 `fanchen-wnj-zh-en` 混合音色包，利用 CPU 多线程 ONNX 推理生成自然 PCM 音频。
+* **SAPI 降级**：若未下载庞大语音包，自动降级调用 Windows 原生 `SAPI` COM 组件，零网络开销朗读。
 
 ---
 
-### 5. 🚀 Mihomo 内核网络代理加速与防风控路由 (Network Acceleration)
+### 7. 物理级桌面控制与自动化 (Computer Use via Win32)
 
-大模型 API 访问经常受阻，但全局代理又容易导致微信等通讯应用频繁异地登录而被风控封号。为此我们设计了“双路网络分离”方案：
+本系统集成了物理级的计算机操控能力，使 AI 助手可以如真人般操控 Windows 桌面：
 
-#### 内核托管
-系统在 `%LOCALAPPDATA%\NexoraAgent\acceleration` 中托管了原生的 mihomo 代理内核。支持订阅链接解析、配置文件导入、节点延迟测速和节点自由切换，并在本地 17890 端口开启代理。
+#### 物理像素坐标映射公式
+大模型在分析屏幕截图后，输出目标操作点的屏幕相对百分比 $(x, y)$。程序通过 Win32 API 驱动层，将物理像素坐标转换为 Windows 虚拟系统的绝对坐标：
 
-#### 进程级环境变量隐式注入
-传统的全局代理软件会强行改变操作系统的全局路由，导致其他无关软件（如网络游戏和网页）变慢或产生连接冲突，且极难配置。
-客户端启动网关子进程时，自动在子进程的环境变量（`process.env`）中注入 `HTTP_PROXY` 和 `HTTPS_PROXY` 指向本地端口。Node.js 的 HTTP 客户端会自动读取并走该代理加速，完全不需要更改用户的 Windows 系统全局代理，避免对其他网络游戏和软件产生网络冲突。
+$$ X_{\text{win}} = \frac{x \times 65535}{W}, \quad Y_{\text{win}} = \frac{y \times 65535}{H} $$
 
-#### 安全防封直连域名过滤
-*   **风控封号痛点**：微信、飞书等渠道的连接若经过海外代理，会被腾讯和字节服务器瞬间触发风控（异地登录封号）。
-*   **解决机制**：系统在注入环境变量时，会同时向子进程注入一份长达数十个主机的 `NO_PROXY` 绕过列表（包含所有微信域名、QQ 域名、飞书域名和钉钉域名）。
-    通讯插件向微信/飞书服务器发起的 Session 握手和消息心跳包，在网络底层会自动识别并强行绕过代理，通过本地物理网卡真实 IP 直连。只有向大模型 API 发起请求时，才走代理加速。这在技术层面上彻底规避了因“异地 IP 跳变登录”触发的即时通讯账号风控，从源头上防范了封号隐患。
+通过底层加载 `user32.dll` 里的 `SetCursorPos` 和 `mouse_event` 导出函数，实现点击、拖拽、击键等物理级自动化闭环。
 
 ---
 
-### 6. 🖥️ 物理级桌面控制与自动化 (Computer Use)
-本系统集成了物理级的计算机使用框架，使本地 of AI 助手不仅仅停留在文字聊天，而是可以如真人一般操控本机的 Windows 系统：
+### 8. 零环境依赖自愈式 Node.js 沙箱 (Node Sandbox v24.15)
 
-#### 高兼容性屏幕截图 (capture-desktop.ps1)
-Windows 环境下，许多第三方截图库在遭遇多显示器或系统缩放 DPI 设置不一致时，会出现图像黑屏或坐标偏移的问题。
-系统使用 PowerShell 脚本调用 Windows 底层 .NET 的 `[System.Drawing.Graphics]::CopyFromScreen` 物理截图接口，能够高兼容地捕获多屏边界、防范高 DPI 缩放失真，并将物理画面压缩为 JPEG 字节流喂给视觉模型。
+为了在没有任何开发环境（无 Node.js、无 Git、无 Python）的纯净 Windows 客户机上完美运行，客户端内置了独立的绿色 Node.js 沙箱：
 
-#### 物理设备输入模拟 (desktop-control.ps1)
-大模型（如支持 Computer Use 的模型）在分析屏幕截图后，输出目标操作点的屏幕相对坐标 $(x, y)$。
-由于传统的应用级模拟容易被 Windows 系统内核防御拦截，网关会通过物理调用本机的 PowerShell 脚本来执行最底层的输入模拟：
-- 该脚本在底层通过 C# 声明直接加载 Windows 系统动态链接库 `user32.dll` 里的 `SetCursorPos` 和 `mouse_event` 导出函数。
-- 在物理层面，物理像素坐标会通过屏幕分辨率 $W \times H$ 转换映射为 Windows 系统的绝对虚拟坐标：
-  $$ X_{\text{win}} = \frac{x \times 65535}{W}, \quad Y_{\text{win}} = \frac{y \times 65535}{H} $$
-- 随后，程序向 Win32 API 驱动层投递鼠标位移、物理点击、双击、拖拽和键盘按键序列，穿透第三方软件界面屏障，执行物理级的自动化控制闭环。
+* **沙箱路径**：`.node-sandbox/node.exe` (v24.15.0 LTS) + SQLite 3.51.3 原生模块。
+* **自动环境自愈 (Auto-Upgrade Check)**：启动时 `main.js` 自动检测沙箱 Node 版本与原生 C++ 模块（`node:sqlite`）的二进制兼容性。若版本不匹配，系统会自动解压升级自愈包，无需用户手动配置任何环境变量！
 
 ---
 
-### 7. 📦 打包部署与磁盘 IO 流水线优化
+## 💬 多平台即时通讯托管系统 (Channel Connectors)
 
-#### ASAR 差异化解包策略 (asarUnpack)
-Electron 默认将所有应用资源归档在 `app.asar` 文件中以保障文件整洁。然而，操作系统内核无法直接在 ASAR 虚拟文件系统中加载 C++ 原生扩展文件（`.node`）或动态链接库（`.dll`）。
-为了解决这一技术瓶颈，编译流水线配置了 **“ASAR 解包白名单（asarUnpack）”** 策略，在打包时把 `node-pty`、`sherpa-onnx-node` 等 native 原生组件自动释放在物理目录 `app.asar.unpacked/` 中。Node 运行时在加载原生扩展时，能够自适应路由到物理路径中读取，从而杜绝了加载报错闪退。
+### 微信渠道 (WeChat) 托管指南
 
-#### 异步 IO 解压防界面假死
-网关运行时的首次解压释放需要向磁盘写入数万个碎小文件。如果直接在主进程的主线程上执行同步解压，会强行阻塞 Event Loop 导致界面长时间冻结，甚至被 Windows 操作系统判定为“未响应”并强制关闭。
-系统通过 `child_process.spawn` 异步拉起后台 `tar` 或 `powershell` 解压进程，主进程只负责异步接收解压进度事件并在界面呈现平滑的进度条，保持 UI 始终保持高帧率流畅。
+#### 1. 绑定步骤
+* 点击「通讯管理」 $\rightarrow$ 找到微信卡片 $\rightarrow$ 点击「扫码绑定」；
+* 用手机微信扫描生成的 Base64 二维码并点击确认；
+* 成功后提示「✅ 绑定成功 (凭证已落盘)」。
 
-#### 延迟删除技术 (Deferred RM Tree)
-当用户选择重装或者清理本地庞大的运行时目录时，由于文件数目巨大，删除动作极其消耗磁盘 IO 资源。主进程引入了延迟删除技术：主进程通过后台分离方式（`detached: true` 和 `unref()`）启动系统自带的 `cmd.exe /c rmdir /s /q` 并在后台默默执行物理垃圾清理，主进程在发出命令后立刻返回绘制 UI，规避巨量 IO 带来的假死。
-
----
-
-## 👣 极简使用流程
-
-> 详细配置说明与图文教程请参阅：[新手快速入门指南](docs/getting-started.md)
-
-1.  **第一步：安装与启动**
-    *   下载最新发布的桌面安装包并双击运行安装。
-    *   打开软件，点击左上角 **「启动 Nexora Agent」** 按钮，等待指示灯由红变黄，最终变为**🟢 绿色（已就绪）**。
-2.  **第二步：配置 AI 的大脑**
-    *   进入左侧「模型配置」菜单，填入您的 API Key（如 DeepSeek 等平台 Key），然后保存。
-    *   在「模型会话」中发送 `你好` 进行快速通路测试。
-3.  **第三步：渠道绑定**
-    *   进入「通讯管理」菜单，在对应卡片（如微信）点击 **「扫码绑定」**，掏出手机扫码确认授权登录。
-    *   当卡片状态变为“已绑定”后，即可拿另外一部手机发送消息测试自动回复！
+#### 2. 陌生人安全防火墙与白名单配对
+为了防止陌生好友或群聊刷爆您的 Token 额度，系统提供前置防火墙：
+* 默认策略下，未授权的好友发信会收到提示：“*您好，我是主人的 AI 助手。配对码为 `[XXXX]`，请向主人申请加入白名单*”。
+* 主人只需在客户端「通讯管理」中一键点击「同意加白」，即可将该好友加入允许列表。
 
 ---
 
-## 🛠️ 故障排除与常见问题 (Troubleshooting & FAQ)
+### 飞书渠道 (Feishu) 托管指南
+
+1. 在 [飞书开放平台](https://open.feishu.cn/) 创建企业自建应用，开启机器人功能；
+2. 获取 `App ID` 和 `App Secret` 填入 Nexora Agent 界面；
+3. 开启 WebSocket 事件订阅，机器人即可在飞书单聊及群聊 `@` 中自动回复卡片。
+
+---
+
+### QQ 机器人 (QQBot) 托管指南
+
+支持对接腾讯官方 QQ 机器人开放平台。填入 `AppID` 与 `Token` 后，机器人即可在 QQ 频道及群聊中响应对话。
+
+---
+
+## 🛠️ 故障排除与常见问题自愈诊断手册 (Troubleshooting)
 
 > [!NOTE]
-> 本节收录了 Nexora Agent 在日常运行和多进程通信中可能遇到的各类常见故障，并提供了详细的底层原因分析及修复手册。
+> 本节汇总了客户端在日常运行中可能遇到的常见问题与自愈诊断方案。
 
-### 1. ⚠️ 语音网桥报错 `ECONNREFUSED 127.0.0.1:18791` 修复手册
-*   **故障现象**：在网关控制台彩色日志或系统运行警报中，频繁弹窗或打印警告：
-    `[voice-bridge] speak failed (message_sent): connect ECONNREFUSED 127.0.0.1:18791`
-*   **底层原因分析**：
-    1.  **语音运行时未开启**：根据 [voice-runtime.js](file:///c:/Users/Yuan/Desktop/ClawAI/NexoraAgent/voice-runtime.js) 的代码逻辑，本地的 18791 端口 HTTP 服务是按需启用的。只有当客户端的**“语音总开关”**和**“渠道回复朗读”**这两个选项同时被勾选为 `true` 时，系统才会通过 `server.listen(18791)` 启动该网桥。如果关闭了语音，后台网关插件在收到 AI 回复后依然尝试向 18791 端口发送 POST 请求，就会连接失败。
-    2.  **端口被占用**：其他本地服务（如残留的旧 Nexora 实例进程，或其它第三方调试工具）占用了 `18791` 端口，导致主进程无法成功监听该端口。
-    3.  **依赖库加载失败**：Sherpa-Onnx 或 Native C++ 加速 DLL 缺失，导致语音运行时初始化提前崩溃，未能成功建立端口监听。
-*   **诊断与解决步骤**：
-    1.  **检查配置**：打开 Nexora 客户端界面，进入“语音设置”，确保将**“开启语音功能”**以及**“渠道回复朗读（语音网桥）”**勾选上。
-    2.  **强制重置**：如果这两个选项已经开启，尝试将其关闭，等待 2 秒后再重新勾选开启，强制让主进程触发 `_syncHttpServer` 方法进行端口重连监听。
-    3.  **排查端口占用**：打开 PowerShell，执行以下命令排查 `18791` 端口是否被占用：
-        ```powershell
-        Get-NetTCPConnection -LocalPort 18791 -ErrorAction SilentlyContinue
-        ```
-        若存在占用，可根据返回的 PID 杀掉残留进程：
-        ```powershell
-        Stop-Process -Id [您的PID] -Force
-        ```
-    4.  **查看错误日志**：如果依然报错，请检查 `%LOCALAPPDATA%\NexoraAgent\main_error.log` 或软件安装根目录下的 `main_error.log`，排查是否有 `[VoiceRuntime] init failed` 的异常日志信息。
+### 故障一：提示“通讯插件未加载 / crash-loop breaker tripped”
+* **底层原因**：先前调试时通过任务管理器强行杀掉了进程，网关累计了 3 次非正常退出，触发了防护锁。
+* **解决办法**：最新版本的软件已内置自动解封逻辑。若日志中依然提示，只需在软件界面点击 **「终止服务」** 随后点击 **「启动 Nexora Agent」**，主进程会在网关启动的瞬间自动擦除崩溃锁并拉起插件。
 
-### 2. ⚠️ 本地 Node.js 绿色沙箱环境初始化失败
-*   **故障现象**：客户端启动后，网关指示灯一直卡在黄色或红色状态，提示找不到 Node 环境或 `gateway init failed`。
-*   **底层原因分析**：内置的绿色沙箱 `node.exe` 运行时，由于用户操作系统缺少 Microsoft Visual C++ Redistributable (2015-2022) 运行库，导致双击运行时报错 DLL 丢失；或是 Windows 系统管理员配置了严格的安全策略，禁止从未签名的临时 AppData 目录调起未知 EXE 应用程序。
-*   **解决步骤**：
-    1.  **手动安装运行库**：下载并安装 [微软官方 VC++ 运行库合集](https://learn.microsoft.com/zh-CN/cpp/windows/latest-supported-vc-redist?view=msvc-170)。
-    2.  **系统降级探活**：确保你的系统全局环境变量中安装了 Node.js（推荐版本 $\ge$ v22）。Nexora Agent 在检测到沙箱不可用时，会自动探测全局环境，若全局环境正常，将自动使用系统自带的 Node.js 调起网关。
-    3.  **防拦截加白**：如果安全杀毒软件（如 360 安全卫士、火绒）提示风险拦截，请将 Nexora Agent 整个安装目录和 `%LOCALAPPDATA%\NexoraAgent` 加入到信任白名单中。
+### 故障二：微信连上后，网络不好就不回复了
+* **底层原因**：旧版插件在网络中断时会直接退出。
+* **解决办法**：项目已全面升级为 v3 高可用无限重连插件，失联判定缩短至 45s，网络恢复后系统会自动热重连恢复对话，无需任何人工干预。
 
-### 3. ⚠️ Clash Meta 代理端口 17890 冲突
-*   **故障现象**：点击“开启网络加速”后，加速通道的状态灯报错或闪烁，终端打印类似 `listen tcp 127.0.0.1:17890: bind: address already in use` 错误。
-*   **底层原因分析**：用户本机的电脑上已经运行了其它 Clash 客户端、V2Ray、或本地爬虫代理服务，占用了 `17890` 的 HTTP 代理默认端口。
-*   **解决步骤**：
-    1.  **关闭第三方代理**：关闭本地其它占用 17890 端口的科学上网客户端。
-    2.  **更改默认端口**：若必须同时运行，可进入 `%USERPROFILE%\.openclaw\openclaw.json`（或点击客户端的“高级设置”），找到 `httpPort` 字段，将其修改为其它未被占用的端口（如 `17898`），保存并重新启动网络加速功能。
+### 故障三：语音网桥报错 `ECONNREFUSED 127.0.0.1:18791`
+* **底层原因**：语音网桥 HTTP 服务未开启，或 18791 端口被其他旧进程占用。
+* **解决办法**：进入「系统设置」 $\rightarrow$ 「语音设置」，取消勾选“开启语音功能”，等待 2 秒后再重新勾选开启，强行重置 18791 监听端口。
+
+### 故障四：点击“开启网络加速”提示 17890 端口冲突
+* **底层原因**：电脑上运行了其它科学上网代理客户端（如 v2rayN、Clash for Windows），占用了 17890 默认端口。
+* **解决办法**：关闭其他第三方代理软件，或在 `openclaw.json` 中将 `httpPort` 修改为 17898。
 
 ---
 
-## 👨‍💻 开发者二次开发与插件开发指南
+## 👨‍💻 开发者二次开发与插件生态 (Developer Guide)
 
 > [!TIP]
-> Nexora Agent 基于高度可扩展的 **OpenClaw 插件容器** 规范构建。开发者可以通过编写简单的 JavaScript 插件来扩展其通讯渠道或为 AI 助手挂载新的 MCP 工具。
+> Nexora Agent 基于 **OpenClaw 插件规范** 构建，支持极其简单的 JavaScript 二次开发。
 
 ### 1. 开发调试环境搭建
-如果您是开发者，想要基于本项目进行二次开发或自己尝试打包发布：
+
 ```bash
 # 1. 克隆代码仓库
-git clone https://github.com/2014-y/ClawAI.git
-cd Nexora-Agent
+git clone https://github.com/2014-y/NexoraAgent.git
+cd NexoraAgent
 
-# 2. 安装项目依赖 (自动拉取所需的通道与核心包)
+# 2. 安装本地项目依赖
 npm install
 
-# 3. 运行本地开发环境进行调试
+# 3. 运行本地开发调试模式
 npm run app:start
 
-# 4. 一键编译打包出 Windows 下的绿色免安装目录与 NSIS Setup 安装包
+# 4. 编译打包生成 Windows 安装包与解压即用目录
 npm run app:dist
 ```
 
-### 2. 通道插件规范 (OpenClaw Plugin)
-一个标准的 OpenClaw 通道插件应该具备以下目录格式：
+### 2. 开发你的第一个 OpenClaw 通讯插件
+
+在 `plugins/` 目录下新建您的插件文件夹：
+
 ```
-plugins/my-custom-channel/
-├── openclaw.plugin.json   # 插件元配置文件
-└── index.js               # 插件核心业务逻辑
+plugins/my-custom-plugin/
+├── openclaw.plugin.json
+└── index.js
 ```
 
-#### 配置文件示例 (`openclaw.plugin.json`)
+#### `openclaw.plugin.json` 示例
 ```json
 {
-  "name": "my-custom-channel",
+  "name": "my-custom-plugin",
   "version": "1.0.0",
-  "description": "自定义即时通讯工具连接通道",
+  "description": "自定义消息通道插件",
   "main": "index.js",
   "settings": {
-    "enabled": {
-      "type": "boolean",
-      "default": false
-    },
-    "apiToken": {
-      "type": "string",
-      "default": ""
-    }
+    "enabled": { "type": "boolean", "default": true }
   }
 }
 ```
 
-#### 业务逻辑实现示例 (`index.js`)
+#### `index.js` 业务逻辑示例
 ```javascript
 'use strict';
 
-class MyCustomChannelPlugin {
+class MyCustomPlugin {
   constructor(context) {
-    this.ctx = context; // 注入网关上下文，可访问大模型路由、日志模块等
-    this.client = null;
+    this.ctx = context; // 注入网关上下文
   }
 
-  // 插件载入时的生命周期钩子
   async onload() {
-    this.ctx.log.info('自定义通道插件已成功载入');
+    this.ctx.log.info('自定义通道插件已载入');
     if (!this.ctx.settings.enabled) return;
 
-    // 建立与您的 IM 服务端的 Websocket 或 HTTP 长轮询连接
-    this.client = this._connectToIMServer(this.ctx.settings.apiToken);
-    
-    // 监听消息事件
-    this.client.on('message', async (msg) => {
-      // 1. 将收到的消息包装为 OpenClaw 统一的消息对象
-      const messagePayload = {
-        senderId: msg.fromUser,
+    // 监听消息并投递给 OpenClaw 智能路由层
+    this._onReceiveMessage(async (msg) => {
+      await this.ctx.router.dispatchMessage({
+        senderId: msg.userId,
         content: msg.text,
-        reply: async (replyText) => {
-          // 定义如何将 AI 的回复发送回去
-          await this.client.send(msg.fromUser, replyText);
+        reply: async (response) => {
+          await this._sendMessageBack(msg.userId, response);
         }
-      };
-
-      // 2. 投递给智能路由层，大模型会自动处理记忆拼装并触发自动回复
-      await this.ctx.router.dispatchMessage(messagePayload);
+      });
     });
   }
 
-  // 插件关闭时的销毁钩子
   async onunload() {
-    if (this.client) {
-      this.client.disconnect();
-    }
-    this.ctx.log.info('自定义通道插件已成功注销');
+    this.ctx.log.info('自定义通道插件已安全注销');
   }
 }
 
-module.exports = MyCustomChannelPlugin;
+module.exports = MyCustomPlugin;
 ```
 
 ---
 
-## 📄 许可证协议
+## ⚙️ 完整配置文件参考 (OpenClaw.json Spec)
 
-本项目采用 [MIT License](LICENSE) 开源许可协议，您可以自由修改、商用或分发。
-如需商业用途或有大规模定制需求，请务必保证对本地隐私沙箱及风控隔离安全模块的遵从，共同维护良好的本地 AI 生态。
+`openclaw.json` 是控制网关行为的核心配置文件。以下为核心参数解释：
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "timeoutMs": 120000,        // 大模型请求超时（毫秒）
+      "maxTokens": 16384,         // 单次最大输出 Token 限制
+      "compaction": {
+        "reserveTokensFloor": 2000, // 上下文自动瘦身保留 Token 下限
+        "autoTrim": true           // 开启长对话上下文自动瘦身
+      }
+    }
+  },
+  "channels": {
+    "openclaw-weixin": {
+      "enabled": true,
+      "autostart": true           // 网关启动时自动拉起微信账号
+    }
+  },
+  "gateway": {
+    "port": 18789,
+    "mode": "local",
+    "crashLoopBreaker": {
+      "enabled": false            // 永久关闭崩塌阻断器，防止插件被拦截
+    }
+  },
+  "tools": {
+    "webSearch": {
+      "provider": "duckduckgo",
+      "enabled": true             // 开启 DuckDuckGo 本地联网搜索
+    },
+    "webFetch": {
+      "enabled": true,
+      "allowPrivateNetwork": true, // 允许代理网段私有网络请求
+      "ssrfPolicy": "lax"
+    }
+  }
+}
+```
+
+---
+
+## 📄 许可证协议 (License)
+
+本项目采用 [MIT License](LICENSE) 开源许可协议。您可以自由修改、商业化使用或二次分发。
+
+如需商业化部署或大规模定制，请务必保留对本地隐私保护及防风控安全模块的遵从，共同维护良好的开源 AI 生态。
