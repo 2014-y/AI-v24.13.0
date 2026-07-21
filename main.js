@@ -3024,13 +3024,19 @@ function createWindow(existingSplash) {
             } catch (e) {}
         `).catch(() => {});
     });
-    // 当渲染进程首次绘制完成后，关闭 splash 并展示主窗口
+    // 当渲染进程首次绘制完成后，关闭 splash；静默启动则不弹主窗口（托盘后台）
     mainWindow.once('ready-to-show', () => {
-        splash.destroy();
+        try { if (splash && !splash.isDestroyed()) splash.destroy(); } catch (e) {}
         try { mainWindow.setBackgroundColor(WINDOW_BG); } catch (e) {}
-        mainWindow.show();
+        const silent = isSilentStartEnabled();
+        if (silent) {
+            // 保持隐藏，仅托盘运行
+            try { mainWindow.hide(); } catch (e) {}
+        } else {
+            mainWindow.show();
+        }
         const id = (global.nexoraInstance && global.nexoraInstance.id) || 1;
-        if (id > 1) {
+        if (id > 1 && !silent) {
             try {
                 showNotification(`Nexora Agent 多开 #${id}`, '已使用独立数据目录与端口；系统代理请勿多实例同时开启。');
             } catch (e) {}
@@ -3797,97 +3803,111 @@ function resolveBuiltinTerminalCwd() {
     try { return app.getPath('home'); } catch (e) { return process.cwd(); }
 }
 
+function killBuiltinPtyProcess() {
+    if (!ptyProcess) return;
+    const proc = ptyProcess;
+    ptyProcess = null; // 先解绑，避免 exit 回调刷「已退出」污染重置后的屏幕
+    try { proc.kill(); } catch (e) {}
+}
+
+function pushBuiltinTerminalData(text) {
+    try {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('builtin-terminal-data', text);
+        }
+    } catch (e) {}
+}
+
+function spawnBuiltinPtyProcess(lang) {
+    const sandboxDir = resolveAppFsPath('.node-sandbox');
+    let pty;
+    try {
+        pty = require('node-pty');
+    } catch (e) {
+        const msg = e && e.message ? e.message : String(e);
+        pushBuiltinTerminalData(`\r\n\x1b[31m[内置终端] node-pty 加载失败（打包环境常见于未解包原生模块）\x1b[0m\r\n${msg}\r\n`);
+        pushBuiltinTerminalData(`\x1b[33m正在打开外部 PowerShell 沙箱窗口作为后备…\x1b[0m\r\n`);
+        try { ipcMain.emit('open-sandbox-terminal'); } catch (e2) {}
+        return { ok: false, error: msg, fallback: 'external' };
+    }
+
+    const isEn = lang === 'en-US';
+    const isTw = lang === 'zh-TW';
+
+    const bannerTitle = isEn
+        ? "         Nexora Agent Built-in Sandbox Terminal (node-pty)      "
+        : (isTw ? "         Nexora Agent 內置沙箱開發終端 (node-pty)               " : "         Nexora Agent 内置沙箱开发终端 (node-pty)               ");
+
+    const bannerCmds = isEn
+        ? "  * You can execute the following commands directly here:"
+        : (isTw ? "  * 您可以直接在此處執行以下命令：" : "  * 您可以直接在此处执行以下命令：");
+
+    const cmdNode = isEn
+        ? "      - node -v            (Show sandbox Node version)"
+        : (isTw ? "      - node -v            (查看內置沙箱 Node 版本)" : "      - node -v            (查看内置沙箱 Node 版本)");
+
+    const cmdNpm = isEn
+        ? "      - npm -v             (Show sandbox npm version)"
+        : (isTw ? "      - npm -v             (查看內置沙箱 npm 版本)" : "      - npm -v             (查看内置沙箱 npm 版本)");
+
+    const sandboxPathForPs = String(sandboxDir || '').replace(/'/g, "''");
+    const initScript = [
+        `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`,
+        `if (Test-Path -LiteralPath '${sandboxPathForPs}') { $env:Path = '${sandboxPathForPs};' + $env:Path }`,
+        `Clear-Host`,
+        `Write-Host "==========================================================" -ForegroundColor Green`,
+        `Write-Host "${bannerTitle}" -ForegroundColor Green`,
+        `Write-Host "==========================================================" -ForegroundColor Green`,
+        `Write-Host "${bannerCmds}" -ForegroundColor Cyan`,
+        `Write-Host "${cmdNode}" -ForegroundColor White`,
+        `Write-Host "${cmdNpm}" -ForegroundColor White`,
+        `Write-Host "==========================================================" -ForegroundColor Green`,
+        `Write-Host ""`
+    ].join('\r\n');
+
+    const encodedCmd = Buffer.from(initScript, 'utf16le').toString('base64');
+    const termCwd = resolveBuiltinTerminalCwd();
+    const pathKey = process.platform === 'win32' ? 'Path' : 'PATH';
+    const childEnv = { ...process.env };
+    if (sandboxDir && fs.existsSync(sandboxDir)) {
+        childEnv[pathKey] = `${sandboxDir}${path.delimiter}${childEnv[pathKey] || ''}`;
+    }
+
+    ptyProcess = pty.spawn('powershell.exe', ['-NoExit', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encodedCmd], {
+        name: 'xterm-256color',
+        cols: 80,
+        rows: 30,
+        // 打包后 __dirname 在 app.asar 内，不能当 cwd，否则壳进程起不来、终端空白
+        cwd: termCwd,
+        env: childEnv,
+        useConpty: true
+    });
+
+    const spawned = ptyProcess;
+    spawned.on('data', function (data) {
+        pushBuiltinTerminalData(data);
+    });
+
+    spawned.on('exit', () => {
+        if (ptyProcess === spawned) {
+            ptyProcess = null;
+            pushBuiltinTerminalData('\r\n\x1b[33m[内置终端已退出]\x1b[0m\r\n');
+        }
+    });
+
+    return { ok: true, cwd: termCwd };
+}
+
 ipcMain.handle('builtin-terminal-start', (event, lang) => {
     if (ptyProcess) return { ok: true, reused: true };
 
-    const pushTerm = (text) => {
-        try {
-            if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send('builtin-terminal-data', text);
-            }
-        } catch (e) {}
-    };
-
     try {
-        const sandboxDir = resolveAppFsPath('.node-sandbox');
-        let pty;
-        try {
-            pty = require('node-pty');
-        } catch (e) {
-            const msg = e && e.message ? e.message : String(e);
-            pushTerm(`\r\n\x1b[31m[内置终端] node-pty 加载失败（打包环境常见于未解包原生模块）\x1b[0m\r\n${msg}\r\n`);
-            pushTerm(`\x1b[33m正在打开外部 PowerShell 沙箱窗口作为后备…\x1b[0m\r\n`);
-            try { ipcMain.emit('open-sandbox-terminal'); } catch (e2) {}
-            return { ok: false, error: msg, fallback: 'external' };
-        }
-
-        const isEn = lang === 'en-US';
-        const isTw = lang === 'zh-TW';
-
-        const bannerTitle = isEn
-            ? "         Nexora Agent Built-in Sandbox Terminal (node-pty)      "
-            : (isTw ? "         Nexora Agent 內置沙箱開發終端 (node-pty)               " : "         Nexora Agent 内置沙箱开发终端 (node-pty)               ");
-
-        const bannerCmds = isEn
-            ? "  * You can execute the following commands directly here:"
-            : (isTw ? "  * 您可以直接在此處執行以下命令：" : "  * 您可以直接在此处执行以下命令：");
-
-        const cmdNode = isEn
-            ? "      - node -v            (Show sandbox Node version)"
-            : (isTw ? "      - node -v            (查看內置沙箱 Node 版本)" : "      - node -v            (查看内置沙箱 Node 版本)");
-
-        const cmdNpm = isEn
-            ? "      - npm -v             (Show sandbox npm version)"
-            : (isTw ? "      - npm -v             (查看內置沙箱 npm 版本)" : "      - npm -v             (查看内置沙箱 npm 版本)");
-
-        const sandboxPathForPs = String(sandboxDir || '').replace(/'/g, "''");
-        const initScript = [
-            `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`,
-            `if (Test-Path -LiteralPath '${sandboxPathForPs}') { $env:Path = '${sandboxPathForPs};' + $env:Path }`,
-            `Clear-Host`,
-            `Write-Host "==========================================================" -ForegroundColor Green`,
-            `Write-Host "${bannerTitle}" -ForegroundColor Green`,
-            `Write-Host "==========================================================" -ForegroundColor Green`,
-            `Write-Host "${bannerCmds}" -ForegroundColor Cyan`,
-            `Write-Host "${cmdNode}" -ForegroundColor White`,
-            `Write-Host "${cmdNpm}" -ForegroundColor White`,
-            `Write-Host "==========================================================" -ForegroundColor Green`,
-            `Write-Host ""`
-        ].join('\r\n');
-
-        const encodedCmd = Buffer.from(initScript, 'utf16le').toString('base64');
-        const termCwd = resolveBuiltinTerminalCwd();
-        const pathKey = process.platform === 'win32' ? 'Path' : 'PATH';
-        const childEnv = { ...process.env };
-        if (sandboxDir && fs.existsSync(sandboxDir)) {
-            childEnv[pathKey] = `${sandboxDir}${path.delimiter}${childEnv[pathKey] || ''}`;
-        }
-
-        ptyProcess = pty.spawn('powershell.exe', ['-NoExit', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encodedCmd], {
-            name: 'xterm-256color',
-            cols: 80,
-            rows: 30,
-            // 打包后 __dirname 在 app.asar 内，不能当 cwd，否则壳进程起不来、终端空白
-            cwd: termCwd,
-            env: childEnv,
-            useConpty: true
-        });
-
-        ptyProcess.on('data', function (data) {
-            pushTerm(data);
-        });
-
-        ptyProcess.on('exit', () => {
-            ptyProcess = null;
-            pushTerm('\r\n\x1b[33m[内置终端已退出]\x1b[0m\r\n');
-        });
-
-        return { ok: true, cwd: termCwd };
+        return spawnBuiltinPtyProcess(lang);
     } catch (e) {
         const msg = e && e.message ? e.message : String(e);
         console.error('[BuiltinTerminal] start failed:', msg);
-        pushTerm(`\r\n\x1b[31m[内置终端启动失败]\x1b[0m\r\n${msg}\r\n`);
-        pushTerm(`\x1b[33m正在打开外部 PowerShell 沙箱窗口作为后备…\x1b[0m\r\n`);
+        pushBuiltinTerminalData(`\r\n\x1b[31m[内置终端启动失败]\x1b[0m\r\n${msg}\r\n`);
+        pushBuiltinTerminalData(`\x1b[33m正在打开外部 PowerShell 沙箱窗口作为后备…\x1b[0m\r\n`);
         try {
             // 复用外部终端入口
             const sandboxDir = resolveAppFsPath('.node-sandbox');
@@ -3898,13 +3918,25 @@ ipcMain.handle('builtin-terminal-start', (event, lang) => {
                 `Write-Host "Nexora Agent 外部沙箱终端（内置终端启动失败时的后备）" -ForegroundColor Yellow`
             ].join('\r\n');
             const encodedCmd = Buffer.from(initScript, 'utf16le').toString('base64');
-            spawn('cmd.exe', ['/c', `start powershell -NoExit -ExecutionPolicy Bypass -EncodedCommand ${encodedCmd}`], {
+            spawn('powershell.exe', ['-NoExit', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encodedCmd], {
                 cwd: resolveBuiltinTerminalCwd(),
                 detached: true,
                 stdio: 'ignore'
             }).unref();
         } catch (e2) {}
         return { ok: false, error: msg, fallback: 'external' };
+    }
+});
+
+ipcMain.handle('builtin-terminal-reset', (event, lang) => {
+    try {
+        killBuiltinPtyProcess();
+        return spawnBuiltinPtyProcess(lang || 'zh-CN');
+    } catch (e) {
+        const msg = e && e.message ? e.message : String(e);
+        console.error('[BuiltinTerminal] reset failed:', msg);
+        pushBuiltinTerminalData(`\r\n\x1b[31m[内置终端重置失败]\x1b[0m\r\n${msg}\r\n`);
+        return { ok: false, error: msg };
     }
 });
 
@@ -6024,6 +6056,59 @@ ipcMain.handle('autostart-get', async () => {
     return settings.openAtLogin;
 });
 
+function silentStartSettingsPath() {
+    try {
+        return path.join(app.getPath('userData'), 'silent-start.json');
+    } catch (e) {
+        return path.join(CONFIG_DIR || process.cwd(), 'silent-start.json');
+    }
+}
+
+function isSilentStartEnabled() {
+    try {
+        const p = silentStartSettingsPath();
+        if (!fs.existsSync(p)) return false;
+        const raw = fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, '');
+        const data = JSON.parse(raw);
+        return data && data.enabled === true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function setSilentStartEnabled(enabled) {
+    const on = Boolean(enabled);
+    const p = silentStartSettingsPath();
+    try {
+        const dir = path.dirname(p);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(p, JSON.stringify({ enabled: on }, null, 2), 'utf8');
+    } catch (e) {
+        console.warn('[SilentStart] write failed:', e && e.message);
+    }
+    // 与开机自启配合：静默时带 --silent，便于系统登录项识别
+    try {
+        const login = app.getLoginItemSettings();
+        if (login.openAtLogin) {
+            app.setLoginItemSettings({
+                openAtLogin: true,
+                openAsHidden: on,
+                path: app.getPath('exe'),
+                args: on ? ['--silent'] : []
+            });
+        }
+    } catch (e) {}
+    return on;
+}
+
+ipcMain.handle('silent-start-get', async () => {
+    return isSilentStartEnabled();
+});
+
+ipcMain.handle('silent-start-set', async (event, enabled) => {
+    return setSilentStartEnabled(enabled);
+});
+
 // 获取应用当前版本号
 ipcMain.handle('get-app-version', async () => {
     return app.getVersion();
@@ -6043,9 +6128,12 @@ ipcMain.handle('copy-text', async (event, text) => {
 });
 
 ipcMain.handle('autostart-set', async (event, enabled) => {
+    const silent = isSilentStartEnabled();
     app.setLoginItemSettings({
         openAtLogin: enabled,
-        path: app.getPath('exe')
+        openAsHidden: enabled ? silent : false,
+        path: app.getPath('exe'),
+        args: (enabled && silent) ? ['--silent'] : []
     });
     return true;
 });

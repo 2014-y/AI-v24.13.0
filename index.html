@@ -96,7 +96,8 @@
             </div>
             <div class="nav-item" data-tab="communication-view" id="nav-communication-mgmt">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                <path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/>
+                <path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/>
               </svg>
               <span data-i18n="nav.communication">通讯管理</span>
             </div>
@@ -741,8 +742,8 @@
                   </p>
                   <div class="form-row">
                     <div class="form-field">
-                      <label for="model-teacher" data-i18n="config.label.teacher_model">教学老师模型 (Teacher Model - 推荐云端高智能模型)</label>
-                      <input type="text" id="model-teacher" autocomplete="off" placeholder="例如: agnes-ai/agnes-2.0-flash" data-i18n-placeholder="config.placeholder.teacher_model">
+                      <label for="model-teacher" data-i18n="config.label.teacher_model">教学老师模型（跟随主用模型，不可单独修改）</label>
+                      <input type="text" id="model-teacher" autocomplete="off" readonly disabled placeholder="自动同步上方主用模型" data-i18n-placeholder="config.placeholder.teacher_model" title="跟随「默认模型选型」中的主用模型，修改主用模型后自动更新">
                     </div>
                     <div class="form-field">
                       <label for="model-student" data-i18n="config.label.student_model">模仿学生模型 (Student Model - 专属本地模型)</label>
@@ -828,8 +829,8 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                   <h3 data-i18n="config.section.json_preview">📄 openclaw.json 实时预览</h3>
                   <div style="display: flex; gap: 8px; align-items: center;">
-                    <button type="button" class="btn-secondary" id="config-reset-btn" style="padding: 0 14px; font-size: 12px; font-weight: 500; border-radius: 6px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); color: var(--text-primary); transition: all 0.3s ease; cursor: pointer; height: 28px; line-height: 28px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; margin-top: 0;" data-i18n="config.btn.reset_json" title="仅还原 JSON 预览区手写内容">放弃修改</button>
-                    <button type="button" class="btn-primary" id="config-save-btn" style="padding: 0 16px; font-size: 12px; font-weight: 600; border-radius: 6px; box-shadow: var(--accent-glow); cursor: pointer; height: 28px; line-height: 28px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; margin-top: 0;" data-i18n="config.btn.save">保存配置</button>
+                    <button type="button" class="btn-secondary" id="config-reset-btn" style="padding: 0 14px; font-size: 12px; font-weight: 600; border-radius: 6px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.25); color: #ffffff; transition: all 0.3s ease; cursor: pointer; height: 32px; line-height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; margin-top: 0; box-shadow: 0 2px 6px rgba(0,0,0,0.2);" data-i18n="config.btn.reset_json" title="仅还原 JSON 预览区手写内容">放弃修改</button>
+                    <button type="button" class="btn-primary" id="config-save-btn" style="padding: 0 16px; font-size: 12px; font-weight: 600; border-radius: 6px; box-shadow: var(--accent-glow); cursor: pointer; height: 32px; line-height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; margin-top: 0;" data-i18n="config.btn.save">保存配置</button>
                     <span style="font-size: 11px; color: var(--text-secondary); background: rgba(255,255,255,0.06); padding: 0 8px; border-radius: 4px; font-weight: 500; height: 28px; display: inline-flex; align-items: center; box-sizing: border-box;" data-i18n="config.badge.manual_edit">支持手动直接修改</span>
                   </div>
                 </div>
@@ -1142,9 +1143,14 @@
 
         <!-- Tab: 内置终端 -->
         <section class="tab-pane" id="terminal-view">
-          <div class="view-header" style="margin-bottom: 16px; flex-shrink: 0;">
-            <h2 style="margin: 0;" data-i18n="terminal.title">内置沙箱终端</h2>
-            <p style="margin: 6px 0 0 0; line-height: 1.2;" data-i18n="terminal.desc">直接管理底层环境依赖与Nexora Agent运行时的命令行沙盒环境</p>
+          <div class="view-header-row" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; flex-shrink: 0; gap: 12px;">
+            <div class="view-header" style="flex: 1 1 280px; min-width: 240px;">
+              <h2 style="margin: 0;" data-i18n="terminal.title">内置沙箱终端</h2>
+              <p style="margin: 6px 0 0 0; line-height: 1.2;" data-i18n="terminal.desc">直接管理底层环境依赖与Nexora Agent运行时的命令行沙盒环境</p>
+            </div>
+            <div style="display: flex; gap: 8px; flex-shrink: 0;">
+              <button type="button" class="btn-secondary" id="btn-reset-builtin-terminal" style="padding: 0 14px; font-size: 12px; font-weight: 600; border-radius: 6px; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(99, 102, 241, 0.5); color: #ffffff; cursor: pointer; height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; transition: all 0.2s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.35);" data-i18n="terminal.btn.reset" title="清空输出并重新启动沙箱终端">🔄 重置终端</button>
+            </div>
           </div>
           <div id="xterm-container" class="terminal-page-container"></div>
         </section>
@@ -1157,8 +1163,8 @@
               <p style="margin: 6px 0 0 0; line-height: 1.2;" data-i18n="logs.desc">展示网关子进程拉起时的完整 stdout/stderr 原生输出（可用于问题排查与诊断）</p>
             </div>
             <div style="display: flex; gap: 8px; flex-shrink: 0;">
-              <button type="button" class="btn-secondary" id="btn-copy-system-logs" style="padding: 0 12px; font-size: 11px; font-weight: bold; border-radius: 6px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer; height: 28px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;" data-i18n="logs.btn.copy">📋 复制日志</button>
-              <button type="button" class="btn-secondary" id="btn-clear-system-logs" style="padding: 0 12px; font-size: 11px; font-weight: bold; border-radius: 6px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); color: #ff5252; cursor: pointer; height: 28px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;" data-i18n="logs.btn.clear">🗑️ 清空日志</button>
+              <button type="button" class="btn-secondary" id="btn-copy-system-logs" style="padding: 0 14px; font-size: 12px; font-weight: 600; border-radius: 6px; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(99, 102, 241, 0.5); color: #ffffff; cursor: pointer; height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; transition: all 0.2s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.35);" data-i18n="logs.btn.copy">📋 复制日志</button>
+              <button type="button" class="btn-secondary" id="btn-clear-system-logs" style="padding: 0 14px; font-size: 12px; font-weight: 600; border-radius: 6px; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.5); color: #ff9999; cursor: pointer; height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; transition: all 0.2s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.35);" data-i18n="logs.btn.clear">🗑️ 清空日志</button>
             </div>
           </div>
           <div class="system-logs-container syslogs-page-container">
@@ -1199,6 +1205,18 @@
                 <div class="theme-dot mint" id="theme-btn-mint" title="液氮荧光青" data-i18n-title="settings.theme.mint"></div>
                 <div class="theme-dot forest" id="theme-btn-forest" title="英伦极夜绿" data-i18n-title="settings.theme.forest"></div>
               </div>
+            </div>
+
+            <!-- 静默启动 -->
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 12px;">
+              <div>
+                <div style="font-size: 13px; font-weight: bold; color: var(--text-primary);" data-i18n="settings.silent_start.title">🌙 静默启动</div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;" data-i18n="settings.silent_start.desc">开启后，应用启动时不弹出主窗口，仅在系统托盘后台运行；点击托盘图标可随时打开界面。</div>
+              </div>
+              <label class="switch-slider-btn">
+                <input type="checkbox" id="setting-silent-start-toggle">
+                <span class="slider-knob"></span>
+              </label>
             </div>
 
             <!-- 开机自启 -->

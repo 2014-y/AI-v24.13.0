@@ -1,166 +1,94 @@
-import fs from 'node:fs';
+/**
+ * error-filter — 拦截带 ⚠️ / 系统失败样式的外发回复，避免刷到 QQ/飞书/微信/桌面会话
+ *
+ * OpenClaw 2026.7+：用 { id, register } + message_sending 返回 { cancel: true }
+ */
 
-const PLUGIN_NAME = 'error-filter';
+const PLUGIN_ID = 'error-filter';
 
-// ALL error/notification patterns that should be suppressed
-const ERROR_PATTERNS = [
-  // Emoji notifications
+/** 命中任一即拦截（会话可见文案） */
+const BLOCK_SUBSTRINGS = [
   '⚠️',
   '🛠️',
-  '❌',
-  '⚡',
-  
-  // System command failures
-  'del ~',
-  'Get-NetAdapter',
-  'wmic cpu',
-  'netsh ',
-  'audio_check',
-  'audio.ps1',
-  'temp_hw',
-  'status_check',
-  
-  // Config/system errors
-  'consoleLevel',
-  'redactSensitive',
-  'browser.ssrfPolicy',
-  'startup_failed',
-  'plugin already exists',
-  'State dir migration',
-  'Config observe',
-  'doctor warnings',
-  'config warnings',
-  'bonjour.*conflict',
-  'plugins\\.allow is empty',
-  
-  // WeChat channel errors
-  'fetch failed',
-  'getUpdates',
-  'sendTyping',
-  'POST fetch failed',
-  'ilinkai.weixin.qq.com',
-  'Monitor ended',
-  'notifyStart failed',
-  'failed to load bundled channel',
-  'missing generated module',
-  'Could not determine host',
-  
-  // Generic error patterns
-  'TypeError:',
-  'AbortError:',
-  'AbortError',
-  'This operation was aborted',
-  'provider-transport-fetch',
-  'model-fetch] error',
-  'failover decision',
-  'rotate_profile',
-  'LLM idle timeout',
-  'idle timeout',
-  'ETIMEDOUT',
-  'TCP connection timeout',
-  'request timeout',
-  'TLS handshake error',
-  'code=UND_ERR',
-  'code=ETIMEDOUT',
-  'getUpdates error',
-  'TTS conversion failed',
-  
-  // Cleanup/health check messages
-  '临时文件已清理',
-  'cleanup',
-  'health check',
-  'diagnostic',
-
-  // Heartbeat notifications
-  'HEARTBEAT_OK',
-  'HEARTBEAT',
-  
-  // Delivery recovery logs on startup
-  'delivery-recovery',
-  'send_attempt_started',
-  'refusing blind replay',
-  'WebSocket error',
-  'Gateway error',
-  'sendInputNotify',
-  'exceeded 30000ms',
-  'qqbot] [',
-  'Connect Timeout',
-  'bots.qq.com',
-  'open.feishu.cn',
-  'AxiosError',
-  '198.18.',
-  'feishu] feishu',
-  'bot open_id',
-  'gateway startup failed',
-  'shutdown',
-
-  // Voice bridge offline warnings
-  'voice-bridge',
-  'speak failed',
-  'ECONNREFUSED',
-  '18791',
-
-  // Session deletion protection warnings
-  'Cannot delete the main session',
-  'sessions.delete',
+  '✉️ Message:',
+  'Exec failed',
+  'tool failed',
+  'TOOL_FAILED',
+  'openclaw-screenshot-latest',
 ];
 
-function isErrorMessage(text) {
-  if (!text || typeof text !== 'string') return false;
-  const lowerText = text.toLowerCase();
-  return ERROR_PATTERNS.some(p => {
+/** 正则补充（大小写不敏感） */
+const BLOCK_REGEXES = [
+  /^\s*⚠️/,
+  /Message:\s*.+\s+failed/i,
+  /Exec failed/i,
+  /ECONNREFUSED/i,
+  /ETIMEDOUT/i,
+];
+
+function extractText(event) {
+  if (!event) return '';
+  if (typeof event.content === 'string') return event.content;
+  if (typeof event.text === 'string') return event.text;
+  if (Array.isArray(event.content)) {
+    return event.content
+      .map((p) => {
+        if (typeof p === 'string') return p;
+        if (p && typeof p.text === 'string') return p.text;
+        return '';
+      })
+      .join('\n');
+  }
+  if (event.payload && typeof event.payload.text === 'string') return event.payload.text;
+  return '';
+}
+
+function shouldBlockOutbound(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return false;
+  for (const s of BLOCK_SUBSTRINGS) {
+    if (raw.includes(s)) return true;
+  }
+  for (const re of BLOCK_REGEXES) {
     try {
-      const regex = new RegExp(p, 'i');
-      return regex.test(text);
+      if (re.test(raw)) return true;
+    } catch (_) {}
+  }
+  return false;
+}
+
+function register(api) {
+  try {
+    api.logger?.info?.(`[${PLUGIN_ID}] loaded — suppress ⚠️ / system-failure outbound`);
+  } catch (_) {}
+
+  api.on('message_sending', async (event) => {
+    try {
+      const text = extractText(event);
+      if (!shouldBlockOutbound(text)) return;
+      const preview = text.replace(/\s+/g, ' ').slice(0, 100);
+      try {
+        api.logger?.info?.(`[${PLUGIN_ID}] cancelled outbound: ${preview}`);
+      } catch (_) {}
+      console.log(`[${PLUGIN_ID}] cancelled outbound: ${preview}`);
+      return {
+        cancel: true,
+        cancelReason: 'error-filter:suppress-warning-banner',
+      };
     } catch (e) {
-      return lowerText.includes(p.toLowerCase());
+      console.warn(`[${PLUGIN_ID}] message_sending hook error:`, e && e.message);
     }
   });
 }
 
-export default function createPlugin(runtime) {
-  console.log(`[${PLUGIN_NAME}] 错误过滤插件已加载 (${ERROR_PATTERNS.length} 个过滤规则)`);
-  
-  return {
-    name: PLUGIN_NAME,
+const pluginEntry = {
+  id: PLUGIN_ID,
+  name: 'Error Notification Filter',
+  description: 'Suppresses ⚠️ / system failure banners from being delivered to user chats',
+  register,
+};
 
-    async onReady() {
-      console.log(`[${PLUGIN_NAME}] 已就绪，开始拦截系统错误通知`);
-    },
-
-    // KEY HOOK: Intercept ALL incoming messages before processing
-    async onMessage(context) {
-      try {
-        const msg = context?.message?.content || context?.content || '';
-        
-        if (isErrorMessage(msg)) {
-          console.log(`[${PLUGIN_NAME}] 拦截系统通知: ${msg.substring(0, 80)}`);
-          // Return null/undefined to suppress the message
-          return null;
-        }
-      } catch (e) {
-        // Never crash
-        console.error(`[${PLUGIN_NAME}] 拦截异常: ${e.message}`);
-      }
-      // Continue normal processing
-      return context;
-    },
-
-    async onAfterResponse(context) {
-      // Secondary defense: also check responses
-      try {
-        const response = context?.response;
-        const text = typeof response === 'string' ? response : 
-          (response?.content?.map?.(c => c.text || '').join('') || '');
-        
-        if (isErrorMessage(text)) {
-          console.log(`[${PLUGIN_NAME}] 二次拦截响应: ${text.substring(0, 80)}`);
-        }
-      } catch (e) {}
-    },
-
-    async onShutdown() {
-      console.log(`[${PLUGIN_NAME}] 插件已停止`);
-    }
-  };
+export default pluginEntry;
+export function activate(api) {
+  return register(api);
 }

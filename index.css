@@ -2752,6 +2752,13 @@ select option {
   border-color: var(--border-focus);
 }
 
+#model-teacher[disabled],
+#model-teacher[readonly] {
+  opacity: 0.72;
+  cursor: not-allowed;
+  color: var(--text-secondary);
+}
+
 .action-bar-footer {
   display: flex;
   justify-content: flex-end;
@@ -2787,25 +2794,28 @@ select option {
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.10);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 8px;
   padding: 8px 16px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.10);
-  border-color: rgba(255, 255, 255, 0.20);
-  color: white;
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  transform: translateY(-1px);
 }
 
 .btn-secondary:active {
@@ -2820,16 +2830,38 @@ select option {
 }
 
 .btn-secondary.acc-danger-btn {
-  color: #f87171;
-  border-color: rgba(248, 113, 113, 0.25);
-  background: rgba(248, 113, 113, 0.05);
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.12);
 }
 
 .btn-secondary.acc-danger-btn:hover {
-  background: rgba(248, 113, 113, 0.12);
-  border-color: rgba(248, 113, 113, 0.45);
-  color: #fca5a5;
-  box-shadow: 0 0 12px rgba(248, 113, 113, 0.15);
+  background: rgba(248, 113, 113, 0.25);
+  border-color: rgba(248, 113, 113, 0.6);
+  color: #ffffff;
+  box-shadow: 0 0 14px rgba(248, 113, 113, 0.3);
+}
+
+#btn-reset-builtin-terminal:hover,
+#btn-copy-system-logs:hover {
+  background: rgba(59, 130, 246, 0.35) !important;
+  border-color: rgba(99, 102, 241, 0.75) !important;
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35) !important;
+  transform: translateY(-1px);
+}
+
+#btn-clear-system-logs:hover {
+  background: rgba(239, 68, 68, 0.35) !important;
+  border-color: rgba(239, 68, 68, 0.75) !important;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35) !important;
+  transform: translateY(-1px);
+}
+
+#config-reset-btn:hover {
+  background: rgba(255, 255, 255, 0.22) !important;
+  border-color: rgba(255, 255, 255, 0.45) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  transform: translateY(-1px);
 }
 
 
@@ -3030,6 +3062,17 @@ input:checked + .slider-knob {
 
 input:checked + .slider-knob:before {
   transform: translateX(20px);
+}
+
+.switch-slider-btn.is-locked {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+.switch-slider-btn.is-locked .slider-knob,
+.switch-slider-btn input:disabled + .slider-knob {
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 /* --- Token 仪表盘 Tab --- */

@@ -483,11 +483,27 @@ window.promptFields = function (title, fields, desc, okText) {
             box-shadow: 0 15px 50px rgba(0,0,0,0.3); color: var(--text-primary);
             transform: scale(0.9); transition: transform 0.2s ease;
         `;
-        const inputsHtml = (fields || []).map((f, i) => `
+        const inputsHtml = (fields || []).map((f, i) => {
+            const hint = f.hint
+                ? `<div style="font-size:11px; color: var(--text-secondary); opacity:0.85; margin: 2px 0 0; line-height:1.4;">${f.hint}</div>`
+                : '';
+            const attrs = [
+                `id="pf-input-${i}"`,
+                `type="${f.type || 'text'}"`,
+                `placeholder="${f.placeholder || ''}"`,
+                `value="${f.value || ''}"`,
+                f.pattern ? `pattern="${f.pattern}"` : '',
+                f.maxLength ? `maxlength="${f.maxLength}"` : '',
+                f.inputmode ? `inputmode="${f.inputmode}"` : '',
+                f.spellcheck === false ? 'spellcheck="false"' : '',
+                f.autocomplete ? `autocomplete="${f.autocomplete}"` : 'autocomplete="off"',
+            ].filter(Boolean).join(' ');
+            return `
             <label style="display:block; font-size:12px; color: var(--text-secondary); margin: 10px 0 4px;">${f.label || f.key}</label>
-            <input id="pf-input-${i}" type="${f.type || 'text'}" placeholder="${f.placeholder || ''}" value="${f.value || ''}"
+            <input ${attrs}
               style="width:100%; box-sizing:border-box; padding:8px 10px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-input); color:var(--text-primary); font-size:13px;" />
-        `).join('');
+            ${hint}`;
+        }).join('');
         
         const description = desc || '填写后将写入本地配置并尝试加载插件。凭证仅保存在本机。';
         const okLabel = okText || '保存并启用';
@@ -507,6 +523,16 @@ window.promptFields = function (title, fields, desc, okText) {
             overlay.style.opacity = '1';
             overlay.style.pointerEvents = 'auto';
             modal.style.transform = 'scale(1)';
+            // 输入时即时清洗非法字符（如 QQ 账号标识只允许英文数字）
+            (fields || []).forEach((f, i) => {
+                if (!f.sanitize || typeof f.sanitize !== 'function') return;
+                const el = modal.querySelector(`#pf-input-${i}`);
+                if (!el) return;
+                el.addEventListener('input', () => {
+                    const next = f.sanitize(el.value);
+                    if (next !== el.value) el.value = next;
+                });
+            });
         }, 10);
         const close = (value) => {
             overlay.style.opacity = '0';
@@ -521,7 +547,9 @@ window.promptFields = function (title, fields, desc, okText) {
             const out = {};
             (fields || []).forEach((f, i) => {
                 const el = modal.querySelector(`#pf-input-${i}`);
-                out[f.key] = el ? el.value.trim() : '';
+                let v = el ? el.value.trim() : '';
+                if (f.sanitize && typeof f.sanitize === 'function') v = f.sanitize(v);
+                out[f.key] = v;
             });
             close(out);
         });
@@ -1072,11 +1100,11 @@ function updateTopologyUI() {
 // 常见插件元数据（用于生成美观的插件网格）
 // 顺序即 UI 卡片顺序；自动摘要主卡映射自研 auto-summary（llm-task 仍会进 allow）
 const UI_PLUGIN_ORDER = [
-    'dual-model-trainer',
-    'openclaw-weixin',
-    'long-term-memory',
-    'feishu',
     'qqbot',
+    'openclaw-weixin',
+    'feishu',
+    'long-term-memory',
+    'dual-model-trainer',
     'voice-call',
     'telegram',
     'slack',
@@ -1089,6 +1117,14 @@ const UI_PLUGIN_ORDER = [
     'auto-start-codex'
 ];
 
+/** 置顶核心插件：默认开启且开关不可点 */
+const LOCKED_ALWAYS_ON_UI_IDS = new Set([
+    'qqbot',
+    'openclaw-weixin',
+    'feishu',
+    'long-term-memory'
+]);
+
 const LONG_TERM_MEMORY_STACK = ['auto-summary', 'memory-rotate', 'compaction-memory-guard'];
 
 const pluginMetadata = {
@@ -1097,7 +1133,7 @@ const pluginMetadata = {
     'long-term-memory': { name: '📚 长期记忆', desc: '开箱即用：自动摘要、记忆旋转与压缩护栏，将关键信息持久写入 MEMORY.md，对话压缩后仍可召回。', tier: 'zero' },
     'feishu': { name: '🦆 飞书渠道', desc: '接入飞书/Lark 机器人：支持扫码创建应用或手动填写 App ID/Secret，处理私聊与群聊消息', tier: 'credentials' },
     'qqbot': { name: '🐧 QQ机器人', desc: '将Nexora Agent接入 QQ 开放平台机器人（QQ Bot）消息通道，实现 QQ 群聊及私聊交互。', tier: 'credentials' },
-    'voice-call': { name: '📞 语音通话', desc: '开启实时语音对话服务，支持通过微信向 AI 拨打电话', tier: 'credentials' },
+    'voice-call': { name: '🎤 语音', desc: '本地离线语音：渠道 AI 回复朗读、唤醒倾听、语音对话；全部可在「语音管理」细调，默认关闭以节省性能', tier: 'zero' },
     'telegram': { name: '✈️ Telegram', desc: '通过 Telegram 机器人消息通道直接与您的 AI Nexora Agent对话', tier: 'credentials' },
     'slack': { name: '🎨 Slack 渠道', desc: '将 AI 本地Nexora Agent作为应用机器人接入到您的团队 Slack 频道中', tier: 'credentials' },
     'whatsapp': { name: '🟢 WhatsApp', desc: '接入全球 WhatsApp 消息服务，支持媒体及文本处理', tier: 'credentials' },
@@ -1400,6 +1436,26 @@ async function init() {
         }
     }
 
+    // 静默启动
+    const silentStartToggle = document.getElementById('setting-silent-start-toggle');
+    if (silentStartToggle && window.api && window.api.getSilentStart) {
+        try {
+            silentStartToggle.checked = !!(await window.api.getSilentStart());
+        } catch (e) {
+            silentStartToggle.checked = false;
+        }
+        silentStartToggle.addEventListener('change', async (e) => {
+            try {
+                await window.api.setSilentStart(!!e.target.checked);
+                showToast(e.target.checked
+                    ? t('settings.silent_start.toast_on')
+                    : t('settings.silent_start.toast_off'));
+            } catch (err) {
+                console.error('Failed to set silent start:', err);
+            }
+        });
+    }
+
     // 绑定客户端其他偏好设置项
     const settingAutoGateway = document.getElementById('setting-auto-gateway');
     const settingNotifyToggle = document.getElementById('setting-notify-toggle');
@@ -1685,10 +1741,21 @@ async function init() {
             let values;
             try {
                 values = await window.promptFields('添加 QQ 机器人', [
-                    { key: 'accountId', label: t('comm.qq.account.placeholder').split(' (')[0] + ' ' + (t('comm.qq.account.placeholder').includes('(') ? '(' + t('comm.qq.account.placeholder').split('(')[1] : ''), placeholder: t('comm.qq.account.placeholder') },
+                    {
+                        key: 'accountId',
+                        label: t('comm.qq.account.label'),
+                        placeholder: t('comm.qq.account.placeholder'),
+                        hint: t('comm.qq.account.hint'),
+                        pattern: '[A-Za-z0-9][A-Za-z0-9_-]{0,63}',
+                        maxLength: 64,
+                        inputmode: 'latin',
+                        spellcheck: false,
+                        autocomplete: 'off',
+                        sanitize: (v) => String(v || '').replace(/[^a-zA-Z0-9_-]/g, '')
+                    },
                     { key: 'appId', label: 'App ID', placeholder: '请输入机器人 AppID' },
                     { key: 'clientSecret', label: 'Client Secret', placeholder: '请输入机器人 AppSecret', type: 'password' }
-                ]);
+                ], t('comm.qq.add.desc'));
             } finally {
                 btnAddQqbot.disabled = false;
                 btnAddQqbot.style.opacity = '1';
@@ -1703,7 +1770,7 @@ async function init() {
             }
             // OpenClaw 出站发图会把账号 ID 规范化为 [a-z0-9_-]；中文会被洗成 default 导致「missing appId」
             if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(accountId)) {
-                showToast('QQ 账号 ID 只能用英文/数字/下划线（如 youlingzi、qqbot-1），不要用中文');
+                showToast(t('comm.qq.account.invalid_err'));
                 return;
             }
             if (!values.appId || !values.clientSecret) {
@@ -3321,7 +3388,7 @@ async function loadAndRenderConfig() {
         }
     }
 
-    // 双模型教学：老师/学生模型（来自插件配置，不写死本地模型）
+    // 双模型教学：老师模型锁定跟随主用模型；学生模型仍可配置
     const teacherEl = document.getElementById('model-teacher');
     const studentEl = document.getElementById('model-student');
     if (teacherEl || studentEl) {
@@ -3329,8 +3396,8 @@ async function loadAndRenderConfig() {
             && configData.plugins.entries
             && configData.plugins.entries['dual-model-trainer']
             && configData.plugins.entries['dual-model-trainer'].config) || {};
-        if (teacherEl) teacherEl.value = dmtCfg.teacherModel || '';
         if (studentEl) studentEl.value = normalizeStudentModelRef(dmtCfg.studentModel || '');
+        syncTeacherModelFromPrimary();
     }
 
     // 优先从本地 localStorage 加载自定义的视频/图片生成配置（不写盘入 openclaw.json 以免损坏Nexora Agent配置格式）
@@ -4761,6 +4828,29 @@ function updateAssignedProviderSelects(primaryModelId, fallbackModelId, selected
 
     primarySelect.dispatchEvent(new Event('sync-beautified'));
     fallbackSelect.dispatchEvent(new Event('sync-beautified'));
+    syncTeacherModelFromPrimary();
+}
+
+/** 从当前 UI 拼出主用模型完整引用（provider/model） */
+function getPrimaryModelRefFromUi() {
+    const primaryInput = document.getElementById('model-primary');
+    const primarySelect = document.getElementById('model-primary-provider');
+    if (!primaryInput) return '';
+    let modelVal = primaryInput.value.trim();
+    const providerVal = primarySelect ? primarySelect.value.trim() : '';
+    if (!modelVal) return '';
+    if (modelVal.includes('/')) return modelVal;
+    if (providerVal) return `${providerVal}/${modelVal}`;
+    return modelVal;
+}
+
+/** 教学老师模型始终等于主用模型：只读同步，不可单独改 */
+function syncTeacherModelFromPrimary() {
+    const teacherEl = document.getElementById('model-teacher');
+    if (!teacherEl) return;
+    teacherEl.readOnly = true;
+    teacherEl.disabled = true;
+    teacherEl.value = getPrimaryModelRefFromUi();
 }
 
 // 主模型输入框变动事件处理器
@@ -4776,6 +4866,7 @@ function handlePrimaryInput() {
         input.value = val;
     }
     updateAssignedProviderSelects(val, undefined, provider, undefined);
+    syncTeacherModelFromPrimary();
     updateConfigJsonPreview();
 }
 
@@ -4800,7 +4891,6 @@ function setupCustomAutocomplete() {
     const inputIds = [
         'model-primary',
         'model-fallback',
-        'model-teacher',
         'model-student',
         'model-image',
         'model-video'
@@ -5030,6 +5120,7 @@ function startSelectAutoBeautify() {
 
 // 供应商下拉框发生改变
 function handleProviderChange() {
+    syncTeacherModelFromPrimary();
     updateConfigJsonPreview();
 }
 
@@ -5278,9 +5369,10 @@ const handleSaveConfigAction = async () => {
     }
     const dmtEntry = configData.plugins.entries['dual-model-trainer'];
     if (!dmtEntry.config) dmtEntry.config = {};
-    const teacherInput = document.getElementById('model-teacher');
     const studentInput = document.getElementById('model-student');
-    if (teacherInput) dmtEntry.config.teacherModel = teacherInput.value.trim();
+    // 老师模型强制等于主用模型（不可单独配置）
+    dmtEntry.config.teacherModel = (configData.agents.defaults.model.primary || getPrimaryModelRefFromUi() || '').trim();
+    syncTeacherModelFromPrimary();
     if (studentInput) {
         const normalizedStudent = normalizeStudentModelRef(studentInput.value);
         if (studentInput.value.trim() && !normalizedStudent) {
@@ -5419,10 +5511,11 @@ async function renderPluginsGrid() {
             let painted = 0;
             for (const key of UI_PLUGIN_ORDER) {
                 if (!pluginMetadata[key]) continue;
-                if (!entries[key] && key !== 'auto-start-codex' && key !== 'long-term-memory') {
+                if (!entries[key] && key !== 'auto-start-codex' && key !== 'long-term-memory' && key !== 'voice-call') {
                     entries[key] = { enabled: false };
                 }
 
+                const isLockedOn = LOCKED_ALWAYS_ON_UI_IDS.has(key);
                 let isEnabled = false;
                 if (key === 'auto-start-codex') {
                     isEnabled = (configData.hooks && configData.hooks.internal && configData.hooks.internal.entries && configData.hooks.internal.entries['auto-start-codex'])
@@ -5431,9 +5524,13 @@ async function renderPluginsGrid() {
                 } else if (key === 'long-term-memory') {
                     // 伞形卡：真实栈三者全部开启才算“已启用”（不落盘 UI id）
                     isEnabled = LONG_TERM_MEMORY_STACK.every((id) => entries[id] && entries[id].enabled === true);
+                } else if (key === 'voice-call') {
+                    // 与「语音管理」总开关联动（默认关闭）
+                    isEnabled = !!(__voiceState && __voiceState.settings && __voiceState.settings.enabled);
                 } else {
                     isEnabled = entries[key] ? entries[key].enabled === true : false;
                 }
+                if (isLockedOn) isEnabled = true;
 
                 const probe = pluginProbeMap[key] || { badge: 'ready' };
                 const name = (() => { try { return t('plugin.' + key + '.name'); } catch (e) { return pluginMetadata[key].name; } })();
@@ -5495,12 +5592,17 @@ async function renderPluginsGrid() {
                 status.textContent = statusText;
 
                 const label = document.createElement('label');
-                label.className = 'switch-slider-btn';
+                label.className = 'switch-slider-btn' + (isLockedOn ? ' is-locked' : '');
+                if (isLockedOn) label.title = '核心功能，始终开启';
                 const input = document.createElement('input');
                 input.type = 'checkbox';
                 input.className = 'plugin-toggle-checkbox';
                 input.setAttribute('data-plugin', key);
                 if (isEnabled) input.checked = true;
+                if (isLockedOn) {
+                    input.disabled = true;
+                    input.setAttribute('aria-disabled', 'true');
+                }
                 const knob = document.createElement('span');
                 knob.className = 'slider-knob';
                 label.appendChild(input);
@@ -5529,6 +5631,28 @@ async function renderPluginsGrid() {
     async function onPluginToggle(e) {
         const pluginKey = e.target.getAttribute('data-plugin');
         const checked = e.target.checked;
+
+        if (LOCKED_ALWAYS_ON_UI_IDS.has(pluginKey)) {
+            e.target.checked = true;
+            showToast(t('plugin.toast.locked_always_on'));
+            paintCards();
+            return;
+        }
+
+        // 语音卡：与「语音管理」总开关联动，不写 OpenClaw voice-call 插件
+        if (pluginKey === 'voice-call') {
+            try {
+                await patchVoiceSettings({ enabled: checked });
+                showToast(checked
+                    ? t('plugin.toast.voice_linked_on')
+                    : t('plugin.toast.voice_linked_off'));
+            } catch (err) {
+                showToast(String(err && err.message || err));
+                e.target.checked = !checked;
+            }
+            paintCards();
+            return;
+        }
 
         if (checked) {
             let probe = pluginProbeMap[pluginKey];
@@ -5618,7 +5742,6 @@ async function renderPluginsGrid() {
             }
 
             if (pluginKey === 'whatsapp' && probe && probe.hint) showToast(probe.hint);
-            if (pluginKey === 'voice-call') showToast((probe && probe.hint) || t('plugin.voice-call.desc'));
             if (probe && probe.badge === 'missing-runtime') showToast(t('plugin.toast.missing_runtime'));
         }
 
@@ -8237,9 +8360,25 @@ function addTtsToAiBubble(msgDiv, bubble) {
 
 // 往聊天窗口追加气泡消息
 function appendChatMessage(sender, content, attachment = null, isHTML = false) {
-    // 🌟 前端完全干净过滤：隐藏所有底层指令产生的 Exec failed 系统框
-    if (typeof content === 'string' && content.includes('Exec failed')) {
-        return null;
+    // 隐藏底层系统失败横幅（⚠️ ✉️ Message: ... failed / Exec failed 等），不进会话气泡
+    if (typeof content === 'string') {
+        const raw = content.trim();
+        if (
+            raw.includes('Exec failed') ||
+            raw.includes('⚠️') ||
+            raw.includes('🛠️') ||
+            /Message:\s*.+\s+failed/i.test(raw) ||
+            /openclaw-screenshot-latest/i.test(raw)
+        ) {
+            // 保留前端主动引导文案（选模型等），其余带 ⚠️ 的一律不展示
+            const isUiGuide =
+                raw.includes('请先在右上角选择') ||
+                raw.includes('提供商配置不存在') ||
+                raw.includes('未配置 Base URL') ||
+                raw.includes('Please select') ||
+                raw.includes('请先前往【模型配置】');
+            if (!isUiGuide) return null;
+        }
     }
     // 🌟 拦截大模型输出的图片占位符 [[image]] 并替换为最新的物理截图显示
     if (typeof content === 'string' && (content.includes('[[image]]') || content.includes('[image]'))) {
@@ -12512,6 +12651,45 @@ function initBuiltinTerminal() {
     }, 0);
 }
 
+async function resetBuiltinTerminalToInitial() {
+    if (!window.api || !window.api.resetBuiltinTerminal) return;
+    try {
+        if (!isTerminalInitialized || !builtinTerminal) {
+            initBuiltinTerminal();
+            return;
+        }
+        try { builtinTerminal.reset(); } catch (e) {
+            try { builtinTerminal.clear(); } catch (e2) {}
+        }
+        const currentLang = localStorage.getItem('setting_language') || 'zh-CN';
+        const res = await window.api.resetBuiltinTerminal(currentLang);
+        terminalNeedsFit = true;
+        scheduleBuiltinTerminalFit(true);
+        if (builtinTerminal && window.api.resizeBuiltinTerminal) {
+            try {
+                window.api.resizeBuiltinTerminal(builtinTerminal.cols, builtinTerminal.rows);
+            } catch (e) {}
+        }
+        try { builtinTerminal.focus(); } catch (e) {}
+        if (res && res.ok === false) {
+            showToast(t('terminal.toast.reset_fail') + (res.error ? `: ${res.error}` : ''));
+            return;
+        }
+        showToast(t('terminal.toast.reset_ok'));
+    } catch (err) {
+        showToast(t('terminal.toast.reset_fail') + `: ${err && err.message ? err.message : err}`);
+    }
+}
+
+(function bindBuiltinTerminalResetButton() {
+    const btn = document.getElementById('btn-reset-builtin-terminal');
+    if (!btn || btn.dataset.bound === '1') return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', () => {
+        resetBuiltinTerminalToInitial();
+    });
+})();
+
 // ==========================================
 // Nexora Clash Dashboard Helpers
 // ==========================================
@@ -13491,11 +13669,31 @@ function applyVoiceStateToUi(state) {
 
         fillVoicePackSelects(state);
         renderVoicePackGrids(state);
+        syncVoicePluginCardFromState(state);
     } finally {
         __voiceApplyingUi = false;
     }
 
     syncVoiceListeningFromSettings(state.settings || {});
+}
+
+/** 内置插件「语音」开关 ↔ 语音管理总开关 */
+function syncVoicePluginCardFromState(state) {
+    const s = (state && state.settings) || (__voiceState && __voiceState.settings) || {};
+    const enabled = !!s.enabled;
+    const input = document.querySelector('.plugin-toggle-checkbox[data-plugin="voice-call"]');
+    if (!input) return;
+    if (input.checked !== enabled) input.checked = enabled;
+    const bot = input.closest('.plugin-card-bot');
+    if (!bot) return;
+    const status = bot.firstElementChild;
+    if (!status || status.tagName !== 'SPAN') return;
+    try {
+        status.textContent = enabled ? t('plugin.status.enabled') : t('plugin.status.disabled');
+    } catch (e) {
+        status.textContent = enabled ? '已启用' : '已禁用';
+    }
+    status.style.color = enabled ? 'var(--accent-color)' : 'var(--text-secondary)';
 }
 
 function getVoicePackById(packId) {

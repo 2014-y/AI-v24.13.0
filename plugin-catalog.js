@@ -49,7 +49,7 @@ const ZERO_CONFIG_DEFAULT_ON = [
 ];
 
 /** B：需外部平台凭证 / 渠道配置 */
-const CREDENTIAL_PLUGINS = ['slack', 'matrix', 'telegram', 'whatsapp', 'voice-call', 'qqbot', 'feishu'];
+const CREDENTIAL_PLUGINS = ['slack', 'matrix', 'telegram', 'whatsapp', 'qqbot', 'feishu'];
 
 /** C：需本机安装软件 */
 const LOCAL_SOFTWARE_PLUGINS = ['auto-start-codex'];
@@ -72,13 +72,24 @@ const ASYNC_CHANNEL_LOGIN = {
   // 'whatsapp': { openclawChannel: 'whatsapp', label: 'WhatsApp', uiChannel: 'whatsapp', wakeTimeoutMs: 120000 }
 };
 
+/**
+ * 内置插件页置顶且开关锁定（始终开启、不可关闭）。
+ * 顺序与 UI 卡片前四位一致：QQ → 微信 → 飞书 → 长期记忆。
+ */
+const LOCKED_ALWAYS_ON_UI_IDS = [
+  'qqbot',
+  'openclaw-weixin',
+  'feishu',
+  LONG_TERM_MEMORY_UI_ID
+];
+
 /** UI 插件页展示的完整列表（顺序即卡片顺序） */
 const UI_PLUGIN_IDS = [
-  'dual-model-trainer',
-  'openclaw-weixin',
-  LONG_TERM_MEMORY_UI_ID,
-  'feishu',
   'qqbot',
+  'openclaw-weixin',
+  'feishu',
+  LONG_TERM_MEMORY_UI_ID,
+  'dual-model-trainer',
   'voice-call',
   'telegram',
   'slack',
@@ -96,6 +107,7 @@ for (const id of ZERO_CONFIG_PLUGINS) PLUGIN_TIER[id] = 'zero';
 for (const id of CREDENTIAL_PLUGINS) PLUGIN_TIER[id] = 'credentials';
 for (const id of LOCAL_SOFTWARE_PLUGINS) PLUGIN_TIER[id] = 'software';
 PLUGIN_TIER[LONG_TERM_MEMORY_UI_ID] = 'zero';
+PLUGIN_TIER['voice-call'] = 'zero'; // UI 映射本地「语音管理」，非 OpenClaw 渠道插件
 
 function ensureAllow(config, id) {
   if (!config.plugins) config.plugins = {};
@@ -159,7 +171,9 @@ function setLongTermMemoryEnabled(config, enabled) {
   if (!config.plugins) config.plugins = {};
   if (!config.plugins.entries) config.plugins.entries = {};
   if (!Array.isArray(config.plugins.allow)) config.plugins.allow = [];
-  const on = Boolean(enabled);
+  // 长期记忆为锁定常开：忽略关闭请求
+  const on = true;
+  void enabled;
   for (const id of LONG_TERM_MEMORY_STACK) {
     if (!config.plugins.entries[id]) config.plugins.entries[id] = {};
     config.plugins.entries[id].enabled = on;
@@ -221,6 +235,16 @@ function ensureUiPluginCatalog(config, opts = {}) {
   // 长期记忆开箱：强制启用真实插件栈 + UI 伞形卡
   const ltm = ensureLongTermMemoryStack(config);
   if (ltm.changed) changes.push(...ltm.changes);
+
+  // QQ / 微信 / 飞书：与长期记忆同级，始终开启（UI 开关锁定）
+  for (const id of ['qqbot', 'openclaw-weixin', 'feishu']) {
+    if (ensureEntry(config, id, true)) changes.push(`${id}: entry created`);
+    if (config.plugins.entries[id] && config.plugins.entries[id].enabled !== true) {
+      config.plugins.entries[id].enabled = true;
+      changes.push(`${id}: enabled -> true (locked always-on)`);
+    }
+    if (ensureAllow(config, id)) changes.push(`${id}: +allow`);
+  }
 
   // 角色管理：全渠道查询/切换基础能力，始终默认开启（不进插件菜单）
   if (ensureEntry(config, 'role-manager', true)) changes.push('role-manager: entry created');
@@ -449,11 +473,11 @@ function feishuNeedsConfig(config) {
 }
 
 function voiceCallNeedsConfig() {
-  // 语音通话默认关闭；开启即可加载插件，细项可在控制台配置
+  // 本地语音：与「语音管理」总开关联动，默认关闭
   return {
     needsConfig: false,
     missingFields: [],
-    hint: '默认关闭；开启后可通过微信等进行语音通话（需网关语音能力可用）'
+    hint: 'plugin.voice-call.hint'
   };
 }
 
@@ -491,6 +515,17 @@ function probePlugin(pluginId, opts = {}) {
     return base;
   }
 
+  // UI「语音」：映射本地语音管理总开关，不依赖 OpenClaw voice-call 包
+  if (pluginId === 'voice-call') {
+    const n = voiceCallNeedsConfig();
+    base.available = true;
+    base.needsConfig = false;
+    base.missingFields = [];
+    base.hint = n.hint;
+    base.badge = 'ready';
+    return base;
+  }
+
   if (tier === 'credentials') {
     if (pluginId === 'slack') {
       const n = slackNeedsConfig(config);
@@ -510,10 +545,6 @@ function probePlugin(pluginId, opts = {}) {
       // WhatsApp 允许先开再扫码，不强制拦截开关
       base.badge = n.needsConfig ? 'needs-config' : 'ready';
       base.blockEnable = false;
-    } else if (pluginId === 'voice-call') {
-      const n = voiceCallNeedsConfig();
-      Object.assign(base, n);
-      base.badge = 'ready';
     } else if (pluginId === 'qqbot') {
       const n = qqbotNeedsConfig(config);
       Object.assign(base, n);
@@ -645,6 +676,7 @@ module.exports = {
   LOCAL_SOFTWARE_PLUGINS,
   ASYNC_CHANNEL_LOGIN,
   UI_PLUGIN_IDS,
+  LOCKED_ALWAYS_ON_UI_IDS,
   PLUGIN_TIER,
   LONG_TERM_MEMORY_STACK,
   LONG_TERM_MEMORY_UI_ID,

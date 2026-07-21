@@ -45,9 +45,11 @@ contextBridge.exposeInMainWorld('api', {
     savePluginCredentials: (payload) => ipcRenderer.invoke('plugin-save-credentials', payload),
     promptPluginCredentials: (pluginId) => ipcRenderer.invoke('plugin-prompt-credentials', pluginId),
     
-    // 开机自启
+    // 开机自启 / 静默启动
     getAutoStart: () => ipcRenderer.invoke('autostart-get'),
     setAutoStart: (enabled) => ipcRenderer.invoke('autostart-set', enabled),
+    getSilentStart: () => ipcRenderer.invoke('silent-start-get'),
+    setSilentStart: (enabled) => ipcRenderer.invoke('silent-start-set', enabled),
     copyText: (text) => ipcRenderer.invoke('copy-text', text),
     openExternal: (url) => ipcRenderer.invoke('open-external', url),
     getAccelerationStatus: () => ipcRenderer.invoke('acceleration-status'),
@@ -108,6 +110,7 @@ contextBridge.exposeInMainWorld('api', {
 
     // 内置沙箱终端交互
     startBuiltinTerminal: (lang) => ipcRenderer.invoke('builtin-terminal-start', lang),
+    resetBuiltinTerminal: (lang) => ipcRenderer.invoke('builtin-terminal-reset', lang),
     resizeBuiltinTerminal: (cols, rows) => ipcRenderer.send('builtin-terminal-resize', { cols, rows }),
     writeBuiltinTerminal: (data) => ipcRenderer.send('builtin-terminal-write', data),
     onBuiltinTerminalData: (callback) => {

@@ -55,8 +55,15 @@ export default function createPlugin(runtime) {
   }
 
   // 配置项（带默认值和类型校验）——老师/学生仅来自 UI/插件配置，不写死本地模型
+  // 老师模型 = 默认主用模型；插件配置仅作回退
+  let primaryDefault = '';
+  try {
+    primaryDefault = String(runtime?.config?.agents?.defaults?.model?.primary || '').trim();
+  } catch (e) {
+    primaryDefault = '';
+  }
   const config = {
-    teacherModel: String(pluginConfig.teacherModel || '').trim(),
+    teacherModel: String(primaryDefault || pluginConfig.teacherModel || '').trim(),
     studentModel: String(pluginConfig.studentModel || '').trim(),
     mode: ['teach-learn', 'fallback', 'collect-only'].includes(pluginConfig.mode)
       ? pluginConfig.mode : 'collect-only',
