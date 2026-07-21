@@ -1,5 +1,5 @@
 // main.js - Electron 主进程入口
-const { app, BrowserWindow, ipcMain, Tray, Menu, Notification, session, dialog, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, Notification, session, dialog, clipboard, protocol } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const net = require('net');
@@ -3012,18 +3012,6 @@ function createWindow(existingSplash) {
         const id = (global.nexoraInstance && global.nexoraInstance.id) || 1;
         mainWindow.setTitle(id > 1 ? `Nexora Agent #${id}` : 'Nexora Agent');
     } catch (e) {}
-    // 修复：曾把「自动启动」关掉会导致开 App 无核心/无日志；纠正为开启并同步开关 UI
-    mainWindow.webContents.once('did-finish-load', () => {
-        mainWindow.webContents.executeJavaScript(`
-            try {
-              if (localStorage.getItem('setting_auto_launch_gateway') === 'false') {
-                localStorage.setItem('setting_auto_launch_gateway', 'true');
-                const el = document.getElementById('setting-auto-gateway');
-                if (el) el.checked = true;
-              }
-            } catch (e) {}
-        `).catch(() => {});
-    });
     // 当渲染进程首次绘制完成后，关闭 splash；静默启动则不弹主窗口（托盘后台）
     mainWindow.once('ready-to-show', () => {
         try { if (splash && !splash.isDestroyed()) splash.destroy(); } catch (e) {}
@@ -3094,15 +3082,28 @@ function createWindow(existingSplash) {
         mainWindow = null;
     });
 
-    // 主进程兜底自动拉起：避免仅依赖 localStorage（用户关掉「自动启动」后会整页无日志、渠道灰点）
-    // 前端 setting_auto_launch_gateway 仍可再发一次 start（有 gatewayProcess / inFlight 防重）
-    setTimeout(() => {
-        try {
-            startGatewayProcess();
-        } catch (e) {
-            console.warn('[Gateway] boot auto-start failed:', e && e.message);
-        }
-    }, 1800);
+    // 同步渲染进程 localStorage 偏好到 userData，再按设置决定是否兜底拉起网关
+    mainWindow.webContents.once('did-finish-load', () => {
+        const syncAndMaybeStart = async () => {
+            try {
+                const settingsPath = autoLaunchGatewaySettingsPath();
+                if (!fs.existsSync(settingsPath)) {
+                    const v = await mainWindow.webContents.executeJavaScript(
+                        `try { localStorage.getItem('setting_auto_launch_gateway') } catch (e) { null }`
+                    );
+                    if (v === 'false') setAutoLaunchGatewayEnabled(false);
+                    else if (v === 'true') setAutoLaunchGatewayEnabled(true);
+                }
+            } catch (e) {}
+            try {
+                if (!isAutoLaunchGatewayEnabled()) return;
+                startGatewayProcess();
+            } catch (e) {
+                console.warn('[Gateway] boot auto-start failed:', e && e.message);
+            }
+        };
+        setTimeout(() => { syncAndMaybeStart(); }, 800);
+    });
 }
 
 // 创建系统托盘
@@ -6109,6 +6110,139 @@ ipcMain.handle('silent-start-set', async (event, enabled) => {
     return setSilentStartEnabled(enabled);
 });
 
+function autoLaunchGatewaySettingsPath() {
+    try {
+        return path.join(app.getPath('userData'), 'auto-launch-gateway.json');
+    } catch (e) {
+        return path.join(CONFIG_DIR || process.cwd(), 'auto-launch-gateway.json');
+    }
+}
+
+/** 未写入配置文件时默认开启（与 UI 默认一致） */
+function isAutoLaunchGatewayEnabled() {
+    try {
+        const p = autoLaunchGatewaySettingsPath();
+        if (!fs.existsSync(p)) return true;
+        const raw = fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, '');
+        const data = JSON.parse(raw);
+        return !(data && data.enabled === false);
+    } catch (e) {
+        return true;
+    }
+}
+
+function setAutoLaunchGatewayEnabled(enabled) {
+    const on = Boolean(enabled);
+    const p = autoLaunchGatewaySettingsPath();
+    try {
+        const dir = path.dirname(p);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(p, JSON.stringify({ enabled: on }, null, 2), 'utf8');
+    } catch (e) {
+        console.warn('[AutoLaunchGateway] write failed:', e && e.message);
+    }
+    return on;
+}
+
+ipcMain.handle('auto-launch-gateway-get', async () => {
+    return isAutoLaunchGatewayEnabled();
+});
+
+ipcMain.handle('auto-launch-gateway-set', async (event, enabled) => {
+    return setAutoLaunchGatewayEnabled(enabled);
+});
+
+function customThemeBgDir() {
+    return path.join(app.getPath('userData'), 'custom-theme');
+}
+
+function findCustomThemeBackgroundFile() {
+    try {
+        const dir = customThemeBgDir();
+        if (!fs.existsSync(dir)) return null;
+        const files = fs.readdirSync(dir).filter((n) => /^background\./i.test(n));
+        if (!files.length) return null;
+        return path.join(dir, files[0]);
+    } catch (e) {
+        return null;
+    }
+}
+
+function mimeForImageExt(ext) {
+    const e = String(ext || '').toLowerCase();
+    if (e === '.png') return 'image/png';
+    if (e === '.webp') return 'image/webp';
+    if (e === '.gif') return 'image/gif';
+    if (e === '.bmp') return 'image/bmp';
+    return 'image/jpeg';
+}
+
+/** 转 data URL，避免 file:// 在 Electron 渲染进程 CSS 中被拦截导致“图片不生效” */
+function imageFileToDataUrl(filePath) {
+    const buf = fs.readFileSync(filePath);
+    const mime = mimeForImageExt(path.extname(filePath));
+    return `data:${mime};base64,${buf.toString('base64')}`;
+}
+
+ipcMain.handle('theme-pick-background', async () => {
+    try {
+        const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow || undefined, {
+            title: '选择自定义主题背景图',
+            properties: ['openFile'],
+            filters: [
+                { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'] },
+                { name: 'All Files', extensions: ['*'] }
+            ]
+        });
+        if (canceled || !filePaths || !filePaths[0]) return { success: false, canceled: true };
+        const src = filePaths[0];
+        const dir = customThemeBgDir();
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        try {
+            for (const name of fs.readdirSync(dir)) {
+                if (/^background\./i.test(name)) {
+                    try { fs.unlinkSync(path.join(dir, name)); } catch (e) {}
+                }
+            }
+        } catch (e) {}
+        let ext = path.extname(src) || '.jpg';
+        if (!/^\.(jpe?g|png|webp|gif|bmp)$/i.test(ext)) ext = '.jpg';
+        const dest = path.join(dir, 'background' + ext.toLowerCase());
+        fs.copyFileSync(src, dest);
+        // 用自定义协议，避免 file:// / 超大 data URL 在 CSS 里失效
+        return { success: true, fileUrl: `nexora-bg://wallpaper?v=${Date.now()}`, path: dest };
+    } catch (e) {
+        return { success: false, error: e && e.message ? e.message : String(e) };
+    }
+});
+
+ipcMain.handle('theme-get-background', async () => {
+    try {
+        const file = findCustomThemeBackgroundFile();
+        if (!file) return { success: true, fileUrl: null };
+        const mtime = fs.statSync(file).mtimeMs || Date.now();
+        return { success: true, fileUrl: `nexora-bg://wallpaper?v=${Math.floor(mtime)}`, path: file };
+    } catch (e) {
+        return { success: false, error: e && e.message ? e.message : String(e) };
+    }
+});
+
+ipcMain.handle('theme-clear-background', async () => {
+    try {
+        const dir = customThemeBgDir();
+        if (fs.existsSync(dir)) {
+            for (const name of fs.readdirSync(dir)) {
+                if (/^background\./i.test(name)) {
+                    try { fs.unlinkSync(path.join(dir, name)); } catch (e) {}
+                }
+            }
+        }
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: e && e.message ? e.message : String(e) };
+    }
+});
+
 // 获取应用当前版本号
 ipcMain.handle('get-app-version', async () => {
     return app.getVersion();
@@ -7169,9 +7303,42 @@ ipcMain.handle('update-openclaw-package', async (event, { targetVersion }) => {
     }
 });
 
+// 自定义主题背景图协议（须在 ready 前声明）
+try {
+    protocol.registerSchemesAsPrivileged([
+        {
+            scheme: 'nexora-bg',
+            privileges: {
+                standard: true,
+                secure: true,
+                supportFetchAPI: true,
+                bypassCSP: true,
+                stream: true
+            }
+        }
+    ]);
+} catch (e) {}
+
 // 初始化应用
 app.whenReady().then(async () => {
     if (!global.nexoraInstance) return;
+
+    try {
+        protocol.registerFileProtocol('nexora-bg', (request, callback) => {
+            try {
+                const file = findCustomThemeBackgroundFile();
+                if (!file || !fs.existsSync(file)) {
+                    callback({ error: -6 });
+                    return;
+                }
+                callback({ path: path.normalize(file) });
+            } catch (err) {
+                callback({ error: -2 });
+            }
+        });
+    } catch (e) {
+        console.warn('[Theme] nexora-bg protocol register failed:', e && e.message);
+    }
 
     // 初始化加速通道目录与状态
     try {
