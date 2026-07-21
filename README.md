@@ -2,10 +2,14 @@
 
 <br />
 
-<img src="config/icon.ico" width="140" height="140" alt="Nexora Agent Logo" />
+<!-- ⚡ 动态流光赛博 Header Banner ⚡ -->
+<img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=0,2,10,24,30&height=220&section=header&text=NEXORA%20AGENT&fontSize=68&fontColor=ffffff&animation=twinkling&fontAlignY=36&desc=Sovereign%20Autonomous%20Multi-Channel%20AI%20Intelligence%20Matrix&descSize=18&descAlignY=62" width="100%" alt="Nexora Agent Animated Header" />
 
-# NEXORA AGENT
-### Enterprise-Grade Self-Healing Local AI Intelligence Gateway
+<p align="center">
+  <img src="config/icon.ico" width="130" height="130" alt="Nexora Agent Logo" />
+</p>
+
+### 🌌 Autonomous, Self-Healing & Distributed Local AI Intelligence Matrix
 
 **专为企业与个人打造的下一代全离线、分布式、自愈型多渠道 AI 智能体控制中枢**
 
@@ -326,5 +330,8 @@ module.exports = CustomPlugin;
 ---
 
 <div align="center">
+  <br />
+  <img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=0,2,10,24,30&height=120&section=footer" width="100%" alt="Nexora Footer" />
+  <br />
   <sub>Built with ❤️ by Nexora Team. Empowering Decentralized Local AI Agents everywhere.</sub>
 </div>
