@@ -2,8 +2,11 @@
 
 <br />
 
-<!-- ⚡ 动态流光赛博 Header Banner ⚡ -->
-<img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=0,2,10,24,30&height=220&section=header&text=NEXORA%20AGENT&fontSize=68&fontColor=ffffff&animation=twinkling&fontAlignY=36&desc=Sovereign%20Autonomous%20Multi-Channel%20AI%20Intelligence%20Matrix&descSize=18&descAlignY=62" width="100%" alt="Nexora Agent Animated Header" />
+<!-- ⚡ 终极赛博霓虹动态 Header ⚡ -->
+<img src="https://capsule-render.vercel.app/api?type=rect&color=gradient&customColorList=0,2,10,24,30&height=220&section=header&text=NEXORA%20AGENT&fontSize=72&fontColor=ffffff&animation=twinkling&fontAlignY=36&desc=%E2%9A%A1%20SOVEREIGN%20AUTONOMOUS%20LOCAL%20AI%20INTELLIGENCE%20MATRIX%20%E2%9A%A1&descSize=16&descAlignY=65" width="100%" alt="Nexora Cyberpunk Header" />
+
+<br />
+<br />
 
 <p align="center">
   <img src="config/icon.ico" width="130" height="130" alt="Nexora Agent Logo" />
