@@ -10297,7 +10297,7 @@ async function triggerUpdateCheck(isManual = false) {
             if (isManual) {
                 showToast(result.message || '无法连接更新服务器，请稍后重试或手动前往 Releases 页面');
                 if (window.api && window.api.openExternal) {
-                    window.api.openExternal(result.downloadUrl || 'https://github.com/2014-y/ClawAI/releases');
+                    window.api.openExternal(result.downloadUrl || 'https://github.com/2014-y/NexoraAgent/releases');
                 }
             } else {
                 showToast(t('toast.auto_update.failed'));
@@ -10400,7 +10400,7 @@ function setupUpdateModal() {
                 
                 // 自动打开浏览器到 GitHub Releases 页面
                 if (window.api && window.api.openExternal) {
-                    window.api.openExternal('https://github.com/2014-y/ClawAI/releases');
+                    window.api.openExternal('https://github.com/2014-y/NexoraAgent/releases');
                 }
                 
                 // 恢复按钮状态

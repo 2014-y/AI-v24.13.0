@@ -7115,7 +7115,7 @@ ipcMain.handle('get-app-start-time', () => {
 });
 
 // ─── 软件更新：多通道探测 (直连 GitHub API → 镜像代理 → 页面重定向解析) ───
-const UPDATE_REPO = '2014-y/ClawAI';
+const UPDATE_REPO = '2014-y/NexoraAgent';
 const UPDATE_RELEASES_PAGE = `https://github.com/${UPDATE_REPO}/releases`;
 const UPDATE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
