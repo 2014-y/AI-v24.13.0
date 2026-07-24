@@ -595,8 +595,19 @@ let tray = null;
 let gatewayProcess = null;
 let gatewayStartInFlight = null;
 let channelBreakerOverrideTimer = null;
+let overflowRolloverTriggerHelper = null;
 let gatewayHttpReadyTimer = null;
 let gatewayHttpReadyNotified = false;
+
+function getOverflowRolloverTriggerHelper() {
+    if (overflowRolloverTriggerHelper) return overflowRolloverTriggerHelper;
+    try {
+        overflowRolloverTriggerHelper = require('./overflow-rollover-trigger');
+    } catch (e) {
+        overflowRolloverTriggerHelper = null;
+    }
+    return overflowRolloverTriggerHelper;
+}
 /** 意外退出自动拉起：5 分钟内最多 3 次，避免微信发图等硬崩变成连环重启 */
 let gatewayCrashRestartTimer = null;
 let gatewayCrashRestartAt = [];
@@ -1175,7 +1186,8 @@ const BUNDLED_CUSTOM_PLUGINS = [
     'health-check',
     'remote-policy',
     'voice-bridge',
-    'session-tool-heal'
+    'session-tool-heal',
+    'session-overflow-rollover'
 ];
 
 /** extensions/ 下的媒体生成插件：云电脑开箱必须启用并注入 load.paths */
@@ -2916,11 +2928,12 @@ function seedBundledPlugins(options = {}) {
 
         // 角色管理插件依赖根目录 role-config.js：无论 bundle stamp 是否变化都强制同步
         syncRoleManagerSharedModules();
-        // voice-bridge / error-filter / session-tool-heal / disk-compact 钩子变更必须立即覆盖用户目录
+        // voice-bridge / error-filter / session-tool-heal / disk-compact / overflow-rollover 钩子变更必须立即覆盖用户目录
         syncBundledPluginFiles('voice-bridge');
         syncBundledPluginFiles('error-filter');
         syncBundledPluginFiles('session-tool-heal');
         syncBundledPluginFiles('disk-compact');
+        syncBundledPluginFiles('session-overflow-rollover');
         for (const name of BUNDLED_EXTENSION_PLUGINS) {
             syncBundledPluginFiles(name);
         }
@@ -4165,6 +4178,19 @@ async function startGatewayProcess() {
                     voiceRuntime.maybeSpeakChannelReplyFromGatewayLog(text);
                 } catch (e) {}
 
+                // 压缩失败只打日志、钩子漏检时：写触发文件，由 session-overflow-rollover 静默归档续聊（不依赖窗口）
+                try {
+                    const helper = getOverflowRolloverTriggerHelper();
+                    if (helper && typeof helper.queueOverflowRolloverFromLog === 'function') {
+                        const queued = helper.queueOverflowRolloverFromLog(CONFIG_DIR, text);
+                        if (queued && queued.queued) {
+                            console.log(
+                                `[OverflowRollover] queued trigger key=${queued.sessionKey || '(auto)'} from gateway log`
+                            );
+                        }
+                    }
+                } catch (e) {}
+
                 if (mainWindow) {
                     mainWindow.webContents.send('gateway-log', text);
 
@@ -4600,8 +4626,97 @@ function ensureOpenClawConfigInitialized() {
                 config.plugins.entries[name].enabled = true;
                 needsSave = true;
             }
+            if (!config.plugins.entries[name].hooks) {
+                config.plugins.entries[name].hooks = {};
+                needsSave = true;
+            }
+            if (config.plugins.entries[name].hooks.allowConversationAccess !== true) {
+                config.plugins.entries[name].hooks.allowConversationAccess = true;
+                needsSave = true;
+            }
             if (!config.plugins.allow.includes(name)) {
                 config.plugins.allow.push(name);
+                needsSave = true;
+            }
+        }
+
+        // 上下文溢出：归档旧会话 + 新会话续答上一问（替代只提示 /new）
+        {
+            const name = 'session-overflow-rollover';
+            if (!config.plugins.entries[name]) {
+                config.plugins.entries[name] = {};
+                needsSave = true;
+            }
+            if (config.plugins.entries[name].enabled !== true) {
+                config.plugins.entries[name].enabled = true;
+                needsSave = true;
+            }
+            if (!config.plugins.entries[name].hooks) {
+                config.plugins.entries[name].hooks = {};
+                needsSave = true;
+            }
+            if (config.plugins.entries[name].hooks.allowConversationAccess !== true) {
+                config.plugins.entries[name].hooks.allowConversationAccess = true;
+                needsSave = true;
+            }
+            if (!config.plugins.allow.includes(name)) {
+                config.plugins.allow.push(name);
+                needsSave = true;
+            }
+        }
+
+        // 压缩缓冲拉高，尽量在真正溢出前触发压缩；失败仍由 session-overflow-rollover 兜底
+        {
+            if (!config.agents) config.agents = {};
+            if (!config.agents.defaults) config.agents.defaults = {};
+            if (!config.agents.defaults.compaction || typeof config.agents.defaults.compaction !== 'object') {
+                config.agents.defaults.compaction = {};
+                needsSave = true;
+            }
+            const compact = config.agents.defaults.compaction;
+            if (!(Number(compact.reserveTokensFloor) >= 35000)) {
+                compact.reserveTokensFloor = 35000;
+                needsSave = true;
+            }
+            if (compact.mode == null) {
+                compact.mode = 'safeguard';
+                needsSave = true;
+            }
+            if (!(Number(compact.timeoutSeconds) >= 240)) {
+                compact.timeoutSeconds = 240;
+                needsSave = true;
+            }
+            // 更早、更小块压缩，降低一次摘要超时概率
+            if (!(Number(compact.maxHistoryShare) > 0) || Number(compact.maxHistoryShare) > 0.35) {
+                compact.maxHistoryShare = 0.35;
+                needsSave = true;
+            }
+            // 云端大窗误留的极小 maxContextTokens 会反复触发溢出压缩
+            const maxCtx = Number(compact.maxContextTokens);
+            if (Number.isFinite(maxCtx) && maxCtx > 0 && maxCtx < 32000) {
+                delete compact.maxContextTokens;
+                needsSave = true;
+            }
+        }
+
+        // 限流/过载：主模型连续重试 30 次后才切备援（OpenClaw 默认约 1 次就切）
+        {
+            if (!config.auth) config.auth = {};
+            if (!config.auth.cooldowns || typeof config.auth.cooldowns !== 'object') {
+                config.auth.cooldowns = {};
+                needsSave = true;
+            }
+            const cd = config.auth.cooldowns;
+            if (!(Number(cd.rateLimitedProfileRotations) >= 30)) {
+                cd.rateLimitedProfileRotations = 30;
+                needsSave = true;
+            }
+            if (!(Number(cd.overloadedProfileRotations) >= 30)) {
+                cd.overloadedProfileRotations = 30;
+                needsSave = true;
+            }
+            if (!(Number(cd.overloadedBackoffMs) >= 800)) {
+                cd.overloadedBackoffMs = 800;
                 needsSave = true;
             }
         }
@@ -4915,6 +5030,33 @@ function ensureOpenClawConfigInitialized() {
             }
         } catch (e) {
             console.warn('[LatencyTune] skipped:', e.message);
+        }
+
+        // LatencyTune 之后再次钉死云端压缩地板，杜绝被误判小窗压回 8000
+        {
+            if (!config.agents) config.agents = {};
+            if (!config.agents.defaults) config.agents.defaults = {};
+            if (!config.agents.defaults.compaction || typeof config.agents.defaults.compaction !== 'object') {
+                config.agents.defaults.compaction = {};
+            }
+            const compact = config.agents.defaults.compaction;
+            const primaryRaw = config.agents.defaults.model
+                && (typeof config.agents.defaults.model === 'string'
+                    ? config.agents.defaults.model
+                    : config.agents.defaults.model.primary);
+            const cloudPrimary = typeof primaryRaw === 'string'
+                && primaryRaw.includes('/')
+                && primaryRaw.slice(0, primaryRaw.indexOf('/')).toLowerCase() !== 'ollama';
+            if (cloudPrimary) {
+                if (!(Number(compact.reserveTokensFloor) >= 35000)) {
+                    compact.reserveTokensFloor = 35000;
+                    needsSave = true;
+                }
+                if (!(Number(compact.timeoutSeconds) >= 240)) {
+                    compact.timeoutSeconds = 240;
+                    needsSave = true;
+                }
+            }
         }
 
         try {

@@ -23,8 +23,10 @@ const DEFAULTS = {
   smallBootstrapMaxChars: 1200,
   smallBootstrapTotalMaxChars: 2800,
   cloudContextWindowCap: 131072,
-  // 压缩预留：云端也不再顶到 20000，否则历史很长才压缩、越聊越慢
+  // 云端大窗：预留足够压缩缓冲，尽早触发压缩，避免撑到 overflow 后 120s 超时
   reserveTokensFloor: 8000,
+  /** 大上下文云端模型的主动压缩地板（勿再压回 8000） */
+  cloudReserveTokensFloor: 35000,
   /** 小于等于此窗口视为「小上下文」——用自适应 floor + 短 bootstrap */
   smallContextThreshold: 24576
 };
@@ -68,6 +70,13 @@ function resolveEffectiveContextWindow(cfg) {
   }
 
   if (primaryCtx != null) return primaryCtx;
+  // 主模型是非 ollama 的云端 provider：不要用本机 ollama 小窗冒充有效窗口
+  if (typeof primaryRaw === 'string' && primaryRaw.includes('/')) {
+    const provId = primaryRaw.slice(0, primaryRaw.indexOf('/')).toLowerCase();
+    if (provId && provId !== 'ollama') {
+      return DEFAULTS.cloudContextWindowCap;
+    }
+  }
   if (ollamaMin != null) return ollamaMin;
   return null;
 }
@@ -79,7 +88,8 @@ function resolveEffectiveContextWindow(cfg) {
 function computeSafeReserveTokensFloor(contextWindow) {
   const ctx = Number(contextWindow);
   if (!Number.isFinite(ctx) || ctx <= 0) return DEFAULTS.reserveTokensFloor;
-  if (ctx >= 100000) return DEFAULTS.reserveTokensFloor;
+  // 大窗云端：主动抬高地板，提前压缩，避免 overflow 后 compaction 超时
+  if (ctx >= 100000) return DEFAULTS.cloudReserveTokensFloor;
   // 小窗口：floor 绝不能接近或超过整个窗口
   const byRatio = Math.floor(ctx * 0.2);
   const byHeadroom = Math.max(512, ctx - 2048);
@@ -178,12 +188,19 @@ function ensureLatencySafeConfig(config, opts = {}) {
     }
   }
 
-  const effectiveCtx = resolveEffectiveContextWindow(cfg) || ollamaCtx;
+  const resolvedCtx = resolveEffectiveContextWindow(cfg);
+  const effectiveCtx = Number.isFinite(Number(resolvedCtx)) ? Number(resolvedCtx) : ollamaCtx;
   const smallCtx = effectiveCtx <= DEFAULTS.smallContextThreshold;
+  // 云端主模型：绝对禁止被小窗分支/默认 8000 压低（否则会反复 overflow）
+  const primaryRawForGate = ad.model && (typeof ad.model === 'string' ? ad.model : ad.model.primary);
+  const cloudPrimary =
+    typeof primaryRawForGate === 'string' &&
+    primaryRawForGate.includes('/') &&
+    primaryRawForGate.slice(0, primaryRawForGate.indexOf('/')).toLowerCase() !== 'ollama';
 
   // bootstrap：启动一次性注入；云端若被误标成 small-ctx 过矮，也要抬回云端默认
-  const bootMax = smallCtx ? DEFAULTS.smallBootstrapMaxChars : DEFAULTS.bootstrapMaxChars;
-  const bootTotal = smallCtx ? DEFAULTS.smallBootstrapTotalMaxChars : DEFAULTS.bootstrapTotalMaxChars;
+  const bootMax = smallCtx && !cloudPrimary ? DEFAULTS.smallBootstrapMaxChars : DEFAULTS.bootstrapMaxChars;
+  const bootTotal = smallCtx && !cloudPrimary ? DEFAULTS.smallBootstrapTotalMaxChars : DEFAULTS.bootstrapTotalMaxChars;
   const curBoot = Number(ad.bootstrapMaxChars);
   const curTotal = Number(ad.bootstrapTotalMaxChars);
   if (!Number.isFinite(curBoot) || curBoot > bootMax || (!smallCtx && curBoot < bootMax)) {
@@ -204,8 +221,16 @@ function ensureLatencySafeConfig(config, opts = {}) {
   // 过小或过大（相对窗口）都纠正
   const tooSmall = !Number.isFinite(floor) || floor < Math.min(512, safeFloor);
   const tooLargeForWindow = Number.isFinite(floor) && floor > safeFloor && smallCtx;
-  // 云端：保证至少 DEFAULTS.reserveTokensFloor，但若配置更大也往下收到默认（加速压缩）
-  if (smallCtx) {
+  const largeCloudCtx = cloudPrimary || (Number.isFinite(effectiveCtx) && effectiveCtx >= 100000);
+  // 云端大窗：抬到 cloudReserveTokensFloor，禁止再压回 8000（否则易拖到 overflow 超时）
+  if (largeCloudCtx) {
+    const target = Math.max(safeFloor, DEFAULTS.cloudReserveTokensFloor);
+    if (!Number.isFinite(floor) || floor < target) {
+      const prev = ad.compaction.reserveTokensFloor;
+      ad.compaction.reserveTokensFloor = target;
+      changes.push(`compaction.reserveTokensFloor: ${prev ?? 'unset'} -> ${target} (cloud-ctx=${effectiveCtx})`);
+    }
+  } else if (smallCtx) {
     if (!Number.isFinite(floor) || floor !== safeFloor) {
       const prev = ad.compaction.reserveTokensFloor;
       ad.compaction.reserveTokensFloor = safeFloor;
@@ -230,12 +255,36 @@ function ensureLatencySafeConfig(config, opts = {}) {
       ad.compaction.qualityGuard.maxRetries = 2;
       changes.push('compaction.qualityGuard.maxRetries: -> 2');
     }
-  } else if (tooSmall || !Number.isFinite(floor) || floor > DEFAULTS.reserveTokensFloor) {
+  } else if (tooSmall || !Number.isFinite(floor)) {
     const prev = ad.compaction.reserveTokensFloor;
     ad.compaction.reserveTokensFloor = DEFAULTS.reserveTokensFloor;
     changes.push(`compaction.reserveTokensFloor: ${prev ?? 'unset'} -> ${DEFAULTS.reserveTokensFloor}`);
   } else if (tooLargeForWindow) {
     // unreachable when !smallCtx, kept for clarity
+  }
+
+  // 压缩超时：长会话摘要至少给 240s；并收紧历史占比，减小单次摘要体积
+  if (!(Number(ad.compaction.timeoutSeconds) >= 240)) {
+    const prev = ad.compaction.timeoutSeconds;
+    ad.compaction.timeoutSeconds = 240;
+    changes.push(`compaction.timeoutSeconds: ${prev ?? 'unset'} -> 240`);
+  }
+  if (!smallCtx || cloudPrimary) {
+    const share = Number(ad.compaction.maxHistoryShare);
+    if (!Number.isFinite(share) || share > 0.35) {
+      const prev = ad.compaction.maxHistoryShare;
+      ad.compaction.maxHistoryShare = 0.35;
+      changes.push(`compaction.maxHistoryShare: ${prev ?? 'unset'} -> 0.35`);
+    }
+  }
+  // 云端：清掉过小的 maxContextTokens（例如 6000），否则会假溢出 + 压缩超时
+  if (!smallCtx || cloudPrimary) {
+    const maxCtx = Number(ad.compaction.maxContextTokens);
+    if (Number.isFinite(maxCtx) && maxCtx > 0 && maxCtx < 32000) {
+      const prev = ad.compaction.maxContextTokens;
+      delete ad.compaction.maxContextTokens;
+      changes.push(`compaction.maxContextTokens: ${prev} -> unset (cloud)`);
+    }
   }
 
   // contextPruning：云端也裁工具长输出，避免历史里堆满截图/命令结果

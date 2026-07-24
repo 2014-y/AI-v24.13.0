@@ -1,0 +1,22 @@
+{
+  "id": "session-overflow-rollover",
+  "name": "Session Overflow Rollover",
+  "description": "上下文溢出或压缩失败时自动归档旧会话、开启新会话并继续回答上一问",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "是否启用溢出自动归档续聊"
+      }
+    }
+  }
+}

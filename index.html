@@ -279,14 +279,6 @@
                           </div>
                         </div>
                         <div class="topo-channel-grid">
-                          <div class="topo-node topo-channel-card node-wechat pending" id="node-wechat" data-channel="wechat">
-                            <div class="node-icon topo-card-icon" aria-hidden="true">
-                              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8.5 10.5h.01M15.5 10.5h.01"/><path d="M4 11c0-3.3 3.6-6 8-6s8 2.7 8 6-3.6 6-8 6c-.7 0-1.4-.1-2-.2L6 19l.8-3.2C5.1 14.7 4 13 4 11z"/></svg>
-                            </div>
-                            <div class="node-label topo-card-name" data-i18n="console.node.wechat">微信</div>
-                            <span class="topo-card-badge" id="badge-wechat" data-i18n="console.topology.status.pending">未连接</span>
-                            <div class="topo-card-hint" id="hint-wechat" data-i18n="console.topology.hint.unbound">去通讯管理扫码绑定</div>
-                          </div>
                           <div class="topo-node topo-channel-card node-qq pending" id="node-qq" data-channel="qq">
                             <div class="node-icon topo-card-icon" aria-hidden="true">
                               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="9" r="4"/><path d="M5 19c1.5-3 4-4.5 7-4.5S17.5 16 19 19"/><path d="M8 8.5c-.8-1.2.2-3 1.8-2.4M16 8.5c.8-1.2-.2-3-1.8-2.4"/></svg>
@@ -294,6 +286,14 @@
                             <div class="node-label topo-card-name" data-i18n="console.node.qq">QQ 机器人</div>
                             <span class="topo-card-badge" id="badge-qq" data-i18n="console.topology.status.pending">未连接</span>
                             <div class="topo-card-hint" id="hint-qq" data-i18n="console.topology.hint.unbound">去通讯管理填写 AppID</div>
+                          </div>
+                          <div class="topo-node topo-channel-card node-wechat pending" id="node-wechat" data-channel="wechat">
+                            <div class="node-icon topo-card-icon" aria-hidden="true">
+                              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8.5 10.5h.01M15.5 10.5h.01"/><path d="M4 11c0-3.3 3.6-6 8-6s8 2.7 8 6-3.6 6-8 6c-.7 0-1.4-.1-2-.2L6 19l.8-3.2C5.1 14.7 4 13 4 11z"/></svg>
+                            </div>
+                            <div class="node-label topo-card-name" data-i18n="console.node.wechat">微信</div>
+                            <span class="topo-card-badge" id="badge-wechat" data-i18n="console.topology.status.pending">未连接</span>
+                            <div class="topo-card-hint" id="hint-wechat" data-i18n="console.topology.hint.unbound">去通讯管理扫码绑定</div>
                           </div>
                           <div class="topo-node topo-channel-card node-feishu pending" id="node-feishu" data-channel="feishu">
                             <div class="node-icon topo-card-icon" aria-hidden="true">
@@ -409,7 +409,9 @@
                   <div class="dashboard-metrics-row">
                     <!-- 状态指示大卡片 -->
                     <div class="dash-card status-card">
-                      <div class="dash-card-icon">⚙️</div>
+                      <div class="dash-card-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6v6H9z"/><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/></svg>
+                      </div>
                       <div class="dash-card-info">
                         <span class="dash-card-label" data-i18n="console.dash.status_label">Nexora 服务状态</span>
                         <span class="dash-card-value" id="dash-service-status">已停止</span>
@@ -419,7 +421,9 @@
                     
                     <!-- 活动大模型卡片 -->
                     <div class="dash-card model-card">
-                      <div class="dash-card-icon">🧠</div>
+                      <div class="dash-card-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/><path d="M6.5 6.5l2 2M15.5 15.5l2 2M17.5 6.5l-2 2M8.5 15.5l-2 2"/></svg>
+                      </div>
                       <div class="dash-card-info">
                         <span class="dash-card-label" data-i18n="console.dash.model_label">活跃推理引擎</span>
                         <span class="dash-card-value" id="dash-active-model" data-i18n="console.dash.not_configured">未启动</span>
@@ -427,25 +431,31 @@
                     </div>
                   </div>
 
-                  <!-- 中半部分：通道连接面板（微信、QQ、飞书的卡片磁贴） -->
+                  <!-- 中半部分：通道连接面板（QQ、微信、飞书） -->
                   <div class="dashboard-channels-section">
                     <h3 class="dash-section-title" data-i18n="console.dash.channels_title">🔌 通道接口状态监测</h3>
                     <div class="dash-channels-grid">
-                      <!-- 微信 -->
-                      <div class="channel-status-tile offline" id="tile-weixin" title="微信消息通道: 未连接">
-                        <span class="tile-icon">💬</span>
-                        <span class="tile-name" data-i18n="console.node.wechat">微信</span>
-                      </div>
-                      
                       <!-- QQ -->
                       <div class="channel-status-tile offline" id="tile-qqbot" title="QQ机器人通道: 未配置">
-                        <span class="tile-icon">🤖</span>
+                        <span class="tile-icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="9" r="4"/><path d="M5 19c1.5-3 4-4.5 7-4.5S17.5 16 19 19"/><path d="M8 8.5c-.8-1.2.2-3 1.8-2.4M16 8.5c.8-1.2-.2-3-1.8-2.4"/></svg>
+                        </span>
                         <span class="tile-name" data-i18n="console.node.qq">QQ机器人</span>
+                      </div>
+
+                      <!-- 微信 -->
+                      <div class="channel-status-tile offline" id="tile-weixin" title="微信消息通道: 未连接">
+                        <span class="tile-icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8.5 10.5h.01M15.5 10.5h.01"/><path d="M4 11c0-3.3 3.6-6 8-6s8 2.7 8 6-3.6 6-8 6c-.7 0-1.4-.1-2-.2L6 19l.8-3.2C5.1 14.7 4 13 4 11z"/></svg>
+                        </span>
+                        <span class="tile-name" data-i18n="console.node.wechat">微信</span>
                       </div>
                       
                       <!-- 飞书 -->
                       <div class="channel-status-tile offline" id="tile-feishu" title="飞书/Lark通道: 未连接">
-                        <span class="tile-icon">🕊️</span>
+                        <span class="tile-icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12l7-8 2 5 7 1-6 3 2 7-5-4-7 2 4-6z"/></svg>
+                        </span>
                         <span class="tile-name" data-i18n="console.node.feishu">飞书</span>
                       </div>
                     </div>
@@ -1340,6 +1350,23 @@
               </label>
             </div>
 
+            <!-- 侧栏菜单排序（可折叠） -->
+            <div class="settings-menu-order-card is-collapsed" id="setting-menu-order-card">
+              <button type="button" class="settings-menu-order-head" id="btn-menu-order-toggle" aria-expanded="false" aria-controls="setting-menu-order-body">
+                <div class="settings-menu-order-copy">
+                  <div class="settings-menu-order-title" data-i18n="settings.menu_order.title">📑 菜单排序</div>
+                  <div class="settings-menu-order-desc" data-i18n="settings.menu_order.desc">自定义左侧导航菜单位置，使用上移/下移调整，立即生效并自动保存。</div>
+                </div>
+                <span class="settings-menu-order-chevron" aria-hidden="true">▾</span>
+              </button>
+              <div class="settings-menu-order-body" id="setting-menu-order-body" hidden>
+                <div class="settings-menu-order-toolbar">
+                  <button type="button" class="settings-menu-order-reset" id="btn-menu-order-reset" data-i18n="settings.menu_order.reset">恢复默认</button>
+                </div>
+                <div class="settings-menu-order-list" id="setting-menu-order-list" role="list"></div>
+              </div>
+            </div>
+
           </div>
 
           <!-- 软件版本与检测更新 -->
@@ -2081,8 +2108,16 @@
         </div>
         <div class="modal-body">
           <div class="form-field">
-            <label for="new-provider-id" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; display: block;">厂商唯一标识 (仅限小写字母与数字)</label>
+            <label for="new-provider-id" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; display: block;" data-i18n="config.add_provider.id_label">厂商唯一标识 (仅限小写字母与数字，保存后不可改)</label>
             <input type="text" id="new-provider-id" placeholder="例如: deepseek, openai" style="width: 100%; box-sizing: border-box;">
+          </div>
+          <div class="form-field" style="margin-top: 15px;">
+            <label for="new-provider-label" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; display: block;" data-i18n="config.add_provider.label_label">显示名称（可选，便于辨认）</label>
+            <input type="text" id="new-provider-label" placeholder="例如: 公司 Gemini 中转" style="width: 100%; box-sizing: border-box;">
+          </div>
+          <div class="form-field" style="margin-top: 15px;">
+            <label for="new-provider-remark" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; display: block;" data-i18n="config.add_provider.remark_label">备注（可选）</label>
+            <input type="text" id="new-provider-remark" placeholder="例如: 测试账号 / 生产环境" style="width: 100%; box-sizing: border-box;">
           </div>
           <div class="form-field" style="margin-top: 15px;">
             <label for="new-provider-url" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; display: block;">Base URL (API 端点)</label>

@@ -2045,8 +2045,25 @@ textarea.acc-input {
 }
 
 .channel-status-tile .tile-icon {
-  font-size: 28px;
-  line-height: 1;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.channel-status-tile .tile-icon svg {
+  display: block;
+}
+
+.channel-status-tile.online .tile-icon {
+  color: #4caf50;
+}
+
+.channel-status-tile:hover .tile-icon {
+  color: var(--accent-color);
 }
 
 .channel-status-tile .tile-name {
@@ -3180,7 +3197,20 @@ textarea.acc-input {
 }
 
 .dash-card-icon {
-  font-size: 24px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--accent-color);
+  background: rgba(var(--accent-rgb), 0.12);
+  border: 1px solid rgba(var(--accent-rgb), 0.22);
+}
+
+.dash-card-icon svg {
+  display: block;
 }
 
 .dash-card-info {
@@ -4035,6 +4065,19 @@ input:checked + .slider-knob:before {
   color: var(--text-primary);
 }
 
+.provider-card-header .provider-title-wrap {
+  min-width: 0;
+}
+
+.provider-card-header .provider-label-input:hover {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.provider-card-header .provider-label-input:focus {
+  border-color: rgba(var(--accent-rgb), 0.45) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
 .btn-delete-provider {
   background: rgba(211, 47, 47, 0.1);
   color: #ff5252;
@@ -4866,6 +4909,156 @@ input:focus, select:focus, textarea:focus {
 .settings-language-module:has(.custom-select-wrapper.active) {
   position: relative;
   z-index: 100;
+}
+
+/* 系统设置 · 菜单排序 */
+.settings-menu-order-card {
+  padding: 0;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.settings-menu-order-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding: 14px 16px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.settings-menu-order-head:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.settings-menu-order-copy {
+  min-width: 0;
+  flex: 1;
+}
+.settings-menu-order-title {
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--text-primary);
+}
+.settings-menu-order-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  line-height: 1.45;
+}
+.settings-menu-order-chevron {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  transition: transform 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+.settings-menu-order-card:not(.is-collapsed) .settings-menu-order-chevron {
+  transform: rotate(180deg);
+  color: var(--accent-color);
+  border-color: rgba(var(--accent-rgb), 0.45);
+}
+.settings-menu-order-body {
+  padding: 0 16px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.settings-menu-order-card.is-collapsed .settings-menu-order-body {
+  display: none;
+}
+.settings-menu-order-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 0 8px;
+}
+.settings-menu-order-reset {
+  flex-shrink: 0;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+.settings-menu-order-reset:hover {
+  border-color: rgba(var(--accent-rgb), 0.45);
+  color: var(--accent-color);
+}
+.settings-menu-order-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.settings-menu-order-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.12);
+}
+.settings-menu-order-index {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-color);
+  background: rgba(var(--accent-rgb), 0.12);
+  flex-shrink: 0;
+}
+.settings-menu-order-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-menu-order-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.settings-menu-order-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.settings-menu-order-btn:hover:not(:disabled) {
+  border-color: rgba(var(--accent-rgb), 0.45);
+  color: var(--accent-color);
+}
+.settings-menu-order-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .custom-select-trigger {

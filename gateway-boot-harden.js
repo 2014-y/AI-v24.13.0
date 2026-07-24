@@ -305,6 +305,67 @@ function bypassOpenClawPluginTrustCheck(runtimeRoot) {
 }
 
 /**
+ * 放行自定义扩展插件的 api.runtime.gateway.request（sessions.reset / chat.send）。
+ * OpenClaw 为 ESM，必须改写 dist 文件；Module._compile 无效。
+ */
+function patchTrustedPluginGatewayRequestAccess(runtimeRoot) {
+  const dist = path.join(runtimeRoot || '', 'node_modules', 'openclaw', 'dist');
+  if (!exists(dist)) return { ok: false, reason: 'no-dist' };
+  const marker = '__NEXORA_TRUSTED_PLUGIN_IDS__';
+  const trusted = [
+    'session-overflow-rollover',
+    'session-tool-heal',
+    'error-filter',
+    'voice-bridge',
+    'role-manager',
+    'disk-compact',
+    'weixin-reconnect',
+    'auto-summary',
+    'memory-rotate',
+    'compaction-memory-guard',
+    'image-generator',
+    'video-generator',
+    'workboard',
+  ];
+  const needle = 'function canTrustedOfficialPluginRequestScopes(params) {\n\tif (!params.pluginId) return false;';
+  const inject =
+    'function canTrustedOfficialPluginRequestScopes(params) {\n' +
+    '\tif (!params.pluginId) return false;\n' +
+    `\tconst ${marker} = new Set(${JSON.stringify(trusted)});\n` +
+    `\tif (${marker}.has(params.pluginId)) return true;`;
+  let patched = 0;
+  try {
+    for (const name of fs.readdirSync(dist)) {
+      if (!/^server-plugins-.*\.js$/i.test(name)) continue;
+      const file = path.join(dist, name);
+      let src = fs.readFileSync(file, 'utf8');
+      if (!src.includes('canTrustedOfficialPluginRequestScopes')) continue;
+      if (!src.includes('Gateway requests are only available to bundled or trusted official plugins')) continue;
+      if (src.includes(marker)) {
+        patched += 1;
+        continue;
+      }
+      let next = src;
+      if (next.includes(needle)) {
+        next = next.split(needle).join(inject);
+      } else {
+        next = next.replace(
+          /function canTrustedOfficialPluginRequestScopes\(params\)\s*\{\s*if\s*\(\s*!params\.pluginId\s*\)\s*return false;/,
+          inject
+        );
+      }
+      if (next !== src && next.includes(marker)) {
+        fs.writeFileSync(file, next, 'utf8');
+        patched += 1;
+      }
+    }
+  } catch (e) {
+    return { ok: false, reason: e.message };
+  }
+  return { ok: patched > 0, patched };
+}
+
+/**
  * 永久关掉 OpenClaw crash-loop breaker：短时间多次异常退出时仍自动拉起微信/QQ/飞书。
  * 改写 dist/run-*.js 里 uncleanBoots>=3 的判定（ESM，不依赖环境变量）。
  */
@@ -361,6 +422,8 @@ function hardenGatewayBootAgainstPluginNpm(params) {
     notes.push(`soft=${soft.ok ? soft.patched : soft.reason}`);
     const trust = bypassOpenClawPluginTrustCheck(runtimeRoot);
     notes.push(`trust-bypass=${trust.ok ? trust.patched : trust.reason}`);
+    const gwTrust = patchTrustedPluginGatewayRequestAccess(runtimeRoot);
+    notes.push(`gateway-request-trust=${gwTrust.ok ? gwTrust.patched : gwTrust.reason}`);
     const breaker = disableOpenClawCrashLoopBreaker(runtimeRoot);
     notes.push(`crash-loop=${breaker.ok ? breaker.patched : breaker.reason}`);
     const npm = ensureSandboxNpmPresent(runtimeRoot, projectRoot);
@@ -464,6 +527,8 @@ module.exports = {
   forceDisableUninstalledChannelPlugins,
   ensureOpenClawWorkspaceTemplates,
   disableOpenClawCrashLoopBreaker,
+  bypassOpenClawPluginTrustCheck,
+  patchTrustedPluginGatewayRequestAccess,
   hardenGatewayBootAgainstPluginNpm,
   CHANNEL_PLUGIN_IDS,
   STALE_PLUGIN_IDS

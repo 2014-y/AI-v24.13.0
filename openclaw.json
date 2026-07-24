@@ -84,9 +84,11 @@
       "bootstrapMaxChars": 2500,
       "bootstrapTotalMaxChars": 8000,
       "compaction": {
-        "reserveTokensFloor": 2000,
-        "autoTrim": true,
-        "maxContextTokens": 6000
+        "reserveTokensFloor": 35000,
+        "mode": "safeguard",
+        "timeoutSeconds": 240,
+        "maxHistoryShare": 0.35,
+        "autoTrim": true
       }
     }
   },
@@ -161,6 +163,18 @@
       },
       "disk-compact": {
         "enabled": true
+      },
+      "session-overflow-rollover": {
+        "enabled": true,
+        "hooks": {
+          "allowConversationAccess": true
+        }
+      },
+      "session-tool-heal": {
+        "enabled": true,
+        "hooks": {
+          "allowConversationAccess": true
+        }
       },
       "compaction-memory-guard": {
         "enabled": true
@@ -318,6 +332,7 @@
       "dual-model-trainer",
       "memory-rotate",
       "disk-compact",
+      "session-overflow-rollover",
       "compaction-memory-guard",
       "context-router",
       "health-check",
@@ -377,6 +392,13 @@
       "enabled": false
     },
     "autoStartChannels": true
+  },
+  "auth": {
+    "cooldowns": {
+      "rateLimitedProfileRotations": 30,
+      "overloadedProfileRotations": 30,
+      "overloadedBackoffMs": 800
+    }
   },
   "tools": {
     "deny": [

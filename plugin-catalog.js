@@ -32,6 +32,8 @@ const ZERO_CONFIG_PLUGINS = [
   'auto-summary',
   'memory-rotate',
   'compaction-memory-guard',
+  'error-filter',
+  'session-overflow-rollover',
   'role-manager',
   'openclaw-weixin'
 ];
@@ -43,6 +45,8 @@ const ZERO_CONFIG_DEFAULT_ON = [
   'auto-summary',
   'memory-rotate',
   'compaction-memory-guard',
+  'error-filter',
+  'session-overflow-rollover',
   'role-manager',
   'openclaw-weixin',
   LONG_TERM_MEMORY_UI_ID

@@ -1576,6 +1576,14 @@ async function init() {
             try { updateConsoleChannelStatusUI(); } catch (e) {}
             try { updateWeChatStatusUI(); } catch (e) {}
             try { if (typeof window.syncChatQuickPanelToggleText === 'function') window.syncChatQuickPanelToggleText(); } catch (e) {}
+            try { if (typeof renderMenuOrderSettingsUI === 'function') renderMenuOrderSettingsUI(); } catch (e) {}
+            try {
+                if (typeof setMenuOrderExpanded === 'function') {
+                    const card = document.getElementById('setting-menu-order-card');
+                    const expanded = !!(card && !card.classList.contains('is-collapsed'));
+                    setMenuOrderExpanded(expanded);
+                }
+            } catch (e) {}
             if (typeof accelerationState !== 'undefined' && accelerationState) {
                 renderAccelerationChannel(accelerationState);
             }
@@ -1608,7 +1616,13 @@ async function init() {
         }
     }, 3000);
 
-    // 初始化 Tab 切换
+    // 初始化 Tab 切换（先应用侧栏菜单自定义顺序，避免监听绑定后 DOM 位置错乱）
+    try {
+        if (typeof applySidebarNavOrder === 'function') applySidebarNavOrder();
+        if (typeof initMenuOrderSettingsUI === 'function') initMenuOrderSettingsUI();
+    } catch (e) {
+        console.warn('[MenuOrder] init failed:', e);
+    }
     setupTabSwitching();
 
     // 初始化 App 运行时间计时器
@@ -2360,6 +2374,52 @@ function enqueueActivityLog(lineHtml) {
     }
 }
 
+/** 离页积压 / 切回控制台：一次性落盘，不走打字机回放 */
+function appendActivityLogLinesInstant(lineHtmlList) {
+    const streamList = document.getElementById('dash-activity-stream-list');
+    if (!streamList || !Array.isArray(lineHtmlList) || lineHtmlList.length === 0) return;
+
+    streamList.querySelectorAll('.activity-item-empty, .starting-activity-item').forEach((el) => el.remove());
+
+    const frag = document.createDocumentFragment();
+    for (const lineHtml of lineHtmlList) {
+        if (!lineHtml) continue;
+        // 与 enqueue 一致：同阶段重复插件装载日志只保留一条
+        if (lineHtml.includes('成功装载') && lineHtml.includes('消息通道插件')) {
+            const cleanTag = lineHtml.replace(/<\/?[^>]+(>|$)/g, '').trim();
+            if (__seenPluginLogsThisStartup.has(cleanTag)) continue;
+            __seenPluginLogsThisStartup.add(cleanTag);
+        }
+        const item = document.createElement('div');
+        item.className = 'activity-log-line';
+        item.innerHTML = lineHtml;
+        frag.appendChild(item);
+    }
+    streamList.appendChild(frag);
+
+    while (streamList.children.length > 150) {
+        streamList.removeChild(streamList.firstChild);
+    }
+    streamList.scrollTop = streamList.scrollHeight;
+}
+
+function flushDeferredConsoleLogsInstant() {
+    const q = window.__deferredConsoleLogs;
+    if (!q || !q.length) return;
+    const chunk = q.splice(0, q.length).slice(-150);
+    appendActivityLogLinesInstant(chunk);
+    if (logTerminal && chunk.length) {
+        const frag = document.createDocumentFragment();
+        chunk.forEach((lineHtml) => {
+            const s = document.createElement('span');
+            s.innerHTML = lineHtml + (String(lineHtml).endsWith('\n') ? '' : '<br/>');
+            frag.appendChild(s);
+        });
+        logTerminal.appendChild(frag);
+        logTerminal.scrollTop = logTerminal.scrollHeight;
+    }
+}
+
 function processActivityLogQueue() {
     if (__activityLogQueue.length === 0) {
         __isProcessingLogQueue = false;
@@ -2467,6 +2527,34 @@ function isTransientWeixinLongPollError(cleanLine) {
     return lower.includes('tls handshake') || lower.includes('und_err_socket') || lower.includes('fetch failed');
 }
 
+function isHiddenGatewayDiagnosticLog(cleanLine) {
+    const line = String(cleanLine || '');
+    if (!line) return false;
+    const lower = line.toLowerCase();
+    // 最先拦：压缩诊断 / 溢出 / 限流 —— 绝不能变成「系统警报」原文
+    if (
+        lower.includes('compaction-diag') ||
+        lower.includes('compaction_diag') ||
+        lower.includes('[agent/embedded]') ||
+        lower.includes('session-overflow-rollover') ||
+        lower.includes('silent-retry') ||
+        lower.includes('suppress-rate-limit') ||
+        lower.includes('suppress-warning-banner') ||
+        lower.includes('context_overflow') ||
+        lower.includes('diagid=ovf-') ||
+        /trigger\s*=\s*overflow/i.test(line) ||
+        /diagid\s*=\s*ovf-/i.test(line) ||
+        /runid\s*=/i.test(line) && /overflow|compaction/i.test(line) ||
+        /outcome\s*=\s*failed/i.test(line) && /overflow|compaction|timeout/i.test(line) ||
+        /rate[\s-]?limit|temporarily rate-limited|all models are temporarily|auto-compaction|compaction timed|compaction timeout|context[_\s-]?overflow|prompt too large|reservetokensfloor|use \/compact|use \/new|暂时限流|暂时过载|上下文过长|上下文溢出|自动压缩失败|请使用\s*\/new/i.test(
+            line
+        )
+    ) {
+        return true;
+    }
+    return false;
+}
+
 function formatLogForUser(text) {
     if (!text) return null;
     // 移除颜色控制字符并修剪两端
@@ -2474,6 +2562,8 @@ function formatLogForUser(text) {
     if (isMediaApiNoiseLog(cleanLine)) return null;
     const lowerLine = cleanLine.toLowerCase();
     if (isTransientWeixinLongPollError(cleanLine)) return null;
+    // 诊断日志：入口即丢弃，后面任何「error/failed → 系统警报」都碰不到
+    if (isHiddenGatewayDiagnosticLog(cleanLine)) return null;
 
     // 1. 过滤完全无需展示给小白的日志 (底层噪音调试日志)
     // 模型空闲超时 / Abort / rotate_profile 属于网关自愈过程，刷屏会导致活动流卡死
@@ -2677,9 +2767,19 @@ function formatLogForUser(text) {
             lowerLine.includes('refusing blind replay') ||
             lowerLine.includes('sendinputnotify') ||
             lowerLine.includes('exceeded 30000ms') ||
+            lowerLine.includes('compaction') ||
+            lowerLine.includes('overflow') ||
+            lowerLine.includes('agent/embedded') ||
+            lowerLine.includes('diagid') ||
+            lowerLine.includes('timeout') ||
             (lowerLine.includes('qqbot') && (lowerLine.includes('websocket') || lowerLine.includes('gateway error') || lowerLine.includes('timeout'))) ||
-            isMediaApiNoiseLog(cleanLine)
+            isMediaApiNoiseLog(cleanLine) ||
+            isHiddenGatewayDiagnosticLog(cleanLine)
         ) return null;
+        // 硬规则：任何还带技术栈痕迹的失败日志，绝不包装成「系统警报」原文刷给用户
+        if (/[\[\]=]|status=|elapsedms|durationms|stack|errno|ecode|gateway|openclaw|plugin/i.test(cleanLine)) {
+            return null;
+        }
         return `[⚠️ 系统警报] ⚠️ 系统运行警告：${cleanLine}`;
     }
 
@@ -3853,6 +3953,21 @@ function syncJsonToFormFields(parsed) {
 }
 
 // 渲染提供商卡片列表
+function isCustomProviderKey(key) {
+    return key !== 'agnes-ai' && key !== 'ollama';
+}
+
+function getProviderLabel(key, provider) {
+    const p = provider || (localProviders && localProviders[key]) || {};
+    const label = String(p.label || p.displayName || '').trim();
+    return label || key;
+}
+
+function getProviderRemark(key, provider) {
+    const p = provider || (localProviders && localProviders[key]) || {};
+    return String(p.remark || '').trim();
+}
+
 function renderProvidersList() {
     const listZone = document.getElementById('providers-list-zone');
     listZone.innerHTML = '';
@@ -3890,6 +4005,11 @@ function renderProvidersList() {
         if (isTw) return zhTw;
         return zhCn;
     };
+    const esc = (typeof escapeHtml === 'function')
+        ? escapeHtml
+        : (s) => String(s || '').replace(/[&<>"']/g, (c) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
 
     const useBuiltIn = getUseBuiltIn();
 
@@ -3918,8 +4038,11 @@ function renderProvidersList() {
         const isCollapsed = !expandedProviders.has(key);
         card.className = isCollapsed ? 'provider-card collapsed' : 'provider-card';
         
-        // agnes-ai 与 ollama 为内置/默认大模型服务，不支持删除
-        const deleteButtonHtml = (key === 'agnes-ai' || key === 'ollama')
+        // agnes-ai 与 ollama 为内置/默认大模型服务，不支持删除 / 改名
+        const isCustom = isCustomProviderKey(key);
+        const displayLabel = getProviderLabel(key, provider);
+        const displayRemark = getProviderRemark(key, provider);
+        const deleteButtonHtml = !isCustom
             ? '' 
             : `<button type="button" class="btn-delete-provider" data-provider="${key}">❌ ${t('删除此厂家', 'Delete Provider', '刪除此廠商')}</button>`;
 
@@ -3927,18 +4050,48 @@ function renderProvidersList() {
         const foldButtonText = isCollapsed ? t('展开 🔽', 'Expand 🔽', '展開 🔽') : t('收起 🔼', 'Collapse 🔼', '收起 🔼');
         const foldButtonHtml = `<button type="button" class="btn-fold-provider" data-provider="${key}" style="background: rgba(255,255,255,0.05); color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 10px; font-size: 11px; cursor: pointer; transition: all 0.2s ease;">${foldButtonText}</button>`;
 
-        card.innerHTML = `
-            <div class="provider-card-header" style="cursor: pointer; user-select: none;">
-                <h3>🔌 ${key}
+        const headerTitleHtml = isCustom
+            ? `<div class="provider-title-wrap" style="display:flex; flex-direction:column; gap:4px; min-width:0; flex:1; padding-right:8px;">
+                    <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                        <span style="flex-shrink:0;">🔌</span>
+                        <input type="text" class="provider-label-input" data-provider="${key}" value="${esc(displayLabel)}" placeholder="${esc(t('显示名称', 'Display Name', '顯示名稱'))}" title="${esc(t('点击修改显示名称', 'Click to edit display name', '點擊修改顯示名稱'))}" style="flex:1; min-width:0; height:28px; font-size:14px; font-weight:700; color:var(--text-primary); background:rgba(255,255,255,0.04); border:1px solid transparent; border-radius:6px; padding:0 8px; outline:none;">
+                    </div>
+                    ${displayRemark ? `<div class="provider-remark-preview" data-provider="${key}" style="font-size:11px; font-weight:normal; color:var(--text-secondary); margin-left:26px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(displayRemark)}</div>` : `<div class="provider-remark-preview" data-provider="${key}" style="display:none; font-size:11px; font-weight:normal; color:var(--text-secondary); margin-left:26px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></div>`}
+               </div>`
+            : `<h3>🔌 ${esc(key)}
                     ${key === 'agnes-ai' ? `<span id="agnes-built-in-tip" style="font-size: 11px; font-weight: normal; color: #b388ff; margin-left: 8px; display: none;">${t('(已启用内置免配置服务通道)', '(Built-in bypass configured)', '(已啟用內置免配置服務通道)')}</span>` : ''}
                     ${key === 'ollama' ? `<span id="ollama-built-in-tip" style="font-size: 11px; font-weight: normal; color: #8cd8ff; margin-left: 8px;">${t('(内置本地服务通道)', '(Built-in local service channel)', '(內置本地服務通道)')}</span>` : ''}
-                </h3>
+                </h3>`;
+
+        const customMetaHtml = isCustom
+            ? `<div class="form-row" style="margin-bottom: 4px;">
+                    <div class="form-field">
+                        <label>${t('显示名称', 'Display Name', '顯示名稱')}</label>
+                        <input type="text" class="provider-label-input" data-provider="${key}" value="${esc(provider.label || provider.displayName || '')}" placeholder="${esc(t('例如: 公司 Gemini 中转', 'e.g. Company Gemini Relay', '例如: 公司 Gemini 中轉'))}">
+                    </div>
+                    <div class="form-field">
+                        <label>${t('备注', 'Remark', '備註')}</label>
+                        <input type="text" class="provider-remark-input" data-provider="${key}" value="${esc(provider.remark || '')}" placeholder="${esc(t('例如: 测试账号 / 生产环境', 'e.g. Test account / Production', '例如: 測試帳號 / 生產環境'))}">
+                    </div>
+               </div>
+               <div class="form-row" style="margin-bottom: 8px;">
+                    <div class="form-field">
+                        <label>${t('厂商标识（不可修改）', 'Provider ID (read-only)', '廠商標識（不可修改）')}</label>
+                        <input type="text" value="${esc(key)}" readonly disabled style="opacity:0.7; cursor:not-allowed;">
+                    </div>
+               </div>`
+            : '';
+
+        card.innerHTML = `
+            <div class="provider-card-header" style="cursor: pointer; user-select: none;">
+                ${headerTitleHtml}
                 <div style="display: flex; align-items: center; gap: 8px;" class="provider-card-actions">
                     ${deleteButtonHtml}
                     ${foldButtonHtml}
                 </div>
             </div>
             <div class="provider-card-body" id="provider-card-body-${key}">
+                ${customMetaHtml}
                 <div class="form-row">
                     <div class="form-field">
                         <label>${t('Base URL (API 端点)', 'Base URL (API Endpoint)', 'Base URL (API 端點)')}</label>
@@ -4302,6 +4455,74 @@ function bindProviderEvents() {
         });
     });
 
+    const syncProviderLabelInputs = (providerKey, rawLabel, sourceEl) => {
+        if (!localProviders[providerKey]) return;
+        const trimmed = String(rawLabel || '').trim();
+        if (trimmed) localProviders[providerKey].label = trimmed;
+        else delete localProviders[providerKey].label;
+        delete localProviders[providerKey].displayName;
+        const shown = getProviderLabel(providerKey, localProviders[providerKey]);
+        document.querySelectorAll(`.provider-label-input[data-provider="${providerKey}"]`).forEach((el) => {
+            if (el === sourceEl) return;
+            if (el.closest('.provider-card-header')) el.value = shown;
+            else el.value = trimmed;
+        });
+        markConfigDirty();
+    };
+
+    document.querySelectorAll('.provider-label-input').forEach(input => {
+        input.addEventListener('click', (e) => e.stopPropagation());
+        input.addEventListener('mousedown', (e) => e.stopPropagation());
+        input.addEventListener('keydown', (e) => e.stopPropagation());
+        input.addEventListener('input', (e) => {
+            const provider = e.target.getAttribute('data-provider');
+            syncProviderLabelInputs(provider, e.target.value, e.target);
+        });
+        input.addEventListener('change', (e) => {
+            const provider = e.target.getAttribute('data-provider');
+            syncProviderLabelInputs(provider, e.target.value, e.target);
+        });
+        input.addEventListener('focus', (e) => {
+            e.target.style.borderColor = 'rgba(var(--accent-rgb), 0.45)';
+            e.target.style.background = 'rgba(255,255,255,0.06)';
+        });
+        input.addEventListener('blur', (e) => {
+            if (e.target.closest('.provider-card-header')) {
+                e.target.style.borderColor = 'transparent';
+                e.target.style.background = 'rgba(255,255,255,0.04)';
+                // 失焦后标题显示最终名称（空则回退为标识）
+                const provider = e.target.getAttribute('data-provider');
+                e.target.value = getProviderLabel(provider, localProviders[provider]);
+            }
+        });
+    });
+
+    document.querySelectorAll('.provider-remark-input').forEach(input => {
+        input.addEventListener('click', (e) => e.stopPropagation());
+        input.addEventListener('mousedown', (e) => e.stopPropagation());
+        input.addEventListener('input', (e) => {
+            const provider = e.target.getAttribute('data-provider');
+            if (!localProviders[provider]) return;
+            const trimmed = String(e.target.value || '').trim();
+            if (trimmed) localProviders[provider].remark = trimmed;
+            else delete localProviders[provider].remark;
+            const preview = document.querySelector(`.provider-remark-preview[data-provider="${provider}"]`);
+            if (preview) {
+                if (trimmed) {
+                    preview.textContent = trimmed;
+                    preview.style.display = '';
+                } else {
+                    preview.textContent = '';
+                    preview.style.display = 'none';
+                }
+            }
+            markConfigDirty();
+        });
+        input.addEventListener('change', (e) => {
+            e.target.dispatchEvent(new Event('input'));
+        });
+    });
+
     document.querySelectorAll('.provider-key-input').forEach(input => {
         input.addEventListener('change', (e) => {
             const provider = e.target.getAttribute('data-provider');
@@ -4322,7 +4543,7 @@ function bindProviderEvents() {
         btn.addEventListener('click', async (e) => {
             const provider = e.target.getAttribute('data-provider');
             if (provider === 'agnes-ai' || provider === 'ollama') return;
-            if (await confirm(t(`确定要彻底删除厂家 "${provider}" 及其下的所有模型配置吗？`, `Are you sure you want to completely delete provider "${provider}" and all its model configurations?`, `確定要徹底刪除廠商 "${provider}" 及其下的所有模型配置嗎？`))) {
+            if (await confirm(t(`确定要彻底删除厂家 "${getProviderLabel(provider)}" 及其下的所有模型配置吗？`, `Are you sure you want to completely delete provider "${getProviderLabel(provider)}" and all its model configurations?`, `確定要徹底刪除廠商 "${getProviderLabel(provider)}" 及其下的所有模型配置嗎？`))) {
                 delete localProviders[provider];
                 renderProvidersList();
                 updateModelsDatalist();
@@ -4336,6 +4557,8 @@ function bindProviderEvents() {
         header.addEventListener('click', (e) => {
             // 如果点击的是删除按钮，不干扰其自身事件
             if (e.target.closest('.btn-delete-provider')) return;
+            if (e.target.closest('.provider-label-input')) return;
+            if (e.target.closest('.provider-title-wrap')) return;
             
             const btnFold = header.querySelector('.btn-fold-provider');
             if (!btnFold) return;
@@ -5351,6 +5574,8 @@ window.addEventListener('DOMContentLoaded', () => {
 // 添加厂家模态弹窗交互
 const addProviderModal = document.getElementById('add-provider-modal');
 const newProviderIdInput = document.getElementById('new-provider-id');
+const newProviderLabelInput = document.getElementById('new-provider-label');
+const newProviderRemarkInput = document.getElementById('new-provider-remark');
 const newProviderUrlInput = document.getElementById('new-provider-url');
 const newProviderKeyInput = document.getElementById('new-provider-key');
 
@@ -5360,6 +5585,8 @@ document.getElementById('btn-add-provider').addEventListener('click', () => {
         return;
     }
     newProviderIdInput.value = '';
+    if (newProviderLabelInput) newProviderLabelInput.value = '';
+    if (newProviderRemarkInput) newProviderRemarkInput.value = '';
     newProviderUrlInput.value = 'https://api.example.com/v1';
     newProviderKeyInput.value = '';
     addProviderModal.classList.add('active');
@@ -5405,6 +5632,10 @@ document.getElementById('modal-confirm-btn').addEventListener('click', () => {
         api: "openai-completions",
         models: []
     };
+    const labelVal = newProviderLabelInput ? newProviderLabelInput.value.trim() : '';
+    const remarkVal = newProviderRemarkInput ? newProviderRemarkInput.value.trim() : '';
+    if (labelVal) localProviders[key].label = labelVal;
+    if (remarkVal) localProviders[key].remark = remarkVal;
 
     closeAddProviderModal();
     renderProvidersList();
@@ -6505,6 +6736,227 @@ function updateMemoryMock() {
 }
 
 // 7. Tab 页切换控制
+const SIDEBAR_NAV_ORDER_KEY = 'setting_sidebar_nav_order';
+const SIDEBAR_NAV_I18N_BY_TAB = {
+    'console-view': 'nav.console',
+    'chat-view': 'nav.chat',
+    'config-view': 'nav.config',
+    'communication-view': 'nav.communication',
+    'roles-view': 'nav.roles',
+    'acceleration-view': 'nav.acceleration_channel',
+    'openclaw-panel-view': 'nav.openclaw_panel',
+    'dashboard-view': 'nav.stats',
+    'plugins-view': 'nav.plugins',
+    'voice-view': 'nav.voice',
+    'terminal-view': 'nav.terminal',
+    'syslogs-view': 'nav.syslogs',
+    'settings-view': 'nav.settings'
+};
+/** 首次进入时从 HTML 快照的默认顺序；重置必须用它，不能读已被打乱的 DOM */
+let __sidebarNavDefaultOrder = null;
+
+function getSidebarNavRoot() {
+    return document.querySelector('.sidebar-nav');
+}
+
+function captureSidebarNavDefaultOrder() {
+    if (Array.isArray(__sidebarNavDefaultOrder) && __sidebarNavDefaultOrder.length) {
+        return __sidebarNavDefaultOrder.slice();
+    }
+    const root = getSidebarNavRoot();
+    const fromDom = root
+        ? Array.from(root.querySelectorAll(':scope > .nav-item[data-tab]'))
+            .map((el) => el.getAttribute('data-tab'))
+            .filter(Boolean)
+        : [];
+    const builtin = Object.keys(SIDEBAR_NAV_I18N_BY_TAB);
+    __sidebarNavDefaultOrder = fromDom.length ? fromDom : builtin;
+    return __sidebarNavDefaultOrder.slice();
+}
+
+function getDefaultSidebarNavOrder() {
+    return captureSidebarNavDefaultOrder();
+}
+
+function readSavedSidebarNavOrder() {
+    try {
+        const raw = localStorage.getItem(SIDEBAR_NAV_ORDER_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return null;
+        return parsed.map((x) => String(x || '').trim()).filter(Boolean);
+    } catch (_) {
+        return null;
+    }
+}
+
+function normalizeSidebarNavOrder(preferred) {
+    const defaults = getDefaultSidebarNavOrder();
+    const defaultSet = new Set(defaults);
+    const seen = new Set();
+    const out = [];
+    const source = Array.isArray(preferred) ? preferred : [];
+    for (const tab of source) {
+        if (!defaultSet.has(tab) || seen.has(tab)) continue;
+        seen.add(tab);
+        out.push(tab);
+    }
+    for (const tab of defaults) {
+        if (seen.has(tab)) continue;
+        seen.add(tab);
+        out.push(tab);
+    }
+    return out;
+}
+
+function saveSidebarNavOrder(order) {
+    const normalized = normalizeSidebarNavOrder(order);
+    try {
+        localStorage.setItem(SIDEBAR_NAV_ORDER_KEY, JSON.stringify(normalized));
+    } catch (_) {}
+    return normalized;
+}
+
+function applySidebarNavOrder(order) {
+    const root = getSidebarNavRoot();
+    // 必须先快照默认顺序，再改 DOM
+    captureSidebarNavDefaultOrder();
+    if (!root) return normalizeSidebarNavOrder(order || readSavedSidebarNavOrder());
+    const normalized = normalizeSidebarNavOrder(order || readSavedSidebarNavOrder());
+    const byTab = new Map();
+    Array.from(root.querySelectorAll(':scope > .nav-item[data-tab]')).forEach((el) => {
+        const tab = el.getAttribute('data-tab');
+        if (tab) byTab.set(tab, el);
+    });
+    normalized.forEach((tab) => {
+        const el = byTab.get(tab);
+        if (el) root.appendChild(el);
+    });
+    return normalized;
+}
+
+function moveSidebarNavOrder(tabId, direction) {
+    const order = normalizeSidebarNavOrder(readSavedSidebarNavOrder());
+    const idx = order.indexOf(tabId);
+    if (idx < 0) return order;
+    const target = direction < 0 ? idx - 1 : idx + 1;
+    if (target < 0 || target >= order.length) return order;
+    const next = order.slice();
+    const tmp = next[idx];
+    next[idx] = next[target];
+    next[target] = tmp;
+    const saved = saveSidebarNavOrder(next);
+    applySidebarNavOrder(saved);
+    return saved;
+}
+
+function resetSidebarNavOrder() {
+    try { localStorage.removeItem(SIDEBAR_NAV_ORDER_KEY); } catch (_) {}
+    return applySidebarNavOrder(getDefaultSidebarNavOrder());
+}
+
+function getSidebarNavLabel(tabId) {
+    const key = SIDEBAR_NAV_I18N_BY_TAB[tabId];
+    if (key) return t(key);
+    const el = document.querySelector(`.sidebar-nav .nav-item[data-tab="${tabId}"] span`);
+    return (el && el.textContent) ? el.textContent.trim() : tabId;
+}
+
+function renderMenuOrderSettingsUI() {
+    const list = document.getElementById('setting-menu-order-list');
+    if (!list) return;
+    const order = normalizeSidebarNavOrder(readSavedSidebarNavOrder());
+    const upLabel = t('settings.menu_order.up');
+    const downLabel = t('settings.menu_order.down');
+    const esc = (typeof escapeHtml === 'function')
+        ? escapeHtml
+        : (s) => String(s || '').replace(/[&<>"']/g, (c) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    list.innerHTML = order.map((tabId, index) => {
+        const label = getSidebarNavLabel(tabId);
+        const atTop = index === 0;
+        const atBottom = index === order.length - 1;
+        return `
+          <div class="settings-menu-order-row" role="listitem" data-menu-tab="${tabId}">
+            <div class="settings-menu-order-index">${index + 1}</div>
+            <div class="settings-menu-order-label">${esc(label)}</div>
+            <div class="settings-menu-order-actions">
+              <button type="button" class="settings-menu-order-btn" data-menu-move="up" data-menu-tab="${tabId}" ${atTop ? 'disabled' : ''} title="${esc(upLabel)}" aria-label="${esc(upLabel)}">↑</button>
+              <button type="button" class="settings-menu-order-btn" data-menu-move="down" data-menu-tab="${tabId}" ${atBottom ? 'disabled' : ''} title="${esc(downLabel)}" aria-label="${esc(downLabel)}">↓</button>
+            </div>
+          </div>
+        `;
+    }).join('');
+}
+
+function setMenuOrderExpanded(expanded) {
+    const card = document.getElementById('setting-menu-order-card');
+    const body = document.getElementById('setting-menu-order-body');
+    const toggle = document.getElementById('btn-menu-order-toggle');
+    if (!card || !body || !toggle) return;
+    const on = !!expanded;
+    card.classList.toggle('is-collapsed', !on);
+    if (on) body.removeAttribute('hidden');
+    else body.setAttribute('hidden', '');
+    toggle.setAttribute('aria-expanded', on ? 'true' : 'false');
+    toggle.title = on ? t('settings.menu_order.collapse') : t('settings.menu_order.expand');
+    try {
+        localStorage.setItem('setting_menu_order_expanded', on ? 'true' : 'false');
+    } catch (_) {}
+    if (on) {
+        try { renderMenuOrderSettingsUI(); } catch (_) {}
+    }
+}
+
+function initMenuOrderSettingsUI() {
+    const list = document.getElementById('setting-menu-order-list');
+    const resetBtn = document.getElementById('btn-menu-order-reset');
+    const toggle = document.getElementById('btn-menu-order-toggle');
+    if (!list) return;
+
+    // 折叠状态：默认收起；记住用户上次选择
+    let expanded = false;
+    try {
+        expanded = localStorage.getItem('setting_menu_order_expanded') === 'true';
+    } catch (_) {}
+    setMenuOrderExpanded(expanded);
+
+    if (toggle && toggle.dataset.menuOrderToggleBound !== '1') {
+        toggle.dataset.menuOrderToggleBound = '1';
+        toggle.addEventListener('click', () => {
+            const card = document.getElementById('setting-menu-order-card');
+            const next = !!(card && card.classList.contains('is-collapsed'));
+            setMenuOrderExpanded(next);
+        });
+    }
+
+    if (list.dataset.menuOrderBound === '1') {
+        if (expanded) renderMenuOrderSettingsUI();
+        return;
+    }
+    list.dataset.menuOrderBound = '1';
+    list.addEventListener('click', (e) => {
+        const btn = e.target && e.target.closest ? e.target.closest('[data-menu-move]') : null;
+        if (!btn || btn.disabled) return;
+        const tabId = btn.getAttribute('data-menu-tab');
+        const dir = btn.getAttribute('data-menu-move') === 'up' ? -1 : 1;
+        if (!tabId) return;
+        moveSidebarNavOrder(tabId, dir);
+        renderMenuOrderSettingsUI();
+    });
+    if (resetBtn && resetBtn.dataset.menuOrderBound !== '1') {
+        resetBtn.dataset.menuOrderBound = '1';
+        resetBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            resetSidebarNavOrder();
+            renderMenuOrderSettingsUI();
+            try { showToast(t('settings.menu_order.toast_reset')); } catch (_) {}
+        });
+    }
+    if (expanded) renderMenuOrderSettingsUI();
+}
+
 function setupTabSwitching() {
     const allNavItems = Array.from(document.querySelectorAll('.nav-item'));
     const allTabPanes = Array.from(document.querySelectorAll('.tab-pane'));
@@ -6557,6 +7009,11 @@ function setupTabSwitching() {
             const prevTab = currentTab;
             currentTab = nextTab;
 
+            // 切回控制台：离页积压日志立刻落盘（不走打字机），用户一进来就看到完整历史
+            if (nextTab === 'console-view' && prevTab !== 'console-view') {
+                try { flushDeferredConsoleLogsInstant(); } catch (err) {}
+            }
+
             // 离开 OpenClaw 面板时先藏 webview，减轻后台合成压力
             if (prevTab === 'openclaw-panel-view' || nextTab === 'openclaw-panel-view') {
                 const wv = document.getElementById('openclaw-iframe');
@@ -6588,36 +7045,8 @@ function setupTabSwitching() {
 
                 if (currentTab === 'console-view') {
                     try { updateConsoleChannelStatusUI(); } catch (err) { console.error(err); }
-                    // 刷回离页期间积压的控制台日志（限量，避免一次卡死）
-                    try {
-                        const q = window.__deferredConsoleLogs;
-                        if (q && q.length) {
-                            const chunk = q.splice(0, q.length).slice(-80);
-                            // 写入隐藏的原大终端
-                            if (logTerminal) {
-                                const frag = document.createDocumentFragment();
-                                chunk.forEach((lineHtml) => {
-                                    const s = document.createElement('span');
-                                    s.innerHTML = lineHtml + (lineHtml.endsWith('\n') ? '' : '<br/>');
-                                    frag.appendChild(s);
-                                });
-                                logTerminal.appendChild(frag);
-                                logTerminal.scrollTop = logTerminal.scrollHeight;
-                            }
-                            // 同步写入 Dashboard 活动监控流（修复：切菜单回来日志消失）
-                            const streamList = document.getElementById('dash-activity-stream-list');
-                            if (streamList) {
-                                streamList.querySelectorAll('.activity-item-empty, .starting-activity-item').forEach((el) => el.remove());
-                            chunk.forEach((lineHtml) => {
-                                enqueueActivityLog(lineHtml);
-                            });
-                                while (streamList.children.length > 150) {
-                                    streamList.removeChild(streamList.firstChild);
-                                }
-                                streamList.scrollTop = streamList.scrollHeight;
-                            }
-                        }
-                    } catch (err) {}
+                    // 同步路径已 flush；此处兜底再刷一次（队列为空则 no-op）
+                    try { flushDeferredConsoleLogsInstant(); } catch (err) {}
                 }
 
                 if (currentTab === 'terminal-view' && typeof initBuiltinTerminal === 'function') {

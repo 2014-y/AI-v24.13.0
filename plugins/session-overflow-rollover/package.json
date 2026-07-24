@@ -1,0 +1,13 @@
+{
+  "name": "@openclaw-plugin/session-overflow-rollover",
+  "version": "1.0.0",
+  "description": "Archive oversized sessions, open a new one, and resume the last question",
+  "main": "index.js",
+  "type": "module",
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ]
+  },
+  "license": "MIT"
+}

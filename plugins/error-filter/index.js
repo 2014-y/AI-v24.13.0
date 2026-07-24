@@ -24,12 +24,59 @@ const BLOCK_SUBSTRINGS = [
   'Model Fallback',
 ];
 
+/** 系统诊断硬特征：仅短消息或警告气泡拦截，避免误伤正常长回复 */
+const DIAGNOSTIC_HARD_SUBSTRINGS = [
+  'All models are temporarily rate-limited',
+  'temporarily rate-limited',
+  'The AI service is temporarily rate-limited',
+  'The AI service is temporarily overloaded',
+  'API rate limit reached',
+  'Auto-compaction could not recover this turn',
+  'auto-compaction could not recover this turn',
+  'Auto-compaction failed',
+  'Context overflow: prompt too large',
+  'prompt too large for the model',
+  'Compaction timed out',
+  'compaction-diag',
+  'trigger=overflow',
+  '[agent/embedded]',
+  'diagId=ovf-',
+  'increase your compaction buffer',
+  'reserveTokensFloor',
+  'Preserving existing session mapping',
+  'Context is too large and auto-compaction',
+  'Please try again in a few minutes.',
+  'Rate-limited — ready in',
+  '暂时限流',
+  '所有模型暂时',
+  '上下文过长',
+  '上下文溢出',
+  '自动压缩失败',
+  '请使用 /new',
+  '请使用/new',
+];
+
 const BLOCK_REGEXES = [
   /Message:\s*.+\s+failed/i,
   /Exec failed/i,
   /ECONNREFUSED/i,
   /ETIMEDOUT/i,
   /TOOL_FAILED/i,
+];
+
+const DIAGNOSTIC_HARD_REGEXES = [
+  /^\s*⚠️?\s*All models are temporarily rate-limited/i,
+  /^\s*⚠️?\s*Rate-limited/i,
+  /^\s*⚠️?\s*API rate limit/i,
+  /Auto-compaction could not recover/i,
+  /Context overflow:\s*prompt too large/i,
+  /use \/compact,\s*or use \/new/i,
+  /increase your compaction buffer/i,
+  /所有模型.*(限流|过载|繁忙)/i,
+  /暂时(限流|过载|不可用)/i,
+  /(上下文|会话).*(过长|溢出|太大)/i,
+  /自动压缩.*(失败|超时|无法)/i,
+  /请使用\s*\/new/i,
 ];
 
 function extractText(event) {
@@ -90,12 +137,36 @@ function isLeakedToolJsonOnly(text) {
   return /"action_input"\s*:|"command"\s*:\s*"screen-capture"/.test(raw) && stripped.length < 8;
 }
 
+function isSystemDiagnosticBannerOnly(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return false;
+  const stripped = raw.replace(/⚠️/g, '').replace(/\s+/g, ' ').trim();
+  // 长诊断行（compaction-diag 常 >700 字）也必须拦
+  const looksDiag =
+    /rate[\s-]?limit|overloaded|auto-compaction|compaction[-_ ]?diag|compaction timed|compaction timeout|context[_\s-]?overflow|prompt too large|reserveTokensFloor|try again (in|later|shortly)|\/compact|\/new to start|\[agent\/embedded\]|trigger\s*=\s*overflow|diagId\s*=\s*ovf-|runId\s*=|outcome\s*=\s*failed|所有模型|暂时限流|暂时过载|上下文过长|上下文溢出|自动压缩失败|请使用\s*\/new/i.test(
+      stripped
+    );
+  if (!looksDiag) return false;
+  if (/(我来|好的|当然|以下是|已经帮你|完成了|代码如下|```|首先|步骤)/.test(stripped)) return false;
+  return true;
+}
+
 function shouldBlockOutbound(text) {
   const raw = String(text || '').trim();
   if (!raw) return false;
   if (isModelFallbackNoticeOnly(raw)) return true;
   if (isLeakedToolJsonOnly(raw)) return true;
+  if (isSystemDiagnosticBannerOnly(raw)) return true;
   if (/^\s*[!\[]?\s*(warning|error|failed)\b/i.test(raw)) return true;
+
+  // 硬特征：不论长短一律拦截（避免超长 compaction-diag 漏网）
+  for (const s of DIAGNOSTIC_HARD_SUBSTRINGS) {
+    if (raw.includes(s)) return true;
+  }
+  for (const re of DIAGNOSTIC_HARD_REGEXES) {
+    try { if (re.test(raw)) return true; } catch (_) {}
+  }
+
   for (const s of BLOCK_SUBSTRINGS) {
     if (raw.includes(s)) return true;
   }
