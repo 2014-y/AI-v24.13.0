@@ -190,8 +190,63 @@ function unescapeQuoted(value) {
     .trim();
 }
 
+function extractJsonObjects(text) {
+  const raw = String(text || '');
+  const objects = [];
+  for (let start = raw.indexOf('{'); start >= 0; start = raw.indexOf('{', start + 1)) {
+    let depth = 0;
+    let inString = false;
+    let quote = '';
+    let escaped = false;
+    for (let i = start; i < raw.length && i - start < 5000; i++) {
+      const ch = raw[i];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (ch === '\\') {
+          escaped = true;
+        } else if (ch === quote) {
+          inString = false;
+        }
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        inString = true;
+        quote = ch;
+        continue;
+      }
+      if (ch === '{') depth += 1;
+      if (ch === '}') depth -= 1;
+      if (depth === 0) {
+        objects.push(raw.slice(start, i + 1));
+        break;
+      }
+    }
+  }
+  return objects;
+}
+
+function extractPromptFromPseudoToolJson(text) {
+  for (const candidate of extractJsonObjects(text)) {
+    let obj;
+    try {
+      obj = JSON.parse(candidate);
+    } catch (_) {
+      continue;
+    }
+    const action = String(obj.action || obj.name || '').trim().toLowerCase();
+    if (!['draw_picture', 'image', 'image_generate'].includes(action)) continue;
+    const input = obj.action_input || obj.arguments || obj.input || obj;
+    const prompt = input && (input.prompt || input.description || input.text);
+    if (typeof prompt === 'string' && prompt.trim()) return prompt.trim();
+  }
+  return '';
+}
+
 function extractDrawPicturePrompt(text) {
   const raw = String(text || '');
+  const jsonPrompt = extractPromptFromPseudoToolJson(raw);
+  if (jsonPrompt) return jsonPrompt;
   const call = raw.match(/\bdraw_picture\s*\(([\s\S]{0,1200}?)\)/i);
   if (!call) return '';
   const args = call[1] || '';
